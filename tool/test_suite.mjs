@@ -339,6 +339,83 @@ async function runTestSuite() {
       `Shell: modal komentar sel memakai ritz.${m}()`);
   }
 
+  // TEST SUITE 9c: AUDIT TOOLBAR — NOL TOMBOL MATI
+  //
+  // Kelas bug yang dicegah: tombol ada di HTML, terlihat aktif, tapi tidak
+  // melakukan apa pun. Kasus nyata: tbComment hanya di-bind untuk docs,
+  // sehingga di Sheets tombol komentar MATI tanpa gejala apa pun — tidak ada
+  // error, tidak ada exception, hanya tidak bereaksi. Bug itu ditemukan m4
+  // dan asersi ini mencegahnya kembali.
+  //
+  // Klasifikasi yang dipakai (bukan sekadar "ada string id di shell"):
+  //   bound      -> bind('id', ...)
+  //   listener   -> getElementById('id') lalu addEventListener pada variabelnya
+  //   decorative -> span.tb-dot (swatch warna, diperbarui syncToolbar)
+  console.log('\n--- Suite 9c: Audit Toolbar (nol tombol mati) ---');
+  // WAJIB baca sendiri: htmlTb & shellTb dideklarasikan di Suite 13
+  // (jauh DI BAWAH titik ini). Memakainya di sini memicu TDZ ReferenceError
+  // ("Cannot access before initialization") yang menghentikan SELURUH suite
+  // sebelum baris HASIL PENGUJIAN tercetak — gejalanya tampak seperti
+  // "suite lulus" karena exit code tetap 0.
+  const htmlTb = fs.readFileSync(path.resolve(__dirname, 'dashboard.html'), 'utf8');
+  const shellTb = shellSrc;
+  const tbIds = [];
+  let scanFrom = 0;
+  while (true) {
+    const iId = htmlTb.indexOf('id="tb', scanFrom);
+    if (iId === -1) break;
+    const iVal = iId + 4;
+    const iEnd = htmlTb.indexOf('"', iVal);
+    if (iEnd === -1) break;
+    const id = htmlTb.slice(iVal, iEnd);
+    if (id.length > 2 && tbIds.indexOf(id) === -1) tbIds.push(id);
+    scanFrom = iEnd + 1;
+  }
+  assert(tbIds.length >= 55,
+    `Audit: pemindaian toolbar menemukan tombol yang wajar :: ${tbIds.length} (harus >= 55)`);
+
+  const tbDead = [];
+  const tbKinds = { bound: 0, listener: 0, decorative: 0 };
+  for (const id of tbIds) {
+    const bindPat = "bind('" + id + "'";
+    const bindPat2 = 'bind("' + id + '"';
+    if (shellTb.indexOf(bindPat) !== -1 || shellTb.indexOf(bindPat2) !== -1) {
+      tbKinds.bound++;
+      continue;
+    }
+    // Cari getElementById('id') lalu addEventListener di sekitarnya. Jendela
+    // 240 char menangkap dua gaya: langsung maupun lewat variabel perantara
+    // (const x = getElementById(...); if (x) x.addEventListener(...)).
+    const getPat = "getElementById('" + id + "')";
+    let wired = false;
+    let from = 0;
+    while (true) {
+      const iGet = shellTb.indexOf(getPat, from);
+      if (iGet === -1) break;
+      const windowSrc = shellTb.slice(iGet, iGet + 240);
+      if (windowSrc.indexOf('addEventListener') !== -1) { wired = true; break; }
+      from = iGet + getPat.length;
+    }
+    if (wired) { tbKinds.listener++; continue; }
+
+    // Dekoratif: swatch <span class="tb-dot"> di dalam tombol yang terikat.
+    const iEl = htmlTb.indexOf('id="' + id + '"');
+    const around = iEl >= 0 ? htmlTb.slice(Math.max(0, iEl - 220), iEl + 40) : '';
+    if (around.indexOf('tb-dot') !== -1) { tbKinds.decorative++; continue; }
+
+    tbDead.push(id);
+  }
+  assert(tbDead.length === 0,
+    `Audit: NOL tombol toolbar tanpa handler :: ${tbDead.length ? 'MATI: ' + tbDead.join(', ') : 'bersih'}`);
+  assert(tbKinds.bound + tbKinds.listener + tbKinds.decorative === tbIds.length,
+    `Audit: seluruh ${tbIds.length} tombol terklasifikasi :: bind=${tbKinds.bound} listener=${tbKinds.listener} dekoratif=${tbKinds.decorative}`);
+
+  // tbComment spesifik: dulu hanya docs. Ini penjaga langsung untuk regresi itu.
+  const iTbComment = shellTb.indexOf("bind('tbComment'");
+  const tbCommentBlock = iTbComment >= 0 ? shellTb.slice(iTbComment, iTbComment + 400) : '';
+  assert(tbCommentBlock.indexOf("currentApp === 'sheets'") !== -1,
+    'Audit: tbComment hidup di Sheets juga (dulu mati total di sana)');
+
   // TEST SUITE 10: FORMULA ENGINE — REGRESI & TOKEN ERROR
   // Menguji perilaku NYATA engine (bukan sekadar keberadaan teks di sumber),
   // termasuk dua kelas bug yang dulu lolos: parser greedy dan pembagian nol.

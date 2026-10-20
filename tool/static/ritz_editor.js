@@ -98,6 +98,10 @@
       this._hoverResizeRow = -1;
 
       this.onCellChange = null;
+      // Callback saat indikator komentar diklik: (coord, daftarKomentar) => void.
+      // Shell yang membuka thread/modal; editor tidak tahu soal UI percakapan.
+      this.onCommentClick = null;
+      this._hoverComment = false;
       // Bagan mengambang yang disimpan bersama dokumen (lihat insertChart).
       this.charts = [];
       this.activeChartId = null;
@@ -423,6 +427,105 @@
       let n = 0;
       for (let i = 0; i < s.length; i++) n = n * 26 + (s.charCodeAt(i) - 64);
       return n - 1;
+    }
+
+    // ==== KOMENTAR SEL: GEOMETRI & HIT-TEST (paritas Google Sheets) ====
+    // Indikator = segitiga kecil di pojok KANAN-ATAS sel. Sengaja kanan-atas,
+    // BUKAN kanan-bawah: fill handle autofill sudah menempati kanan-bawah
+    // (fillHandleRect(), :398). Menaruhnya di kanan-bawah berarti berebut
+    // piksel dengan drag autofill — klik kecil akan salah sasaran.
+    cellCommentRect(col, row) {
+      const x = this.cellX(col);
+      const y = this.cellY(row);
+      const w = this.getColWidth(col);
+      return { x: x + w - 9, y: y, w: 9, h: 9 };
+    }
+
+    // "A3" -> { col, row }. Null bila tidak bisa diparse / di luar grid.
+    // Memakai colIndexFromLabel() yang SUDAH ADA supaya key komentar memakai
+    // konvensi yang sama dengan this.cells — bukan konversi kedua yang bisa
+    // menyimpang (mis. kolom > Z).
+    coordToCell(coord) {
+      const m = /^([A-Z]+)([0-9]+)$/.exec(String(coord || '').toUpperCase());
+      if (!m) return null;
+      const col = this.colIndexFromLabel(m[1]);
+      const row = parseInt(m[2], 10);
+      if (!Number.isInteger(col) || col < 0 || col >= this.totalCols) return null;
+      if (!Number.isInteger(row) || row < 1 || row > this.totalRows) return null;
+      return { col, row };
+    }
+
+    // Koordinat sel berkomentar yang saat ini ada di dalam grid.
+    // Kunci tanpa isi (sisa dokumen lama) diabaikan agar tidak menggambar
+    // segitiga untuk komentar yang sudah tidak ada.
+    visibleCommentCoords() {
+      const map = this.cellComments || {};
+      const out = [];
+      for (const coord of Object.keys(map)) {
+        const list = map[coord];
+        if (!Array.isArray(list) || !list.length) continue;
+        const pos = this.coordToCell(coord);
+        if (pos) out.push({ coord: coord, col: pos.col, row: pos.row, list: list });
+      }
+      return out;
+    }
+
+    // Hit-test indikator komentar. Mengembalikan koordinat sel atau null.
+    //
+    // Urutan prioritas di mousedown: resize kolom -> resize baris -> fill handle
+    // -> KOMENTAR -> seleksi sel. Komentar sengaja di bawah fill handle karena
+    // area keduanya tidak pernah bertumpuk (atas vs bawah), tetapi bila suatu
+    // saat bertumpuk, autofill yang menang — ia fitur drag yang lebih mahal
+    // salah tembak daripada membuka thread komentar.
+    commentHitTest(x, y) {
+      if (this.editing || this.isResizingCol || this.isResizingRow) return null;
+      if (x <= this.headerWidth || y <= this.headerHeight) return null;
+      const col = this.colFromX(x);
+      const row = this.rowFromY(y);
+      if (col < 0 || col >= this.totalCols || row < 1 || row > this.totalRows) return null;
+      const coord = `${this.colLabel(col)}${row}`;
+      if (!this.hasCellComment(coord)) return null;
+      const t = this.cellCommentRect(col, row);
+      // Toleransi 3px: segitiga 9px sulit ditangkap mouse tanpa sedikit kelonggaran.
+      const pad = 3;
+      if (x < t.x - pad || x > t.x + t.w + pad) return null;
+      if (y < t.y - pad || y > t.y + t.h + pad) return null;
+      return coord;
+    }
+
+    // Gambar indikator segitiga untuk setiap sel berkomentar.
+    // Dipanggil render() SEBELUM overlay seleksi: indikator tidak boleh menutupi
+    // border seleksi maupun fill handle, tetapi tetap terlihat karena isi overlay
+    // seleksi hanya rgba(26,115,232,0.12).
+    renderCellCommentIndicators(ctx, width, height) {
+      const items = this.visibleCommentCoords();
+      if (!items.length) return;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(this.headerWidth, this.headerHeight,
+        width - this.headerWidth, height - this.headerHeight);
+      ctx.clip();
+      for (const it of items) {
+        const x = this.cellX(it.col);
+        const y = this.cellY(it.row);
+        const w = this.getColWidth(it.col);
+        // Sel yang seluruhnya di luar kanvas (ter-scroll jauh) tidak digambar.
+        if (x + w < this.headerWidth || x > width) continue;
+        if (y + 9 < this.headerHeight || y > height) continue;
+        // Status harus terbaca tanpa membuka thread: thread yang masih terbuka
+        // diberi amber, yang SELURUHNYA selesai digambar redup.
+        const anyOpen = it.list.some(c => c && !c.resolved);
+        const size = 8;
+        const tx = x + w - size;
+        ctx.beginPath();
+        ctx.moveTo(tx, y);
+        ctx.lineTo(x + w, y);
+        ctx.lineTo(x + w, y + size);
+        ctx.closePath();
+        ctx.fillStyle = anyOpen ? '#f9ab00' : '#9aa0a6';
+        ctx.fill();
+      }
+      ctx.restore();
     }
 
     // Geser SEMUA referensi A1 di dalam rumus sebesar (dCol, dRow).
@@ -1036,6 +1139,19 @@
             return;
           }
 
+          // ==== KLIK INDIKATOR KOMENTAR (paritas Google Sheets) ====
+          // Dicek SETELAH fill handle (kanan-bawah) dan SEBELUM seleksi sel:
+          // mengklik segitiga membuka thread, BUKAN memindahkan sel aktif.
+          const hitComment = this.commentHitTest(x, y);
+          if (hitComment) {
+            this.isSelecting = false;
+            e.preventDefault();
+            if (typeof this.onCommentClick === 'function') {
+              this.onCommentClick(hitComment, this.getCellComments(hitComment));
+            }
+            return;
+          }
+
           // colFromX()/rowFromY() menghormati lebar kolom dan panel beku.
           const clickedCol = this.colFromX(x);
           const clickedRow = this.rowFromY(y);
@@ -1147,6 +1263,18 @@
           }
           if (this._hoverFillHandle) {
             this._hoverFillHandle = false;
+            this.canvas.style.cursor = 'cell';
+          }
+          // Hover indikator komentar -> kursor pointer (isyarat bisa diklik).
+          if (this.commentHitTest(mx, my)) {
+            if (!this._hoverComment) {
+              this._hoverComment = true;
+              this.canvas.style.cursor = 'pointer';
+            }
+            return;
+          }
+          if (this._hoverComment) {
+            this._hoverComment = false;
             this.canvas.style.cursor = 'cell';
           }
           const hovCol = this.colResizeHit(mx, my);
@@ -1906,6 +2034,10 @@
         ctx.beginPath(); ctx.moveTo(bodyX, 0); ctx.lineTo(bodyX, height); ctx.stroke();
         ctx.restore();
       }
+
+      // ==== INDIKATOR KOMENTAR SEL (paritas Google Sheets) ====
+      // Digambar setelah grid + header, SEBELUM overlay seleksi/fill handle.
+      this.renderCellCommentIndicators(ctx, width, height);
 
       // ==== OVERLAY SELEKSI RENTANG (paritas Google Sheets) ====
       // Digambar SEBELUM border sel aktif. Warna & ukuran mengikuti Sheets asli:

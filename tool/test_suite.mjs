@@ -851,6 +851,165 @@ async function runTestSuite() {
   assert(ritzC.addCellComment('D4', 'setelah migrasi', null) !== null,
     'Sheets: addCellComment tetap bekerja pada dokumen lama');
 
+  // 14b-c. SHEETS: indikator komentar — geometri, hit-test, wiring klik.
+  // Semua variabel di dalam blok { } agar tidak bertabrakan dengan nama yang
+  // sudah dipakai Suite 14 lain (pernah gagal: `const c1` bentrok dengan :45).
+  {
+    const ritzI = new Ritz14('sheetsGridCanvas', 'sheetFormulaInput', 'sheetActiveCell');
+    ritzI.render = () => {};
+    ritzI.renderSheetTabs = () => {};
+    ritzI.updateFormulaBar = () => {};
+    ritzI.recalculateAll = async () => ritzI.cells;
+    ritzI.scrollX = 0; ritzI.scrollY = 0;
+    ritzI.frozenRows = 0; ritzI.frozenCols = 0;
+    ritzI.selStartCol = 0; ritzI.selStartRow = 1;
+    ritzI.selEndCol = 0; ritzI.selEndRow = 1;
+
+    // Geometri: indikator menempel di pojok KANAN-ATAS sel.
+    const tA1 = ritzI.cellCommentRect(0, 1);
+    assert(tA1.x === ritzI.cellX(0) + ritzI.getColWidth(0) - 9 && tA1.y === ritzI.cellY(1) && tA1.w === 9 && tA1.h === 9,
+      `Sheets: indikator komentar di pojok KANAN-ATAS sel :: x=${tA1.x} y=${tA1.y}`);
+
+    // Yang paling penting: TIDAK bertumpuk dengan fill handle autofill
+    // (kanan-bawah). Kalau bertumpuk, klik kecil jadi salah sasaran.
+    const fhRect = ritzI.fillHandleRect();
+    const cmRect = ritzI.cellCommentRect(0, 1);
+    const overlapTR = !(cmRect.x + cmRect.w < fhRect.x || fhRect.x + fhRect.w < cmRect.x ||
+                        cmRect.y + cmRect.h < fhRect.y || fhRect.y + fhRect.h < cmRect.y);
+    assert(!overlapTR,
+      `Sheets: indikator komentar TIDAK bertumpuk dengan fill handle :: cm=${cmRect.x},${cmRect.y} fh=${fhRect.x},${fhRect.y}`);
+
+    // coordToCell memakai colIndexFromLabel yang sudah ada (bukan konversi kedua).
+    const pA3 = ritzI.coordToCell('A3');
+    assert(pA3 && pA3.col === 0 && pA3.row === 3, 'Sheets: coordToCell("A3") -> kolom 0 baris 3');
+    // colIndexFromLabel (sudah ada, dipakai ulang) menangani kolom multi-huruf.
+    assert(ritzI.colIndexFromLabel('AA') === 26 && ritzI.colIndexFromLabel('AB') === 27,
+      'Sheets: colIndexFromLabel menangani kolom multi-huruf (AA=26, AB=27)');
+    // Grid ini hanya A..Z (totalCols=26), jadi kolom AA memang DI LUAR grid dan
+    // harus ditolak — bukan dipaksa masuk. Batas grid dihormati, bukan dilonggarkan.
+    assert(ritzI.totalCols === 26 && ritzI.coordToCell('AA7') === null,
+      'Sheets: coordToCell menolak kolom di luar grid (AA7 saat totalCols=26)');
+    assert(ritzI.coordToCell('z5').col === 25 && ritzI.coordToCell('z5').row === 5,
+      'Sheets: coordToCell tidak case-sensitive (z5 -> 25,5)');
+    assert(ritzI.coordToCell('') === null && ritzI.coordToCell('3A') === null &&
+           ritzI.coordToCell('A0') === null && ritzI.coordToCell('A101') === null &&
+           ritzI.coordToCell('A') === null && ritzI.coordToCell('1') === null,
+      'Sheets: coordToCell menolak koordinat cacat / di luar grid');
+
+    // visibleCommentCoords hanya mengembalikan sel yang valid + berisi.
+    ritzI.cellComments = {
+      A1: [{ id: 'sc_1', author: 'Budi', text: 'buka', createdAt: 'x', resolved: false, replies: [] }],
+      B2: [{ id: 'sc_2', author: 'Ani', text: 'selesai', createdAt: 'x', resolved: true, replies: [] }],
+      ZZZ99999: [{ id: 'sc_3', author: 'X', text: 'di luar grid', createdAt: 'x', resolved: false, replies: [] }],
+      C3: []
+    };
+    const vis = ritzI.visibleCommentCoords();
+    const visCoords = vis.map(v => v.coord).sort().join(',');
+    assert(visCoords === 'A1,B2',
+      `Sheets: visibleCommentCoords melewati kunci di luar grid & array kosong :: ${visCoords}`);
+
+    // Hit-test: titik tengah segitiga mengembalikan koordinat sel.
+    const cxA1 = tA1.x + tA1.w / 2;
+    const cyA1 = tA1.y + tA1.h / 2;
+    assert(ritzI.commentHitTest(cxA1, cyA1) === 'A1',
+      'Sheets: commentHitTest mengenai segitiga -> koordinat sel');
+    // Tengah sel (bukan segitiga) -> null, supaya seleksi sel tidak direbut.
+    assert(ritzI.commentHitTest(ritzI.cellX(0) + 40, ritzI.cellY(1) + 20) === null,
+      'Sheets: commentHitTest di tengah sel (bukan segitiga) -> null');
+    // Sel tanpa komentar -> null walau titiknya di area segitiga.
+    const tC5 = ritzI.cellCommentRect(2, 5);
+    assert(ritzI.commentHitTest(tC5.x + 4, tC5.y + 4) === null,
+      'Sheets: commentHitTest pada sel tanpa komentar -> null');
+    // Header tidak pernah dianggap indikator.
+    assert(ritzI.commentHitTest(20, 10) === null, 'Sheets: commentHitTest mengabaikan area header');
+    // Guard: saat menyunting / resize, hit-test dimatikan.
+    ritzI.editing = true;
+    assert(ritzI.commentHitTest(cxA1, cyA1) === null, 'Sheets: commentHitTest mati saat in-cell editing');
+    ritzI.editing = false;
+    ritzI.isResizingCol = true;
+    assert(ritzI.commentHitTest(cxA1, cyA1) === null, 'Sheets: commentHitTest mati saat resize kolom');
+    ritzI.isResizingCol = false;
+
+    // Fill handle menang atas komentar pada piksel yang sama (tidak ada rebutan):
+    // titik pusat fill handle BUKAN titik segitiga, jadi hit-test komentar null.
+    assert(ritzI.commentHitTest(fhRect.x + 3, fhRect.y + 3) === null,
+      'Sheets: titik fill handle tidak pernah dianggap indikator komentar (prioritas autofill)');
+
+    // ---- RENDER: jumlah segitiga = jumlah sel berkomentar yang terlihat ----
+    const colors = [];
+    const recCtx = {
+      _fs: '',
+      set fillStyle(v) { this._fs = v; },
+      get fillStyle() { return this._fs; },
+      save() {}, restore() {}, beginPath() {}, rect() {}, clip() {},
+      moveTo() {}, lineTo() {}, closePath() {},
+      fill() { colors.push(this._fs); }
+    };
+    ritzI.renderCellCommentIndicators(recCtx, 794, 1050);
+    assert(colors.length === 2,
+      `Sheets: render menggambar satu segitiga per sel berkomentar :: ${colors.length} segitiga`);
+    assert(colors.indexOf('#f9ab00') >= 0,
+      'Sheets: thread yang masih terbuka digambar amber (#f9ab00)');
+    assert(colors.indexOf('#9aa0a6') >= 0,
+      'Sheets: thread yang seluruhnya selesai digambar redup (#9aa0a6)');
+    // Tanpa komentar -> tidak menggambar apa pun (tidak ada biaya render).
+    ritzI.cellComments = {};
+    colors.length = 0;
+    ritzI.renderCellCommentIndicators(recCtx, 794, 1050);
+    assert(colors.length === 0, 'Sheets: tanpa komentar, render tidak menggambar segitiga');
+
+    // ---- WIRING MOUSE: klik segitiga membuka thread, TIDAK memindah sel ----
+    ritzI.cellComments = {
+      A1: [{ id: 'sc_1', author: 'Budi', text: 'buka', createdAt: 'x', resolved: false, replies: [] }]
+    };
+    // Samakan skala kanvas agar clientX/clientY == koordinat kanvas (tanpa zoom).
+    ritzI.canvas._rect = {
+      left: 0, top: 0, width: ritzI.canvas.width, height: ritzI.canvas.height,
+      right: ritzI.canvas.width, bottom: ritzI.canvas.height
+    };
+    const mdHandlers = (ritzI.canvas._handlers || {}).mousedown || [];
+    assert(mdHandlers.length >= 1, 'Sheets: handler mousedown terpasang pada kanvas');
+    // PENTING: docStub men-cache elemen per id, jadi ritzI.canvas adalah objek
+    // yang SAMA dengan ritz14.canvas dari tes sebelumnya. Handler [0] milik
+    // ritz14 (closure-nya menunjuk ritz14, bukan ritzI). Handler ritzI adalah
+    // yang TERAKHIR didaftarkan — memakai [0] membuat tes lulus/gagal secara palsu.
+    const mdIdx = mdHandlers.length - 1;
+    assert(mdHandlers.length >= 2, `Sheets: handler ritzI terdaftar setelah ritz14 :: ${mdHandlers.length} handler`);
+    const fireMD = (px, py) => mdHandlers[mdIdx]({ clientX: px, clientY: py, preventDefault() {} });
+
+    let clickedCoord = null, clickedList = null;
+    ritzI.onCommentClick = (coord, list) => { clickedCoord = coord; clickedList = list; };
+    ritzI.activeCol = 5; ritzI.activeRow = 10;   // sel aktif jauh dari A1
+    fireMD(tA1.x + tA1.w / 2, tA1.y + tA1.h / 2);
+    assert(clickedCoord === 'A1',
+      `Sheets: klik segitiga memicu onCommentClick dengan koordinat sel :: ${clickedCoord}`);
+    assert(Array.isArray(clickedList) && clickedList.length === 1 && clickedList[0].text === 'buka',
+      'Sheets: onCommentClick menerima daftar komentar sel tersebut');
+    assert(ritzI.activeCol === 5 && ritzI.activeRow === 10,
+      `Sheets: klik segitiga TIDAK memindahkan sel aktif :: ${ritzI.activeCol},${ritzI.activeRow}`);
+
+    // Klik tengah sel (bukan segitiga) tetap memilih sel, tanpa memicu callback.
+    clickedCoord = null;
+    fireMD(ritzI.cellX(0) + 40, ritzI.cellY(1) + 20);
+    assert(clickedCoord === null, 'Sheets: klik di tengah sel tidak memicu onCommentClick');
+    assert(ritzI.activeCol === 0 && ritzI.activeRow === 1,
+      `Sheets: klik di tengah sel tetap memilih sel itu :: ${ritzI.activeCol},${ritzI.activeRow}`);
+
+    // ---- HOVER: kursor pointer di indikator, kembali normal di luar ----
+    const mmHandlers = (ritzI.canvas._handlers || {}).mousemove || [];
+    assert(mmHandlers.length >= 1, 'Sheets: handler mousemove terpasang pada kanvas');
+    // Alasan sama seperti mousedown: ambil handler TERAKHIR milik ritzI.
+    const mmIdx = mmHandlers.length - 1;
+    const fireMM = (px, py) => mmHandlers[mmIdx]({ clientX: px, clientY: py, preventDefault() {} });
+    ritzI.isSelecting = false; ritzI.editing = false;
+    fireMM(tA1.x + tA1.w / 2, tA1.y + tA1.h / 2);
+    assert(ritzI.canvas.style.cursor === 'pointer',
+      `Sheets: hover di indikator komentar -> kursor pointer :: ${ritzI.canvas.style.cursor}`);
+    fireMM(ritzI.cellX(3) + 30, ritzI.cellY(6) + 12);
+    assert(ritzI.canvas.style.cursor === 'cell',
+      `Sheets: hover di luar indikator -> kursor kembali normal :: ${ritzI.canvas.style.cursor}`);
+  }
+
   // 14c. DOCS: ceklis (kotak centang) + daftar bernomor berurutan.
   const Kix14 = loadEditor('static/kix_editor.js', 'KixDocsEditor');
   const kix14 = new Kix14('docsScrollBox', 'kixHiddenInput');

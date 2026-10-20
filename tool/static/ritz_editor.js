@@ -87,6 +87,16 @@
       this.isSelecting = false;
       this._dragBound = false;
 
+      // ==== AUTOFILL / FILL HANDLE (paritas Google Sheets) ====
+      // Kotak 6x6 di pojok kanan-bawah seleksi sudah digambar sejak fc733b6,
+      // tetapi belum bereaksi apa pun. State di bawah menghidupkannya.
+      // autofillOrigin = rentang SUMBER (tetap), autofillTarget = rentang
+      // perluasan saat drag. Keduanya memakai bentuk getRangeBounds().
+      this.isAutofilling = false;
+      this.autofillOrigin = null;
+      this.autofillTarget = null;
+      this._hoverFillHandle = false;
+
       // ==== MULTI-SHEET (paritas tab sheet Google Sheets) ====
       // sheets[] adalah sumber kebenaran. this.cells / this.charts tetap menunjuk
       // ke sheet AKTIF, sehingga seluruh kode lama (formula, bagan, render,
@@ -219,6 +229,173 @@
       let x = 0;
       for (let i = 0; i < n; i++) x += this.getColWidth(i);
       return x;
+    }
+
+    // ==== AUTOFILL: GEOMETRI & HIT-TESTING ====
+    // Baris mana yang berada pada y tertentu (kebalikan dari rumus render).
+    rowFromY(y) {
+      if (y < this.headerHeight) return -1;
+      const r = Math.floor((y - this.headerHeight + this.scrollY) / this.rowHeight) + 1;
+      return (r >= 1 && r <= this.totalRows) ? r : -1;
+    }
+
+    // Kotak fill handle 6x6 di pojok kanan-bawah seleksi. Koordinatnya HARUS
+    // identik dengan yang digambar render(): biru (rentang) dan hijau (sel
+    // tunggal) sama-sama mendarat di rx+rw-4, ry+rh-4 — jadi satu hit-test
+    // cukup untuk keduanya.
+    fillHandleRect() {
+      const rb = this.getRangeBounds();
+      const rx = this.getColX(rb.minCol) - this.scrollX;
+      const ry = this.headerHeight + ((rb.minRow - 1) * this.rowHeight) - this.scrollY;
+      const rw = this.getColX(rb.maxCol + 1) - this.getColX(rb.minCol);
+      const rh = (rb.maxRow - rb.minRow + 1) * this.rowHeight;
+      return { x: rx + rw - 4, y: ry + rh - 4, w: 6, h: 6 };
+    }
+
+    // Toleransi klik sedikit lebih lebar dari 6x6 aslinya supaya handle kecil
+    // tetap mudah ditangkap mouse (Sheets punya toleransi serupa).
+    isOverFillHandle(x, y) {
+      if (this.isResizingCol || this.editing) return false;
+      const h = this.fillHandleRect();
+      if (h.x < this.headerWidth - 8 || h.y < this.headerHeight - 8) return false;
+      const pad = 4;
+      return x >= h.x - pad && x <= h.x + h.w + pad && y >= h.y - pad && y <= h.y + h.h + pad;
+    }
+
+    // Kebalikan colLabel(): "A" -> 0, "AA" -> 26.
+    colIndexFromLabel(txt) {
+      const s = String(txt || '').toUpperCase();
+      let n = 0;
+      for (let i = 0; i < s.length; i++) n = n * 26 + (s.charCodeAt(i) - 64);
+      return n - 1;
+    }
+
+    // Geser SEMUA referensi A1 di dalam rumus sebesar (dCol, dRow).
+    // $A$1 tidak digeser, $A1 hanya baris, A$1 hanya kolom. Isi string
+    // literal ("...") tidak disentuh, dan nama fungsi seperti LOG10( tidak
+    // salah ditafsirkan sebagai referensi.
+    shiftFormula(raw, dCol, dRow) {
+      if (typeof raw !== 'string' || raw.charAt(0) !== '=') return raw;
+      if (!dCol && !dRow) return raw;
+      const REF = /(?<![A-Za-z0-9_$])(\$?)([A-Za-z]{1,3})(\$?)(\d{1,7})(?![A-Za-z0-9_(])/g;
+      // Pisahkan string literal agar tidak ikut digeser.
+      const parts = raw.split(/("(?:[^"]|"")*")/);
+      return parts.map((seg, i) => {
+        if (i % 2 === 1) return seg;
+        return seg.replace(REF, (m, cAbs, colTxt, rAbs, rowTxt) => {
+          let col = this.colIndexFromLabel(colTxt);
+          let row = parseInt(rowTxt, 10);
+          if (!cAbs) col += dCol;
+          if (!rAbs) row += dRow;
+          if (col < 0 || col >= this.totalCols || row < 1 || row > this.totalRows) return m;
+          return `${cAbs ? '$' : ''}${this.colLabel(col)}${rAbs ? '$' : ''}${row}`;
+        });
+      }).join('');
+    }
+
+    // ==== AUTOFILL: LOGIKA PENGISIAN ====
+    // Menerima rentang SUMBER dan rentang TUJUAN (bentuk getRangeBounds()),
+    // lalu mengisi bagian di luar sumber. Empat pola, sesuai perilaku Sheets:
+    //   1) formula  -> referensi relatif digeser per baris/kolom
+    //   2) angka    -> deret aritmatika bila >= 2 angka, selain itu salin
+    //   3) teks+angka di ujung ("Bab 1") -> angka dinaikkan
+    //   4) selain itu -> salin berulang mengikuti pola sumber
+    // Arah didukung: bawah, atas, kanan, kiri (tidak hanya ke bawah).
+    applyAutofill(origin, target) {
+      if (!origin || !target) return 0;
+      const srcRows = origin.maxRow - origin.minRow + 1;
+      const srcCols = origin.maxCol - origin.minCol + 1;
+
+      // Kumpulan nilai sumber per posisi relatif (dipakai untuk pola siklus).
+      const srcCells = [];
+      for (let r = origin.minRow; r <= origin.maxRow; r++) {
+        const rowVals = [];
+        for (let c = origin.minCol; c <= origin.maxCol; c++) {
+          const cell = this.cells[`${this.colLabel(c)}${r}`];
+          rowVals.push(cell ? { ...cell } : null);
+        }
+        srcCells.push(rowVals);
+      }
+
+      const numOf = (cell) => {
+        if (!cell) return null;
+        const v = (cell.val !== undefined && cell.val !== '') ? cell.val : cell.raw;
+        if (typeof v === 'number') return v;
+        if (typeof v === 'string' && v.trim() !== '' && !isNaN(Number(v))) return Number(v);
+        return null;
+      };
+      const isFormula = (cell) => !!cell && typeof cell.raw === 'string' && cell.raw.charAt(0) === '=';
+      const hasFormula = srcCells.some(row => row.some(isFormula));
+
+      let written = 0;
+      for (let r = target.minRow; r <= target.maxRow; r++) {
+        for (let c = target.minCol; c <= target.maxCol; c++) {
+          // Lewati sel yang masih bagian dari rentang sumber.
+          const inSrc = r >= origin.minRow && r <= origin.maxRow && c >= origin.minCol && c <= origin.maxCol;
+          if (inSrc) continue;
+
+          // Sel sumber acuan: dipetakan periodik terhadap ukuran sumber.
+          const srcRowIdx = ((r - origin.minRow) % srcRows + srcRows) % srcRows;
+          const srcColIdx = ((c - origin.minCol) % srcCols + srcCols) % srcCols;
+          const ref = srcCells[srcRowIdx] && srcCells[srcRowIdx][srcColIdx];
+
+          const coord = `${this.colLabel(c)}${r}`;
+          if (!ref) { delete this.cells[coord]; continue; }
+
+          const prevMeta = this.cells[coord] ? { ...this.cells[coord] } : {};
+
+          if (isFormula(ref)) {
+            // Pergeseran dihitung dari sel sumber acuan ke sel tujuan.
+            const fromCol = origin.minCol + srcColIdx;
+            const fromRow = origin.minRow + srcRowIdx;
+            const shifted = this.shiftFormula(ref.raw, c - fromCol, r - fromRow);
+            this.cells[coord] = { ...prevMeta, raw: shifted, val: this.coerce(shifted) };
+            written++;
+            continue;
+          }
+
+          // Deret angka: hanya bila SELURUH kolom sumber numerik & >= 2 baris.
+          const colVals = srcCells.map(row => numOf(row[srcColIdx]));
+          const allNum = srcRows >= 2 && colVals.every(v => v !== null);
+          if (allNum && !hasFormula) {
+            const step = (colVals[colVals.length - 1] - colVals[0]) / (srcRows - 1);
+            // Indeks langkah relatif terhadap baris sumber pertama.
+            const stepsFromStart = r - origin.minRow;
+            const n = colVals[0] + step * stepsFromStart;
+            const rounded = Math.round(n * 1e10) / 1e10;
+            this.cells[coord] = { ...prevMeta, raw: String(rounded), val: rounded };
+            written++;
+            continue;
+          }
+
+          // Teks berakhiran angka: "Bab 1" -> "Bab 2", "Bab 3", ...
+          const rawTxt = ref.raw !== undefined ? String(ref.raw) : (ref.val !== undefined ? String(ref.val) : '');
+          const m = /^(.*?)(\d+)$/.exec(rawTxt);
+          // Angka MURNI tunggal disalin, bukan dijadikan deret. Di Google Sheets
+          // deret hanya lahir dari >= 2 sel angka; "7" diseret tetap "7".
+          // Karena itu pola "teks berakhiran angka" hanya boleh jalan bila ada
+          // awalan non-angka ("Bab 1" ya, "7" tidak).
+          const pureNum = rawTxt.trim() !== '' && !isNaN(Number(rawTxt));
+          if (m && !pureNum && m[1].trim() !== '' && !hasFormula && srcRows * srcCols === 1) {
+            const base = parseInt(m[2], 10);
+            const delta = (r - origin.minRow) + (c - origin.minCol);
+            const nextTxt = `${m[1]}${base + delta}`;
+            this.cells[coord] = { ...prevMeta, raw: nextTxt, val: this.coerce(nextTxt) };
+            written++;
+            continue;
+          }
+
+          // Pola umum: salin nilai sumber (siklus).
+          const copyRaw = ref.raw !== undefined ? ref.raw : '';
+          this.cells[coord] = { ...prevMeta, raw: copyRaw, val: ref.val !== undefined ? ref.val : this.coerce(copyRaw) };
+          written++;
+        }
+      }
+
+      if (written) {
+        this.recalculateAll();
+      }
+      return written;
     }
 
     // ==== API MULTI-SHEET ====
@@ -648,6 +825,19 @@
         }
 
         if (x > this.headerWidth && y > this.headerHeight) {
+          // ==== AUTOFILL: MULAI SERET FILL HANDLE (paritas Google Sheets) ====
+          // Dicek SEBELUM seleksi sel, supaya menyeret handle tidak mengubah
+          // jangkar seleksi. Handle kecil (6x6) dengan toleransi 4px.
+          if (this.isOverFillHandle(x, y)) {
+            this.isAutofilling = true;
+            this.autofillOrigin = this.getRangeBounds();
+            this.autofillTarget = { ...this.autofillOrigin };
+            this.isSelecting = false;
+            e.preventDefault();
+            this.render();
+            return;
+          }
+
           // colFromX() menghormati lebar kolom yang sudah di-resize.
           const clickedCol = this.colFromX(x + this.scrollX);
           const clickedRow = Math.floor((y - this.headerHeight + this.scrollY) / this.rowHeight) + 1;
@@ -709,10 +899,46 @@
           return;
         }
 
+        // ==== DRAG AUTOFILL (paritas Google Sheets) ====
+        // Target diperluas mengikuti sel di bawah kursor. Arah ditentukan oleh
+        // posisi kursor relatif terhadap rentang sumber: di bawah -> bawah,
+        // di atas -> atas, di kanan -> kanan, di kiri -> kiri. Preview digambar
+        // oleh render() sebagai kotak putus-putus.
+        if (this.isAutofilling && this.autofillOrigin) {
+          const o = this.autofillOrigin;
+          const curCol = this.colFromX(mx + this.scrollX);
+          const curRow = this.rowFromY(my);
+          if (curCol < 0 || curRow < 0) return;
+          const t = { ...o };
+          if (curRow > o.maxRow) { t.maxRow = curRow; t.minRow = o.minRow; }
+          else if (curRow < o.minRow) { t.minRow = curRow; t.maxRow = o.maxRow; }
+          if (curCol > o.maxCol) { t.maxCol = curCol; t.minCol = o.minCol; }
+          else if (curCol < o.minCol) { t.minCol = curCol; t.maxCol = o.maxCol; }
+          if (JSON.stringify(t) !== JSON.stringify(this.autofillTarget)) {
+            this.autofillTarget = t;
+            this.render();
+          }
+          return;
+        }
+
         // ==== HOVER GARIS KOLOM -> kursor col-resize ====
         // Memakai colResizeHit() yang SAMA dengan mousedown, sehingga area
         // hover dan area klik selalu identik (tidak ada zona "hampir kena").
         if (!this.isSelecting && !this.editing) {
+          // Fill handle dicek lebih dulu: kursor crosshair menandakan handle
+          // bisa diseret, dan posisinya menang atas garis kolom.
+          if (this.isOverFillHandle(mx, my)) {
+            if (!this._hoverFillHandle) {
+              this._hoverFillHandle = true;
+              this._hoverResizeCol = -1;
+              this.canvas.style.cursor = 'crosshair';
+            }
+            return;
+          }
+          if (this._hoverFillHandle) {
+            this._hoverFillHandle = false;
+            this.canvas.style.cursor = 'cell';
+          }
           const hovCol = this.colResizeHit(mx, my);
           if (hovCol !== this._hoverResizeCol) {
             this._hoverResizeCol = hovCol;
@@ -742,6 +968,35 @@
           this._syncActiveSheet();
           if (typeof this.onCellChange === 'function') this.onCellChange(this.cells);
           this.render();
+          return;
+        }
+        // ==== SELESAI AUTOFILL (paritas Google Sheets) ====
+        // Isi rentang tujuan, jadikan rentang hasil sebagai seleksi baru,
+        // lalu picu autosave. Dicek sebelum logika seleksi.
+        if (this.isAutofilling) {
+          const o = this.autofillOrigin;
+          const t = this.autofillTarget;
+          this.isAutofilling = false;
+          this.autofillOrigin = null;
+          this.autofillTarget = null;
+          this._hoverFillHandle = false;
+          this.canvas.style.cursor = 'cell';
+          if (o && t) {
+            const wrote = this.applyAutofill(o, t);
+            // Seleksi mengikuti hasil pengisian, persis seperti Sheets.
+            if (wrote > 0) {
+              this.selStartCol = t.minCol;
+              this.selStartRow = t.minRow;
+              this.selEndCol = t.maxCol;
+              this.selEndRow = t.maxRow;
+              this.activeCol = t.minCol;
+              this.activeRow = t.minRow;
+              this._syncActiveSheet();
+              if (typeof this.onCellChange === 'function') this.onCellChange(this.cells);
+            }
+          }
+          this.render();
+          this.updateFormulaBar();
           return;
         }
         if (!this.isSelecting) return;
@@ -1249,6 +1504,40 @@
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 1;
         ctx.strokeRect(handleX + 0.5, handleY + 0.5, 5, 5);
+        ctx.restore();
+      }
+
+      // ==== PRATINJAU AUTOFILL (paritas Google Sheets) ====
+      // Selama handle diseret, area perluasan digambar sebagai kotak putus-putus
+      // biru supaya user melihat persis sel mana yang akan terisi SEBELUM
+      // melepas mouse. Digambar di atas overlay seleksi, di bawah garis resize.
+      if (this.isAutofilling && this.autofillTarget) {
+        const t = this.autofillTarget;
+        const px = this.getColX(t.minCol) - this.scrollX;
+        const py = this.headerHeight + ((t.minRow - 1) * this.rowHeight) - this.scrollY;
+        const pw = this.getColX(t.maxCol + 1) - this.getColX(t.minCol);
+        const ph = (t.maxRow - t.minRow + 1) * this.rowHeight;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(this.headerWidth, this.headerHeight, width - this.headerWidth, height - this.headerHeight);
+        ctx.clip();
+        ctx.strokeStyle = '#1a73e8';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 3]);
+        ctx.strokeRect(px, py, pw, ph);
+        ctx.setLineDash([]);
+        // Label rentang tujuan (mis. "A1:A5") menempel di kotak, seperti Sheets.
+        const tgtTxt = `${this.colLabel(t.minCol)}${t.minRow}:${this.colLabel(t.maxCol)}${t.maxRow}`;
+        ctx.font = '600 11px Arial, sans-serif';
+        const ttw = ctx.measureText(tgtTxt).width;
+        const tbx = Math.min(px + 2, width - ttw - 12);
+        const tby = Math.max(this.headerHeight + 2, py - 18);
+        ctx.fillStyle = '#1a73e8';
+        ctx.fillRect(tbx, tby, ttw + 10, 16);
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(tgtTxt, tbx + 5, tby + 8);
         ctx.restore();
       }
 

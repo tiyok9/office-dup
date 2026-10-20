@@ -75,9 +75,47 @@
       this.selEndRow = this.activeRow;
       this.isSelecting = false;
       this._dragBound = false;
+
+      // ==== MULTI-SHEET (paritas tab sheet Google Sheets) ====
+      // sheets[] adalah sumber kebenaran. this.cells / this.charts tetap menunjuk
+      // ke sheet AKTIF, sehingga seluruh kode lama (formula, bagan, render,
+      // sortRange) bekerja tanpa perubahan apa pun.
+      this.sheets = [{ name: 'Sheet1', cells: {}, charts: [] }];
+      this.activeSheetIdx = 0;
       this.initEvents();
     }
 
+    // Tulis keadaan editor saat ini ke entri sheets[] yang aktif.
+    // Dipanggil SEBELUM berpindah sheet / sebelum menyusun data dokumen,
+    // supaya suntingan pada sheet lama tidak hilang.
+    _syncActiveSheet() {
+      if (!Array.isArray(this.sheets) || !this.sheets.length) {
+        this.sheets = [{ name: 'Sheet1', cells: {}, charts: [] }];
+        this.activeSheetIdx = 0;
+      }
+      const s = this.sheets[this.activeSheetIdx];
+      if (!s) return;
+      s.cells = this.cells || {};
+      s.charts = this.charts || [];
+    }
+
+    // Muat entri sheets[] aktif menjadi keadaan editor (cells/charts/seleksi).
+    _loadActiveSheet() {
+      const s = this.sheets[this.activeSheetIdx] || { cells: {}, charts: [] };
+      this.cells = JSON.parse(JSON.stringify(s.cells || {}));
+      this.charts = JSON.parse(JSON.stringify(s.charts || []));
+      this.activeChartId = this.charts.length ? this.charts[this.charts.length - 1].id : null;
+      // Seleksi milik sheet sebelumnya tidak boleh ikut terbawa.
+      this.selStartCol = this.activeCol;
+      this.selStartRow = this.activeRow;
+      this.selEndCol = this.activeCol;
+      this.selEndRow = this.activeRow;
+      this.isSelecting = false;
+      this.renderChartOverlay();
+    }
+
+    // Jalur LAMA (dipakai tes, undo, dan dokumen format lama). Tetap dipertahankan
+    // 100%: hanya mengisi sheet AKTIF, tidak menghapus sheet lain.
     setCells(cellsMap) {
       this.cells = JSON.parse(JSON.stringify(cellsMap || {}));
       // Dokumen baru = seleksi lama tidak berlaku. Tanpa ini, name box bisa
@@ -87,12 +125,147 @@
       this.selEndCol = this.activeCol;
       this.selEndRow = this.activeRow;
       this.isSelecting = false;
+      // Cerminkan ke sheets[] supaya dokumen format lama (tanpa sheets[])
+      // tidak menghapus isi sheet aktif saat disimpan.
+      if (!Array.isArray(this.sheets) || !this.sheets.length) {
+        this.sheets = [{ name: 'Sheet1', cells: {}, charts: [] }];
+        this.activeSheetIdx = 0;
+      }
+      if (this.sheets[this.activeSheetIdx]) {
+        this.sheets[this.activeSheetIdx].cells = this.cells;
+      }
       this.render();
       this.updateFormulaBar();
     }
 
     getCells() {
       return this.cells;
+    }
+
+    // ==== API MULTI-SHEET ====
+    // Dokumen format lama (hanya punya data.cells) tetap terbaca: dibungkus jadi
+    // satu sheet bernama Sheet1, sehingga tidak ada migrasi yang memutus data.
+    setSheets(arr, activeIdx = 0) {
+      const list = Array.isArray(arr) ? arr : [];
+      if (!list.length) {
+        this.sheets = [{ name: 'Sheet1', cells: {}, charts: [] }];
+        this.activeSheetIdx = 0;
+      } else {
+        this.sheets = list.map((s, i) => ({
+          name: (s && s.name) ? String(s.name) : `Sheet${i + 1}`,
+          cells: (s && s.cells) ? JSON.parse(JSON.stringify(s.cells)) : {},
+          charts: (s && Array.isArray(s.charts)) ? JSON.parse(JSON.stringify(s.charts)) : []
+        }));
+        const idx = Number(activeIdx);
+        this.activeSheetIdx = (Number.isInteger(idx) && idx >= 0 && idx < this.sheets.length) ? idx : 0;
+      }
+      this.activeCol = 2;
+      this.activeRow = 1;
+      this._loadActiveSheet();
+      this.renderSheetTabs();
+      this.render();
+      this.updateFormulaBar();
+    }
+
+    getSheets() {
+      this._syncActiveSheet();
+      return this.sheets;
+    }
+
+    getActiveSheetName() {
+      const s = this.sheets[this.activeSheetIdx];
+      return s ? s.name : 'Sheet1';
+    }
+
+    // Pindah sheet: suntingan sheet lama WAJIB disimpan dulu ke sheets[].
+    switchSheet(idx) {
+      if (!Number.isInteger(idx) || idx < 0 || idx >= this.sheets.length) return false;
+      if (idx === this.activeSheetIdx) return false;
+      this._syncActiveSheet();
+      this.activeSheetIdx = idx;
+      this.activeCol = 2;
+      this.activeRow = 1;
+      this._loadActiveSheet();
+      this.renderSheetTabs();
+      this.render();
+      this.updateFormulaBar();
+      this.notifyChange();
+      return true;
+    }
+
+    addSheet(name) {
+      this._syncActiveSheet();
+      const n = this.sheets.length + 1;
+      // Nama unik: Sheet2, Sheet3, ... (lewati nama yang sudah dipakai).
+      let candidate = name ? String(name) : `Sheet${n}`;
+      let k = n;
+      while (this.sheets.some(s => s.name === candidate)) {
+        k++;
+        candidate = name ? `${name}${k}` : `Sheet${k}`;
+      }
+      this.sheets.push({ name: candidate, cells: {}, charts: [] });
+      this.activeSheetIdx = this.sheets.length - 1;
+      this.activeCol = 2;
+      this.activeRow = 1;
+      this._loadActiveSheet();
+      this.renderSheetTabs();
+      this.render();
+      this.updateFormulaBar();
+      this.notifyChange();
+      return candidate;
+    }
+
+    // Hapus sheet aktif. Sheet terakhir TIDAK boleh dihapus (perilaku Sheets).
+    deleteSheet(idx = this.activeSheetIdx) {
+      if (this.sheets.length <= 1) return false;
+      if (!Number.isInteger(idx) || idx < 0 || idx >= this.sheets.length) return false;
+      this._syncActiveSheet();
+      this.sheets.splice(idx, 1);
+      if (this.activeSheetIdx >= this.sheets.length) this.activeSheetIdx = this.sheets.length - 1;
+      else if (idx < this.activeSheetIdx) this.activeSheetIdx--;
+      this._loadActiveSheet();
+      this.renderSheetTabs();
+      this.render();
+      this.updateFormulaBar();
+      this.notifyChange();
+      return true;
+    }
+
+    // Gambar ulang tab bar dari this.sheets (bukan HTML statis).
+    renderSheetTabs() {
+      const bar = document.getElementById('sheetsTabBar');
+      if (!bar) return;
+      bar.innerHTML = '';
+      this.sheets.forEach((s, i) => {
+        const tab = document.createElement('div');
+        tab.className = 'sheet-tab' + (i === this.activeSheetIdx ? ' active' : '');
+        tab.setAttribute('data-sheet-idx', String(i));
+        tab.title = s.name;
+        const label = document.createElement('span');
+        label.className = 'sheet-tab-label';
+        label.textContent = s.name;
+        tab.appendChild(label);
+        // Tombol tutup hanya muncul di tab aktif dan bila sheet > 1.
+        if (i === this.activeSheetIdx && this.sheets.length > 1) {
+          const x = document.createElement('button');
+          x.className = 'sheet-tab-close';
+          x.type = 'button';
+          x.title = `Hapus ${s.name}`;
+          x.textContent = '\u00d7';
+          x.addEventListener('click', (e) => { e.stopPropagation(); this.deleteSheet(i); });
+          tab.appendChild(x);
+        }
+        tab.addEventListener('click', () => this.switchSheet(i));
+        bar.appendChild(tab);
+      });
+      const add = document.createElement('button');
+      add.className = 'sheet-tab-add';
+      add.type = 'button';
+      add.id = 'sheetTabAdd';
+      add.title = 'Tambahkan Sheet';
+      add.textContent = '+';
+      add.addEventListener('click', () => this.addSheet());
+      bar.appendChild(add);
     }
 
     colLabel(idx) {

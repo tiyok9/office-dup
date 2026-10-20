@@ -125,6 +125,15 @@
     #sheetsGridCanvas { width: 100%; height: 100%; display: block; }
     .sheets-tab-bar { height: 34px; background: #f1f3f4; border-top: 1px solid var(--g-border); display: flex; align-items: center; padding: 0 8px; gap: 4px; }
     .sheet-tab-item { background: #ffffff; border-radius: 4px 4px 0 0; padding: 5px 16px; font-size: 12px; font-weight: 500; color: #137333; border-top: 3px solid #137333; box-shadow: 0 1px 2px rgba(0,0,0,0.1); cursor: pointer; }
+    /* === TAB SHEET DINAMIS (paritas docs-sheet-tab Google Sheets) === */
+    .sheet-tab { display: inline-flex; align-items: center; gap: 6px; background: transparent; border-radius: 4px 4px 0 0; padding: 5px 12px; font-size: 12px; font-weight: 500; color: #5f6368; border-top: 3px solid transparent; cursor: pointer; user-select: none; max-width: 180px; }
+    .sheet-tab:hover { background: rgba(0,0,0,0.05); }
+    .sheet-tab.active { background: #ffffff; color: #137333; border-top-color: #137333; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+    .sheet-tab-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sheet-tab-close { border: 0; background: transparent; color: #5f6368; font-size: 14px; line-height: 1; padding: 0 2px; cursor: pointer; border-radius: 50%; }
+    .sheet-tab-close:hover { background: rgba(0,0,0,0.1); color: #d93025; }
+    .sheet-tab-add { border: 0; background: transparent; color: #137333; font-size: 18px; line-height: 1; padding: 2px 8px; cursor: pointer; border-radius: 50%; }
+    .sheet-tab-add:hover { background: rgba(0,0,0,0.06); }
 
     /* VIEW: SLIDES (PUNCH) */
     .view-slides { flex: 1; display: none; overflow: hidden; background: #e9eef6; }
@@ -395,9 +404,7 @@
       <div class="sheets-grid-wrapper">
         <canvas id="sheetsGridCanvas"></canvas>
       </div>
-      <div class="sheets-tab-bar">
-        <div class="sheet-tab-item">Sheet1</div>
-      </div>
+      <div class="sheets-tab-bar" id="sheetsTabBar"></div>
     </div>
 
     <!-- 3. GOOGLE SLIDES (PUNCH) -->

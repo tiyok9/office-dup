@@ -90,11 +90,14 @@
       if (window.RitzSpreadsheetEditor) {
         this.ritz = new window.RitzSpreadsheetEditor('sheetsGridCanvas', 'sheetFormulaInput', 'sheetActiveCell');
         this.ritz.onCellChange = (cells) => {
-          const data = { cells };
+          // sheets[] ikut dikirim supaya suntingan pada sheet mana pun tersimpan.
+          const data = { cells, sheets: this.ritz.getSheets(), activeSheetIdx: this.ritz.activeSheetIdx };
           if (!this._restoring) this.recordHistory('sheets', data);
           this.triggerAutosave({ data });
           this.syncToolbar();
         };
+        // Tab bar dinamis digambar dari model (bukan HTML statis "Sheet1").
+        this.ritz.renderSheetTabs();
       }
 
       if (window.PunchSlidesEditor) {
@@ -156,7 +159,14 @@
       try { data = JSON.parse(json); } catch { return; }
       this._restoring = true;
       if (app === 'docs' && this.kix) this.kix.setDocumentData(data);
-      else if (app === 'sheets' && this.ritz) this.ritz.setCells(data.cells || {});
+      else if (app === 'sheets' && this.ritz) {
+        // Snapshot lama mungkin hanya punya cells (tanpa sheets[]).
+        if (Array.isArray(data.sheets) && data.sheets.length) {
+          this.ritz.setSheets(data.sheets, data.activeSheetIdx || 0);
+        } else {
+          this.ritz.setCells(data.cells || {});
+        }
+      }
       else if (app === 'slides' && this.punch) this.punch.setSlides(data.slides || []);
       this._restoring = false;
       this.triggerAutosave({ data });
@@ -360,9 +370,18 @@
           this.kix.setDocumentData(doc.data);
           this.resetHistory('docs', doc.data);
         } else if (doc.type === 'sheets' && this.ritz && doc.data) {
-          this.ritz.setCells(doc.data.cells || {});
-          this.ritz.setCharts(doc.data.charts || []);
-          this.resetHistory('sheets', { cells: doc.data.cells || {}, charts: doc.data.charts || [] });
+          // Dokumen format lama hanya punya data.cells -> dibungkus jadi 1 sheet.
+          // Dokumen baru punya data.sheets[] -> semua sheet ikut dimuat.
+          if (Array.isArray(doc.data.sheets) && doc.data.sheets.length) {
+            this.ritz.setSheets(doc.data.sheets, doc.data.activeSheetIdx || 0);
+          } else {
+            this.ritz.setSheets([{ name: 'Sheet1', cells: doc.data.cells || {}, charts: doc.data.charts || [] }], 0);
+          }
+          this.resetHistory('sheets', {
+            cells: this.ritz.getCells(),
+            sheets: this.ritz.getSheets(),
+            activeSheetIdx: this.ritz.activeSheetIdx
+          });
         } else if (doc.type === 'slides' && this.punch && doc.data) {
           this.punch.setSlides(doc.data.slides || []);
           this.resetHistory('slides', { slides: doc.data.slides || [] });
@@ -1177,7 +1196,16 @@
 
     editorData(type) {
       if (type === 'docs' && this.kix) return this.kix.getDocumentData();
-      if (type === 'sheets' && this.ritz) return { cells: this.ritz.getCells(), charts: this.ritz.getCharts() };
+      if (type === 'sheets' && this.ritz) {
+        // sheets[] = sumber kebenaran (semua tab). cells/charts sheet aktif tetap
+        // dikirim untuk kompatibilitas mundur dengan pembaca format lama.
+        return {
+          cells: this.ritz.getCells(),
+          charts: this.ritz.getCharts(),
+          sheets: this.ritz.getSheets(),
+          activeSheetIdx: this.ritz.activeSheetIdx
+        };
+      }
       if (type === 'slides' && this.punch) return { slides: this.punch.getSlides() };
       const doc = this.documents.find(d => d.id === this.currentDocId);
       return doc || {};

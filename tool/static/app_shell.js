@@ -128,6 +128,10 @@
         };
         // Tab bar dinamis digambar dari model (bukan HTML statis "Sheet1").
         this.ritz.renderSheetTabs();
+        // Klik indikator komentar sel: buka thread. Pola identik dengan
+        // penanganan komentar di Docs (lihat pemasangan pada editor Kix di atas):
+        // editor tetap murni model+tampilan, shell yang membuka UI percakapan.
+        this.ritz.onCommentClick = (coord, list) => this.openSheetCommentModal(coord, list);
       }
 
       if (window.PunchSlidesEditor) {
@@ -805,7 +809,10 @@
       bind('tbPrint', () => window.print());
       bind('tbPresent', () => { if (this.punch) this.punch.startPresentationMode(); });
       bind('tbWordCount', () => this.openWordCountModal());
-      bind('tbComment', () => { if (this.currentApp === 'docs') this.openCommentModal(); });
+      bind('tbComment', () => {
+      if (this.currentApp === 'docs') this.openCommentModal();
+      else if (this.currentApp === 'sheets') this.openSheetCommentModal();
+    });
       bind('tbShortcuts', () => this.openShortcutsModal());
 
       // --- Zoom (global, <select> → event 'change', bukan 'click') ---
@@ -1078,12 +1085,18 @@
           // akan mati tepat di konteks yang paling dibutuhkan.
           e.preventDefault();
           this.openLinkModal();
-        } else if (k === 'm' && e.altKey && this.currentApp === 'docs' && !inModalField) {
-          // Komentar: paritas Google Docs (Ctrl+Alt+M). Guard !inModalField
+        } else if (k === 'm' && e.altKey && (this.currentApp === 'docs' || this.currentApp === 'sheets') && !inModalField) {
+          // Komentar: paritas Google Docs/Sheets (Ctrl+Alt+M). Guard !inModalField
           // (bukan !inField) — hiddenInput Kix adalah TEXTAREA, jadi inField
           // selalu true saat mengetik di dokumen.
+          //
+          // RUTE WAJIB per aplikasi: openCommentModal() adalah modal KHUSUS Docs
+          // dan langsung menolak bila currentApp !== 'docs'. Memanggilnya di
+          // Sheets berarti pintasan tampak terpasang tetapi tidak pernah membuka
+          // apa pun (hanya toast penolakan).
           e.preventDefault();
-          this.openCommentModal();
+          if (this.currentApp === 'sheets') this.openSheetCommentModal();
+          else this.openCommentModal();
         } else if (k === 's') {
           e.preventDefault();
           this.saveDocument({ title: document.getElementById('docTitle')?.value });
@@ -1214,7 +1227,7 @@
           { label: 'Tambah Halaman Baru (Docs)', action: () => { if (this.kix) this.kix.insertNewPage(); } },
           { label: 'Pemisah Halaman (Docs)', shortcut: 'Ctrl+Enter', action: () => { if (this.kix) this.kix.insertPageBreak(); } },
           { label: 'Tautan (Docs)', shortcut: 'Ctrl+K', action: () => this.openLinkModal() },
-          { label: 'Komentar (Docs)', shortcut: 'Ctrl+Alt+M', action: () => this.openCommentModal() },
+          { label: 'Komentar', shortcut: 'Ctrl+Alt+M', action: () => { if (this.currentApp === 'sheets') this.openSheetCommentModal(); else this.openCommentModal(); } },
           { sep: true },
           { label: 'Tambah Slide Baru (Slides)', action: () => { if (this.punch) this.punch.addNewSlide(); } },
           { label: 'Duplikat Slide Aktif (Slides)', action: () => { if (this.punch) this.punch.duplicateActiveSlide(); } },
@@ -1374,6 +1387,16 @@
     closeModal() {
       const modal = document.getElementById('gwsModal');
       if (modal) {
+        // Lepas fokus SEBELUM menyembunyikan modal.
+        //
+        // Tanpa ini document.activeElement tetap menunjuk tombol/textarea di
+        // dalam #gwsModal yang kini display:none. Guard `inModalField`
+        // (initKeyboardShortcuts, :1027) memakai e.target.closest('#gwsModal'),
+        // sehingga SELURUH pintasan (Ctrl+F, Ctrl+K, Ctrl+Alt+M, ...) tetap
+        // dianggap "sedang di dalam modal" dan MATI setelah modal ditutup.
+        // Gejalanya membingungkan: tombol toolbar jalan, pintasan tidak.
+        const ae = document.activeElement;
+        if (ae && modal.contains(ae) && typeof ae.blur === 'function') ae.blur();
         modal.style.display = 'none';
         modal.onclick = null;
       }
@@ -1913,6 +1936,160 @@
         };
         renderThread();
       }
+    }
+
+    // ==== KOMENTAR SEL (Sheets) ====
+    // Meniru openCommentModal() Docs: modal dinamis via ensureModal(),
+    // stopPropagation keydown textarea (cegah bocor ke window keydown Ritz
+    // yang menulis ke grid), dan mutasi lewat metode ritz_editor (bukan di sini).
+    //
+    // Perbedaan dari Docs: satu sel bisa punya BANYAK komentar (paritas Sheets),
+    // jadi modal menampilkan seluruh thread sel + form tambah komentar baru.
+    openSheetCommentModal(coord, existingList) {
+      if (!this.ritz || this.currentApp !== 'sheets') {
+        this.showToast('Komentar sel hanya tersedia di Sheets.');
+        return;
+      }
+      if (!coord) coord = this.ritz.getActiveCoord();
+      const modal = this.ensureModal();
+      const btn = 'padding:7px 14px; border:1px solid #dadce0; background:#fff; color:#1a73e8; border-radius:6px; font-size:12.5px; font-weight:500; cursor:pointer;';
+      const btnP = 'padding:7px 14px; border:none; background:#1a73e8; color:#fff; border-radius:6px; font-size:12.5px; font-weight:500; cursor:pointer;';
+      const btnD = 'padding:7px 14px; border:1px solid #dadce0; background:#fff; color:#d93025; border-radius:6px; font-size:12.5px; font-weight:500; cursor:pointer;';
+      const fmtDate = (iso) => {
+        try {
+          const d = new Date(iso);
+          return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) + ' ' +
+                 d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+        } catch { return iso || ''; }
+      };
+      // stopPropagation WAJIB: window.addEventListener('keydown') di ritz_editor.js
+      // (:1398) menulis ke grid bila e.target bukan INPUT/TEXTAREA. Modal memakai
+      // textarea, jadi technically aman — tetapi stopPropagation adalah sabuk
+      // pengaman kedua (defense in depth), persis seperti openCommentModal Docs.
+      const guardTextarea = (el) => {
+        if (!el) return;
+        el.addEventListener('keydown', (ev) => {
+          ev.stopPropagation();
+          if (ev.key === 'Escape') { ev.preventDefault(); this.closeModal(); }
+        });
+      };
+
+      const renderThread = () => {
+        const list = this.ritz.getCellComments(coord);
+        const commentsHtml = list.map((c) => {
+          const rs = Array.isArray(c.replies) ? c.replies : [];
+          const replyHtml = rs.map(r => `
+            <div style="margin-top:8px; padding-left:14px; border-left:2px solid #e0e0e0;">
+              <div style="font-size:12px; color:#5f6368; margin-bottom:2px;"><strong>${escapeXml(r.author || 'Saya')}</strong> · ${escapeXml(fmtDate(r.createdAt))}</div>
+              <div style="font-size:13px; color:#202124; white-space:pre-wrap;">${escapeXml(r.text || '')}</div>
+            </div>`).join('');
+          const resolvedBadge = c.resolved
+            ? '<span style="display:inline-block; padding:2px 8px; background:#e6f4ea; color:#137333; border-radius:10px; font-size:11px; font-weight:500; margin-left:8px;">Selesai</span>'
+            : '';
+          return `
+            <div style="background:#f8f9fa; padding:12px 14px; border-radius:8px; margin-bottom:12px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <div style="font-size:12px; color:#5f6368;"><strong>${escapeXml(c.author || 'Saya')}</strong> · ${escapeXml(fmtDate(c.createdAt))}${resolvedBadge}</div>
+                <div style="display:flex; gap:6px;">
+                  <button class="sc-resolve" data-id="${escapeXml(c.id)}" style="${btn}">${c.resolved ? 'Buka' : 'Selesai'}</button>
+                  <button class="sc-delete" data-id="${escapeXml(c.id)}" style="${btnD}">Hapus</button>
+                </div>
+              </div>
+              <div style="font-size:13px; color:#202124; white-space:pre-wrap; margin-bottom:8px;">${escapeXml(c.text || '')}</div>
+              ${replyHtml ? `<div style="margin-bottom:8px;">${replyHtml}</div>` : ''}
+              <div style="display:flex; gap:6px; align-items:flex-start;">
+                <textarea class="sc-reply-input" data-id="${escapeXml(c.id)}" rows="1" placeholder="Balas…" autocomplete="off"
+                  style="flex:1; box-sizing:border-box; padding:6px 8px; border:1px solid #dadce0; border-radius:6px; font-size:12.5px; outline:none; resize:none; font-family:inherit;"></textarea>
+                <button class="sc-reply-btn" data-id="${escapeXml(c.id)}" style="${btnP}">Balas</button>
+              </div>
+            </div>`;
+        }).join('');
+
+        const hasComments = list.length > 0;
+        modal.innerHTML = `
+          <div style="background:#fff; width:520px; max-height:80vh; overflow-y:auto; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,.25); padding:20px; font-family:'Google Sans',Arial,sans-serif;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+              <h3 style="font-size:17px; font-weight:500; color:#202124; margin:0;">Komentar Sel ${escapeXml(coord)}</h3>
+              <span class="modal-close" style="cursor:pointer; font-size:20px; color:#5f6368;">✕</span>
+            </div>
+            ${hasComments ? commentsHtml : '<div style="font-size:13px; color:#5f6368; margin-bottom:14px;">Belum ada komentar pada sel ini.</div>'}
+            <label style="display:block; font-size:12px; color:#5f6368; margin-bottom:4px;">Tambah Komentar</label>
+            <textarea id="gwsSheetCommentText" rows="2" placeholder="Tulis komentar…" autocomplete="off"
+              style="width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid #dadce0; border-radius:6px; font-size:13px; outline:none; resize:vertical; font-family:inherit; margin-bottom:8px;"></textarea>
+            <div id="gwsSheetCommentErr" style="font-size:12px; color:#d93025; min-height:16px; margin-bottom:6px;"></div>
+            <div style="display:flex; gap:8px; justify-content:flex-end;">
+              <button class="modal-close" style="${btn}">Tutup</button>
+              <button id="gwsSheetCommentAdd" style="${btnP}">Komentari</button>
+            </div>
+          </div>
+        `;
+        modal.style.display = 'flex';
+        modal.querySelectorAll('.modal-close').forEach(el => el.addEventListener('click', () => this.closeModal()));
+        guardTextarea(modal.querySelector('#gwsSheetCommentText'));
+        modal.querySelectorAll('.sc-reply-input').forEach(el => guardTextarea(el));
+
+        // Tambah komentar baru.
+        const addBtn = modal.querySelector('#gwsSheetCommentAdd');
+        if (addBtn) addBtn.addEventListener('click', () => {
+          const tEl = modal.querySelector('#gwsSheetCommentText');
+          const errEl = modal.querySelector('#gwsSheetCommentErr');
+          const body = tEl ? tEl.value.trim() : '';
+          if (!body) { if (errEl) errEl.textContent = 'Komentar tidak boleh kosong.'; return; }
+          this.ritz.addCellComment(coord, body, 'Saya');
+          this.showToast('Komentar ditambahkan.');
+          renderThread();
+          const nt = modal.querySelector('#gwsSheetCommentText');
+          if (nt) nt.focus();
+        });
+
+        // Reply per komentar.
+        modal.querySelectorAll('.sc-reply-btn').forEach(btnEl => {
+          btnEl.addEventListener('click', () => {
+            const cid = btnEl.getAttribute('data-id');
+            const input = modal.querySelector(`.sc-reply-input[data-id="${cid}"]`);
+            const body = input ? input.value.trim() : '';
+            if (!body) { input && input.focus(); return; }
+            const ok = this.ritz.addCellCommentReply(coord, cid, body, 'Saya');
+            if (!ok) { this.showToast('Komentar tidak ditemukan.'); return; }
+            this.showToast('Balasan ditambahkan.');
+            renderThread();
+          });
+        });
+
+        // Resolve toggle per komentar.
+        modal.querySelectorAll('.sc-resolve').forEach(btnEl => {
+          btnEl.addEventListener('click', () => {
+            const cid = btnEl.getAttribute('data-id');
+            const c = this.ritz.getCellComments(coord).find(x => x.id === cid);
+            if (!c) { this.closeModal(); this.showToast('Komentar tidak ditemukan.'); return; }
+            this.ritz.setCellCommentResolved(coord, cid);
+            this.showToast(c.resolved ? 'Komentar dibuka kembali.' : 'Komentar diselesaikan.');
+            renderThread();
+          });
+        });
+
+        // Delete per komentar.
+        modal.querySelectorAll('.sc-delete').forEach(btnEl => {
+          btnEl.addEventListener('click', () => {
+            const cid = btnEl.getAttribute('data-id');
+            const ok = this.ritz.deleteCellComment(coord, cid);
+            if (ok) {
+              this.showToast('Komentar dihapus.');
+              // Bila sel tidak lagi punya komentar, tutup modal (tidak ada yang ditampilkan).
+              if (!this.ritz.hasCellComment(coord)) { this.closeModal(); return; }
+              renderThread();
+            } else {
+              this.showToast('Komentar tidak ditemukan.');
+            }
+          });
+        });
+
+        // Fokus: bila tidak ada komentar, fokus ke textarea tambah; bila ada,
+        // fokus tetap di textarea tambah (paritas Sheets: form selalu siap).
+        const focusEl = modal.querySelector('#gwsSheetCommentText');
+        if (focusEl) focusEl.focus();
+      };
+      renderThread();
     }
 
     openAboutModal() {

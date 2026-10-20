@@ -291,6 +291,54 @@ async function runTestSuite() {
     assert(called.size > 0, `Integrasi: shell benar-benar memanggil method ${name} (${called.size} panggilan)`);
   }
 
+  // TEST SUITE 9b: KOMENTAR SEL — WIRING SHELL (statis)
+  // Shell TIDAK diinstansiasi di unit suite (butuh DOM penuh), jadi yang diuji
+  // di sini adalah KONTRAK SUMBER: handler terpasang, guard kontekstual benar,
+  // dan tidak ada dialog native. Perilaku nyata (klik -> modal -> simpan)
+  // dibuktikan di E2E dengan DOM sungguhan.
+  console.log('\n--- Suite 9b: Wiring Komentar Sel di Shell ---');
+  assert(/this\.ritz\.onCommentClick\s*=\s*\(coord,\s*list\)/.test(shellSrc),
+    'Shell: ritz.onCommentClick dipasang dan meneruskan (coord, list)');
+  assert(/openSheetCommentModal\(coord, existingList\)\s*\{/.test(shellSrc),
+    'Shell: openSheetCommentModal didefinisikan');
+
+  // tbComment WAJIB kontekstual. Versi lama hanya menangani docs, sehingga
+  // tombol komentar MATI di Sheets (rect ada, handler tidak melakukan apa pun).
+  const iTbC = shellSrc.indexOf("bind('tbComment'");
+  assert(iTbC !== -1, 'Shell: tbComment terikat');
+  const tbCBlock = shellSrc.slice(iTbC, iTbC + 400);
+  assert(tbCBlock.includes("currentApp === 'docs'") && tbCBlock.includes("currentApp === 'sheets'"),
+    'Shell: tbComment menangani Docs DAN Sheets (dulu mati di Sheets)');
+  assert(tbCBlock.includes('openCommentModal') && tbCBlock.includes('openSheetCommentModal'),
+    'Shell: tbComment memanggil modal yang tepat per aplikasi');
+
+  // Ctrl+Alt+M harus berlaku di Sheets juga (paritas Google Sheets).
+  assert(/k === 'm' && e\.altKey && \(this\.currentApp === 'docs' \|\| this\.currentApp === 'sheets'\)/.test(shellSrc),
+    'Shell: Ctrl+Alt+M membuka komentar di Docs maupun Sheets');
+
+  // Item menu Insert ikut kontekstual (dulu selalu membuka modal Docs).
+  const iMenu = shellSrc.indexOf("label: 'Komentar'");
+  assert(iMenu !== -1, 'Shell: item menu Komentar ada (label tidak lagi mengunci ke Docs)');
+  const menuBlock = shellSrc.slice(iMenu, iMenu + 260);
+  assert(menuBlock.includes('openSheetCommentModal'),
+    'Shell: item menu Komentar merutekan ke modal Sheets saat di Sheets');
+
+  // Guard: ketikan di modal tidak boleh bocor ke window keydown Ritz.
+  const iOpenSheet = shellSrc.indexOf('openSheetCommentModal(coord, existingList)');
+  const sheetModalSrc = shellSrc.slice(iOpenSheet, iOpenSheet + 12000);
+  assert(sheetModalSrc.includes('stopPropagation'),
+    'Shell: textarea modal komentar sel memanggil stopPropagation (cegah bocor ke grid)');
+  assert(!/\bwindow\.(prompt|confirm|alert)\s*\(/.test(sheetModalSrc),
+    'Shell: modal komentar sel tidak memakai dialog native');
+
+  // Modal WAJIB memakai 6 method ritz yang benar (Suite 9 sudah memverifikasi
+  // keberadaannya; di sini dipastikan modal memang memanggilnya).
+  for (const m of ['addCellComment', 'addCellCommentReply', 'setCellCommentResolved',
+                   'deleteCellComment', 'getCellComments', 'hasCellComment']) {
+    assert(sheetModalSrc.includes('this.ritz.' + m + '('),
+      `Shell: modal komentar sel memakai ritz.${m}()`);
+  }
+
   // TEST SUITE 10: FORMULA ENGINE — REGRESI & TOKEN ERROR
   // Menguji perilaku NYATA engine (bukan sekadar keberadaan teks di sumber),
   // termasuk dua kelas bug yang dulu lolos: parser greedy dan pembagian nol.

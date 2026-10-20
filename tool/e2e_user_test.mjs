@@ -1447,6 +1447,159 @@ async function stopIsolatedServer() {
     enter11.pages === pbAfter.pages && enter11.lines === linesBefore11 + 1,
     `${linesBefore11} -> ${enter11.lines} baris, pages=${enter11.pages}`);
 
+  // ================= S12: SHEETS — KOMENTAR SEL (DOM NYATA) =================
+  // m4 tidak bisa dibuktikan lewat unit suite: WorkspaceAppShell TIDAK pernah
+  // diinstansiasi di sana (butuh DOM penuh), jadi Suite 9b hanya memindai teks
+  // sumber. Di sini seluruh rantai diuji dengan klik & ketik NYATA.
+  //
+  // Sel target TIDAK di-hardcode. Overlay bagan (ritzChartOverlay) adalah elemen
+  // DOM DI ATAS kanvas, jadi sel di bawahnya tidak bisa diklik user sama sekali.
+  // Kandidat dicari dinamis dan diverifikasi dengan elementFromPoint, sehingga
+  // bila gagal, detailnya menunjukkan PENYEBAB (tertutup overlay / di luar
+  // viewport), bukan sekadar "sel salah".
+  console.log('\n--- S12: Sheets — komentar sel lewat klik nyata ---');
+  await cdp.click('document.getElementById("tab-drive")');
+  await sleep(500);
+  await cdp.click(`document.querySelector('#driveGridContainer .drive-card[data-doc-id="${sheetsId}"]')`);
+  await sleep(1400);
+  check('S12: kembali ke spreadsheet uji', (await cdp.eval('window.workspaceApp.currentApp')) === 'sheets');
+
+  const target12 = JSON.parse(await cdp.eval(`(() => {
+    const r = window.workspaceApp.ritz;
+    const c = document.getElementById('sheetsGridCanvas');
+    const b = c.getBoundingClientRect();
+    const sx = b.width ? c.width / b.width : 1;
+    const sy = b.height ? c.height / b.height : 1;
+    const ov = document.getElementById('ritzChartOverlay');
+    const o = (ov && getComputedStyle(ov).display !== 'none') ? ov.getBoundingClientRect() : null;
+    for (let row = 1; row <= 40; row++) {
+      for (let col = 0; col <= 10; col++) {
+        const cx = r.cellX(col) + r.getColWidth(col) / 2;
+        const cy = r.cellY(row) + r.getRowHeight(row) / 2;
+        const px = b.left + cx / sx, py = b.top + cy / sy;
+        if (px < 4 || py < 4 || px > window.innerWidth - 4 || py > window.innerHeight - 4) continue;
+        if (o && px >= o.left && px <= o.right && py >= o.top && py <= o.bottom) continue;
+        if (document.elementFromPoint(px, py) !== c) continue;
+        return JSON.stringify({ ok: true, col: col, row: row, x: Math.round(px), y: Math.round(py), coord: r.colLabel(col) + row, chart: !!o });
+      }
+    }
+    return JSON.stringify({ ok: false, chart: !!o });
+  })()`));
+  check('S12: ada sel yang benar-benar bisa diklik user (tidak tertutup overlay bagan)',
+    target12.ok === true, JSON.stringify(target12));
+
+  await cdp.clickAt(target12.x, target12.y);
+  await sleep(300);
+  const active12 = await cdp.eval('window.workspaceApp.ritz.getActiveCoord()');
+  check('S12: klik nyata memilih sel target', active12 === target12.coord,
+    `klik=${target12.coord} aktif=${active12}`);
+
+  // Tombol komentar WAJIB hidup di Sheets. Sebelum m4 handler-nya hanya
+  // menangani docs, sehingga tombol ini mati total di Sheets.
+  await cdp.click('document.getElementById("tbComment")');
+  await sleep(450);
+  const modal12 = await cdp.eval('(() => { const m = document.getElementById("gwsModal"); if (!m) return "no-modal"; if (m.style.display !== "flex") return "hidden"; return /Komentar Sel/.test(m.innerText || m.textContent || "") ? "ok" : "wrong-modal"; })()');
+  check('S12: klik tbComment di Sheets membuka modal komentar SEL (bukan Docs)', modal12 === 'ok', String(modal12));
+
+  await cdp.click('document.getElementById("gwsSheetCommentText")');
+  await cdp.insertText('Tolong cek angka ini');
+  await cdp.click('document.getElementById("gwsSheetCommentAdd")');
+  await sleep(600);
+  const cc12 = await cdp.eval(`window.workspaceApp.ritz.getCellComments("${target12.coord}").length`);
+  check('S12: komentar tersimpan di model sel target', cc12 === 1,
+    `sel=${target12.coord} jumlah=${cc12}`);
+  const ccAuthor = await cdp.eval(`window.workspaceApp.ritz.getCellComments("${target12.coord}")[0].author`);
+  check('S12: author default "Saya" (dialek sama dengan Docs)', ccAuthor === 'Saya', String(ccAuthor));
+
+  // Indikator harus BENAR-BENAR ter-paint di kanvas, bukan hanya ada di model.
+  // Ambang dilonggarkan: indikator digambar SEBELUM overlay seleksi biru 12%,
+  // jadi warnanya sedikit tercampur.
+  const ind12 = JSON.parse(await cdp.eval(`(() => {
+    const r = window.workspaceApp.ritz;
+    const t = r.cellCommentRect(${target12.col}, ${target12.row});
+    const c = document.getElementById('sheetsGridCanvas');
+    const d = c.getContext('2d').getImageData(Math.round(t.x), Math.round(t.y), t.w, t.h).data;
+    let amber = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i] > 200 && d[i + 1] > 130 && d[i + 1] < 210 && d[i + 2] < 100 && d[i + 3] > 100) amber++;
+    }
+    return JSON.stringify({ amber: amber, x: Math.round(t.x), y: Math.round(t.y) });
+  })()`));
+  check('S12: indikator komentar benar-benar ter-paint di kanvas', ind12.amber >= 20,
+    JSON.stringify(ind12));
+
+  // Balas.
+  await cdp.click('document.querySelector("#gwsModal .sc-reply-input")');
+  await cdp.insertText('Sudah saya periksa');
+  await cdp.click('document.querySelector("#gwsModal .sc-reply-btn")');
+  await sleep(600);
+  const rp12 = await cdp.eval(`window.workspaceApp.ritz.getCellComments("${target12.coord}")[0].replies.length`);
+  check('S12: balasan tersimpan di thread', rp12 === 1, 'balasan=' + rp12);
+
+  // Selesaikan (toggle).
+  await cdp.click('document.querySelector("#gwsModal .sc-resolve")');
+  await sleep(600);
+  const rs12 = await cdp.eval(`window.workspaceApp.ritz.getCellComments("${target12.coord}")[0].resolved`);
+  check('S12: tombol Selesai menandai komentar resolved', rs12 === true, String(rs12));
+
+  // Persistensi ke DISK: komentar harus ikut tersimpan, bukan hanya di memori.
+  await sleep(1900);
+  const disk12 = await apiGet(sheetsId);
+  const sheetsDisk = disk12 && disk12.data && Array.isArray(disk12.data.sheets) ? disk12.data.sheets : [];
+  const hit12 = sheetsDisk.map(s => (s && s.cellComments) || {}).filter(m => m[target12.coord]);
+  check('S12: cellComments ikut tersimpan ke disk',
+    hit12.length === 1 && Array.isArray(hit12[0][target12.coord]) && hit12[0][target12.coord].length === 1,
+    `sel=${target12.coord} sheet=${sheetsDisk.length}`);
+
+  // BUKTI round-trip lewat disk: reload halaman, buka dokumen lagi, komentar
+  // harus masih ada. Inilah yang membuktikan whitelist setSheets tidak bocor.
+  await cdp.send('Page.reload', { ignoreCache: false });
+  await sleep(2400);
+  await cdp.waitFor('!!(window.workspaceApp && window.workspaceApp.ritz)', 12000);
+  await cdp.click('document.getElementById("tab-drive")');
+  await sleep(700);
+  await cdp.click(`document.querySelector('#driveGridContainer .drive-card[data-doc-id="${sheetsId}"]')`);
+  await sleep(1600);
+  const afterReload12 = await cdp.eval(`window.workspaceApp.ritz.getCellComments("${target12.coord}").length`);
+  check('S12: komentar SELAMAT melewati reload (bukti round-trip disk -> model)',
+    afterReload12 === 1, `sel=${target12.coord} jumlah=${afterReload12}`);
+  const afterReply12 = await cdp.eval(`window.workspaceApp.ritz.getCellComments("${target12.coord}")[0].replies.length`);
+  check('S12: balasan juga selamat melewati reload', afterReply12 === 1, 'balasan=' + afterReply12);
+
+  // Hapus komentar terakhir: kunci harus dibuang & modal menutup sendiri.
+  await cdp.clickAt(target12.x, target12.y);
+  await sleep(400);
+  await cdp.click('document.getElementById("tbComment")');
+  await sleep(500);
+  await cdp.click('document.querySelector("#gwsModal .sc-delete")');
+  await sleep(700);
+  const delObj = JSON.parse(await cdp.eval(`(() => {
+    const r = window.workspaceApp.ritz;
+    const m = document.getElementById('gwsModal');
+    return JSON.stringify({
+      has: r.hasCellComment("${target12.coord}"),
+      key: Object.prototype.hasOwnProperty.call(r.getAllCellComments(), "${target12.coord}"),
+      hidden: !m || m.style.display !== 'flex'
+    });
+  })()`));
+  check('S12: hapus komentar membersihkan model & kuncinya',
+    delObj.has === false && delObj.key === false, JSON.stringify(delObj));
+  check('S12: modal menutup sendiri saat komentar terakhir dihapus', delObj.hidden === true,
+    JSON.stringify(delObj));
+
+  // Ctrl+Alt+M harus berlaku di Sheets juga (paritas Google Sheets).
+  // modifiers CDP bersifat BITMASK: Alt=1, Ctrl=2, Meta=4, Shift=8.
+  // Ctrl+Alt = 3. Memakai 1 (Alt saja) TIDAK akan pernah sampai ke cabang
+  // 'm', karena initKeyboardShortcuts() sudah keluar lebih awal pada guard
+  // `if (!e.ctrlKey && !e.metaKey) return;` — tes akan gagal secara palsu.
+  await cdp.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'm', code: 'KeyM', windowsVirtualKeyCode: 77, nativeVirtualKeyCode: 77, modifiers: 3 });
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'm', code: 'KeyM', windowsVirtualKeyCode: 77, nativeVirtualKeyCode: 77, modifiers: 3 });
+  await sleep(600);
+  const hot12 = await cdp.eval('(() => { const m = document.getElementById("gwsModal"); return !!(m && m.style.display === "flex" && /Komentar Sel/.test(m.innerText || m.textContent || "")); })()');
+  check('S12: Ctrl+Alt+M membuka komentar sel di Sheets', hot12 === true, String(hot12));
+  await cdp.eval('window.workspaceApp.closeModal()');
+  await sleep(300);
+
   // ================= ERROR FRONTEND =================
   console.log('\n--- Error frontend yang tertangkap selama seluruh alur user ---');
   check('Tidak ada exception JS selama seluruh alur', pageErrors.length === 0, pageErrors.slice(0, 3).join(' | '));

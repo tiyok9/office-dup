@@ -2035,10 +2035,6 @@
         ctx.restore();
       }
 
-      // ==== INDIKATOR KOMENTAR SEL (paritas Google Sheets) ====
-      // Digambar setelah grid + header, SEBELUM overlay seleksi/fill handle.
-      this.renderCellCommentIndicators(ctx, width, height);
-
       // ==== OVERLAY SELEKSI RENTANG (paritas Google Sheets) ====
       // Digambar SEBELUM border sel aktif. Warna & ukuran mengikuti Sheets asli:
       // isi biru transparan, tepi #1a73e8 2px, fill handle 6x6 di pojok kanan-bawah.
@@ -2090,6 +2086,20 @@
         ctx.fillRect(selX + selW - 4, selY + selH - 4, 6, 6);
         ctx.lineWidth = 1;
       }
+
+      // ==== INDIKATOR KOMENTAR SEL (paritas Google Sheets) ====
+      // Digambar SETELAH border sel aktif, BUKAN sebelumnya.
+      //
+      // Alasannya terukur, bukan selera: segitiga indikator berukuran 8x8 (32 px).
+      // Border sel aktif digambar strokeRect 2px pada perimeter sel, sehingga
+      // bila indikator digambar lebih dulu, baris atas (9 px) + kolom kanan
+      // (8 px) dikurangi sudut tumpang-tindih (1 px) = 17 px TERTUTUP, dan hanya
+      // tersisa 15 px amber. Gejalanya: indikator tampak terpotong justru pada
+      // sel yang sedang dipilih — persis sel yang paling sering dilihat user.
+      //
+      // Area indikator (kanan-atas) dan fill handle (kanan-bawah) tidak pernah
+      // bertumpuk, jadi menggambar indikator lebih akhir tidak merebut apa pun.
+      this.renderCellCommentIndicators(ctx, width, height);
 
       // 3) Fill handle di pojok kanan-bawah rentang: kotak biru bertepi putih.
       if (handleVisible && handleX >= this.headerWidth && handleY >= this.headerHeight) {

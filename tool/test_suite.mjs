@@ -731,6 +731,126 @@ async function runTestSuite() {
   ritz14.removeChart();
   assert(ritz14.getCharts().length === 0, 'Sheets: bagan dapat dihapus');
 
+  // 14b-b. SHEETS: komentar sel — model CRUD + persistensi round-trip.
+  // cellComments = { 'A3': [{id, author, text, createdAt, resolved, replies[]}] }
+  // Map TERPISAH dari cells: komentar tidak hilang saat nilai sel dikosongkan.
+  const ritzC = new Ritz14('sheetsGridCanvas', 'sheetFormulaInput', 'sheetActiveCell');
+  ritzC.render = () => {};
+  ritzC.renderSheetTabs = () => {};
+  ritzC.updateFormulaBar = () => {};
+  ritzC.recalculateAll = async () => ritzC.cells;
+
+  // ROUND-TRIP dulu: setSheets(getSheets()) WAJIB mempertahankan cellComments.
+  // Tanpa entri di whitelist setSheets, komentar hilang diam-diam saat load
+  // (bukan error — hanya lenyap), jadi asersi ini menjaga fondasi sebelum
+  // method CRUD diuji.
+  ritzC.addCellComment('A3', 'Komentar pertama', 'Budi');
+  ritzC.addCellComment('A3', 'Komentar kedua', 'Cici');
+  ritzC.addCellComment('B5', 'Komentar sel lain', 'Ani');
+  const ccBeforeTrip = JSON.parse(JSON.stringify(ritzC.getSheets()));
+  ritzC.setSheets(ccBeforeTrip, 0);
+  const ccAfterTrip = ritzC.getAllCellComments();
+  assert(ccAfterTrip['A3'] && ccAfterTrip['A3'].length === 2,
+    `Sheets: round-trip setSheets(getSheets()) mempertahankan 2 komentar di A3 :: ${ccAfterTrip['A3'] ? ccAfterTrip['A3'].length : 'HILANG'}`);
+  assert(ccAfterTrip['B5'] && ccAfterTrip['B5'].length === 1,
+    'Sheets: round-trip mempertahankan komentar di B5');
+  assert(ccAfterTrip['A3'][0].author === 'Budi' && ccAfterTrip['A3'][0].text === 'Komentar pertama',
+    'Sheets: metadata komentar (author/text) utuh setelah round-trip');
+
+  // addCellComment: id berprefix sc_, author default 'Saya', resolved false.
+  const ccC1 = ritzC.addCellComment('C7', 'Tes komentar', null);
+  assert(ccC1 && ccC1.id.startsWith('sc_') && ccC1.author === 'Saya' && ccC1.resolved === false && !!ccC1.createdAt,
+    `Sheets: addCellComment menghasilkan objek lengkap :: author=${ccC1 && ccC1.author} resolved=${ccC1 && ccC1.resolved}`);
+  assert(Array.isArray(ccC1.replies) && ccC1.replies.length === 0,
+    'Sheets: komentar baru punya replies array kosong');
+
+  // Teks kosong ditolak (null), bukan membuat entri sampah.
+  assert(ritzC.addCellComment('C7', '   ', 'X') === null,
+    'Sheets: addCellComment menolak teks kosong');
+  assert(ritzC.getCellComments('C7').length === 1,
+    'Sheets: teks kosong tidak menambah komentar');
+
+  // Koordinat dinormalisasi: 'a3' == 'A3'.
+  assert(ritzC.getCellComments('a3').length === 2,
+    'Sheets: koordinat tidak case-sensitive (a3 == A3)');
+
+  // editCellComment: ubah teks, id tetap.
+  const ccId = ritzC.getCellComments('C7')[0].id;
+  assert(ritzC.editCellComment('C7', ccId, 'Teks baru hasil edit') === true,
+    'Sheets: editCellComment mengembalikan true bila sukses');
+  assert(ritzC.getCellComments('C7')[0].text === 'Teks baru hasil edit',
+    'Sheets: editCellComment mengubah teks komentar');
+  assert(ritzC.editCellComment('C7', 'tidak-ada', 'x') === false,
+    'Sheets: editCellComment ke id tidak dikenal mengembalikan false');
+  assert(ritzC.editCellComment('C7', ccId, '  ') === false &&
+         ritzC.getCellComments('C7')[0].text === 'Teks baru hasil edit',
+    'Sheets: editCellComment menolak teks kosong dan tidak mengubah apa pun');
+
+  // addCellCommentReply: reply punya id sendiri, author default.
+  const ccR1 = ritzC.addCellCommentReply('C7', ccId, 'Balasan pertama', null);
+  assert(ccR1 && ccR1.id.startsWith('sc_') && ccR1.author === 'Saya' && ccR1.text === 'Balasan pertama',
+    'Sheets: addCellCommentReply menghasilkan reply lengkap');
+  assert(ritzC.getCellComments('C7')[0].replies.length === 1,
+    'Sheets: reply tertambah ke replies array komentar');
+  assert(ritzC.addCellCommentReply('C7', 'tidak-ada', 'x', 'X') === null,
+    'Sheets: addCellCommentReply ke id tidak dikenal mengembalikan null');
+
+  // setCellCommentResolved: toggle tanpa argumen, paksa true/false.
+  assert(ritzC.getCellComments('C7')[0].resolved === false,
+    'Sheets: komentar baru belum resolved');
+  ritzC.setCellCommentResolved('C7', ccId);
+  assert(ritzC.getCellComments('C7')[0].resolved === true,
+    'Sheets: setCellCommentResolved toggle (tanpa argumen) membalik status');
+  ritzC.setCellCommentResolved('C7', ccId, false);
+  assert(ritzC.getCellComments('C7')[0].resolved === false,
+    'Sheets: setCellCommentResolved(false) memaksa resolved=false');
+
+  // hasCellComment: true untuk sel berkomentar, false untuk yang kosong.
+  assert(ritzC.hasCellComment('A3') === true && ritzC.hasCellComment('Z9') === false,
+    'Sheets: hasCellComment benar untuk sel berkomentar / tidak');
+
+  // deleteCellComment: hapus satu, bukan semua. Kunci kosong dibuang.
+  const ccA3First = ritzC.getCellComments('A3')[0].id;
+  assert(ritzC.deleteCellComment('A3', ccA3First) === true,
+    'Sheets: deleteCellComment mengembalikan true bila sukses');
+  assert(ritzC.getCellComments('A3').length === 1,
+    'Sheets: deleteCellComment menghapus satu komentar (bukan semua)');
+  ritzC.deleteCellComment('A3', ritzC.getCellComments('A3')[0].id);
+  assert(!('A3' in ritzC.getAllCellComments()),
+    'Sheets: kunci kosong dibuang setelah komentar terakhir dihapus');
+  assert(ritzC.deleteCellComment('C7', 'tidak-ada') === false,
+    'Sheets: deleteCellComment ke id tidak dikenal mengembalikan false');
+
+  // Komentar TIDAK terikat nilai sel (paritas Google Sheets).
+  ritzC.cells = { C7: { raw: '', val: '' } };
+  assert(ritzC.hasCellComment('C7') === true,
+    'Sheets: komentar tetap ada walau nilai sel dikosongkan');
+
+  // Komentar per-sheet: pindah sheet tidak membocorkan komentar sheet lain.
+  ritzC.setSheets([
+    { name: 'S1', cells: { A1: { raw: 'x', val: 'x' } }, cellComments: { A1: [{ id: 'sc_a', author: 'A', text: 'satu', createdAt: 'x', resolved: false, replies: [] }] } },
+    { name: 'S2', cells: { B2: { raw: 'y', val: 'y' } }, cellComments: {} }
+  ], 0);
+  assert(ritzC.hasCellComment('A1') === true && ritzC.hasCellComment('B2') === false,
+    'Sheets: sheet 1 hanya memuat komentarnya sendiri');
+  ritzC.switchSheet(1);
+  assert(ritzC.hasCellComment('A1') === false && ritzC.getAllCellComments()['A1'] === undefined,
+    'Sheets: komentar sheet 1 TIDAK bocor ke sheet 2');
+  ritzC.addCellComment('B2', 'komentar sheet 2', 'Z');
+  ritzC.switchSheet(0);
+  assert(ritzC.hasCellComment('A1') === true && ritzC.hasCellComment('B2') === false,
+    'Sheets: komentar sheet 2 TIDAK bocor balik ke sheet 1');
+  const ccPerSheet = ritzC.getSheets();
+  assert(ccPerSheet[0].cellComments['A1'] && ccPerSheet[1].cellComments['B2'],
+    'Sheets: getSheets menyimpan cellComments per sheet');
+
+  // Dokumen lama tanpa cellComments tetap valid (fallback {}).
+  ritzC.setSheets([{ name: 'Lama', cells: { A1: { raw: '1', val: 1 } } }], 0);
+  assert(JSON.stringify(ritzC.getAllCellComments()) === '{}',
+    'Sheets: dokumen lama tanpa cellComments dimuat sebagai map kosong (bukan undefined)');
+  assert(ritzC.addCellComment('D4', 'setelah migrasi', null) !== null,
+    'Sheets: addCellComment tetap bekerja pada dokumen lama');
+
   // 14c. DOCS: ceklis (kotak centang) + daftar bernomor berurutan.
   const Kix14 = loadEditor('static/kix_editor.js', 'KixDocsEditor');
   const kix14 = new Kix14('docsScrollBox', 'kixHiddenInput');

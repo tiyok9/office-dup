@@ -44,6 +44,11 @@
 
       // { 'A1': { val, raw, bold, italic, color, bg, align, numFormat } }
       this.cells = {};
+      // ==== KOMENTAR SEL (paritas Google Sheets) ====
+      // Map TERPISAH { 'A3': [{id, author, text, createdAt, resolved, replies[]}] }.
+      // Sengaja di luar shape `cells`: nol dampak pada sel yang sudah stabil, dan
+      // komentar TETAP ADA walau nilai sel dikosongkan (perilaku Google Sheets).
+      this.cellComments = {};
       this.activeCol = 2; // C (0-based)
       this.activeRow = 1; // Row 1 (1-based)
       this.scrollX = 0;
@@ -121,7 +126,7 @@
       // sheets[] adalah sumber kebenaran. this.cells / this.charts tetap menunjuk
       // ke sheet AKTIF, sehingga seluruh kode lama (formula, bagan, render,
       // sortRange) bekerja tanpa perubahan apa pun.
-      this.sheets = [{ name: 'Sheet1', cells: {}, charts: [] }];
+      this.sheets = [{ name: 'Sheet1', cells: {}, charts: [], cellComments: {} }];
       this.activeSheetIdx = 0;
       this.initEvents();
     }
@@ -131,13 +136,15 @@
     // supaya suntingan pada sheet lama tidak hilang.
     _syncActiveSheet() {
       if (!Array.isArray(this.sheets) || !this.sheets.length) {
-        this.sheets = [{ name: 'Sheet1', cells: {}, charts: [] }];
+        this.sheets = [{ name: 'Sheet1', cells: {}, charts: [], cellComments: {} }];
         this.activeSheetIdx = 0;
       }
       const s = this.sheets[this.activeSheetIdx];
       if (!s) return;
       s.cells = this.cells || {};
       s.charts = this.charts || [];
+      // Komentar milik sheet ini (cermin cells/charts).
+      s.cellComments = this.cellComments || {};
       // Lebar kolom ikut sheet ini (tiap tab bisa punya lebar berbeda).
       s.colWidths = { ...(this.colWidths || {}) };
       // Tinggi baris juga milik sheet ini (cermin colWidths).
@@ -154,6 +161,9 @@
       const s = this.sheets[this.activeSheetIdx] || { cells: {}, charts: [] };
       this.cells = JSON.parse(JSON.stringify(s.cells || {}));
       this.charts = JSON.parse(JSON.stringify(s.charts || []));
+      // Deep clone WAJIB (cermin cells). Kalau hanya referensi, snapshot undo/redo
+      // saling alias: mutasi komentar di satu snapshot mengontaminasi snapshot lain.
+      this.cellComments = JSON.parse(JSON.stringify(s.cellComments || {}));
       this.activeChartId = this.charts.length ? this.charts[this.charts.length - 1].id : null;
       // Geometri milik sheet ini; dokumen lama tanpa colWidths -> default 110.
       this.colWidths = { ...(s.colWidths || {}) };
@@ -192,7 +202,7 @@
       // Cerminkan ke sheets[] supaya dokumen format lama (tanpa sheets[])
       // tidak menghapus isi sheet aktif saat disimpan.
       if (!Array.isArray(this.sheets) || !this.sheets.length) {
-        this.sheets = [{ name: 'Sheet1', cells: {}, charts: [] }];
+        this.sheets = [{ name: 'Sheet1', cells: {}, charts: [], cellComments: {} }];
         this.activeSheetIdx = 0;
       }
       if (this.sheets[this.activeSheetIdx]) {
@@ -549,13 +559,18 @@
     setSheets(arr, activeIdx = 0) {
       const list = Array.isArray(arr) ? arr : [];
       if (!list.length) {
-        this.sheets = [{ name: 'Sheet1', cells: {}, charts: [] }];
+        this.sheets = [{ name: 'Sheet1', cells: {}, charts: [], cellComments: {} }];
         this.activeSheetIdx = 0;
       } else {
         this.sheets = list.map((s, i) => ({
           name: (s && s.name) ? String(s.name) : `Sheet${i + 1}`,
           cells: (s && s.cells) ? JSON.parse(JSON.stringify(s.cells)) : {},
           charts: (s && Array.isArray(s.charts)) ? JSON.parse(JSON.stringify(s.charts)) : [],
+          // WAJIB ada di whitelist ini. setSheets memetakan field SATU PER SATU,
+          // jadi tanpa baris ini komentar HILANG diam-diam saat dokumen dimuat
+          // (bukan error — hanya lenyap). Default {} menjaga dokumen lama valid.
+          cellComments: (s && s.cellComments && typeof s.cellComments === 'object')
+            ? JSON.parse(JSON.stringify(s.cellComments)) : {},
           // Lebar kolom per sheet ikut dipulihkan dari dokumen.
           colWidths: (s && s.colWidths && typeof s.colWidths === 'object') ? { ...s.colWidths } : {},
           // Tinggi baris per sheet ikut dipulihkan (dokumen lama tanpa -> default 26).
@@ -1479,6 +1494,130 @@
     notifyChange() {
       if (Array.isArray(this.charts) && this.charts.length) this.renderChartOverlay();
       if (typeof this.onCellChange === 'function') this.onCellChange(this.cells);
+    }
+
+    // ==== KOMENTAR SEL (paritas Google Sheets) ====
+    // Model: this.cellComments = { 'A3': [ { id, author, text, createdAt, resolved, replies: [] } ] }
+    // Dialek SENGAJA identik dengan komentar Docs (kix_editor.js:1048-1145) supaya
+    // tidak ada dua konvensi di satu aplikasi:
+    //   - `resolved` hanya di level komentar, TIDAK di reply.
+    //   - reply murni { id, author, text, createdAt }.
+    //   - author default 'Saya'.
+    // Semua mutasi memanggil notifyChange() (autosave + onCellChange) dan render()
+    // (indikator segitiga harus langsung terlihat/d hilang).
+    _newCellCommentId() {
+      // Prefix 'sc_' (sheet comment) supaya saat debug jelas asalnya, bukan 'c_'
+      // milik Docs. Guard + fallback identik _newCommentId() Kix.
+      try {
+        if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+          return 'sc_' + crypto.randomUUID();
+        }
+      } catch (_) { /* jatuh ke fallback */ }
+      return 'sc_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    }
+
+    // Accessor MURNI (tanpa mutasi) — kembalikan array hidup milik map.
+    // Sengaja tidak meng-clone: pemanggil hanya membaca; mutasi wajib lewat method.
+    _cellCommentsOf(coord) {
+      const k = this._normCoord(coord);
+      const m = this.cellComments || (this.cellComments = {});
+      return Array.isArray(m[k]) ? m[k] : [];
+    }
+
+    _normCoord(coord) {
+      return String(coord == null ? '' : coord).toUpperCase();
+    }
+
+    // API PUBLIK: daftar komentar pada satu sel (array kosong bila tidak ada).
+    getCellComments(coord) {
+      return this._cellCommentsOf(coord);
+    }
+
+    // Seluruh map komentar sheet aktif (dipakai shell untuk hitung badge/toolbar).
+    getAllCellComments() {
+      return this.cellComments || {};
+    }
+
+    // Dipakai lapisan render/hit-test untuk tahu apakah sel perlu indikator.
+    hasCellComment(coord) {
+      return this._cellCommentsOf(coord).length > 0;
+    }
+
+    // Setelah mutasi: sinkronkan ke sheets[], gambar ulang, lalu picu autosave.
+    // Urutan ini meniru applyFormat(): state -> render -> notifyChange.
+    _afterCellCommentChange() {
+      this._syncActiveSheet();
+      this.render();
+      this.notifyChange();
+    }
+
+    addCellComment(coord, text, author) {
+      const k = this._normCoord(coord);
+      const body = String(text == null ? '' : text).trim();
+      if (!k || !body) return null;
+      if (!this.cellComments) this.cellComments = {};
+      if (!Array.isArray(this.cellComments[k])) this.cellComments[k] = [];
+      const c = {
+        id: this._newCellCommentId(),
+        author: String(author || 'Saya'),
+        text: body,
+        createdAt: new Date().toISOString(),
+        resolved: false,
+        replies: []
+      };
+      // push, BUKAN menimpa: satu sel boleh punya banyak komentar (paritas Sheets).
+      this.cellComments[k].push(c);
+      this._afterCellCommentChange();
+      return c;
+    }
+
+    editCellComment(coord, commentId, newText) {
+      const list = this._cellCommentsOf(coord);
+      const body = String(newText == null ? '' : newText).trim();
+      if (!body) return false;
+      const c = list.find(x => x && x.id === commentId);
+      if (!c) return false;
+      c.text = body;
+      this._afterCellCommentChange();
+      return true;
+    }
+
+    deleteCellComment(coord, commentId) {
+      const k = this._normCoord(coord);
+      const list = this._cellCommentsOf(k);
+      const idx = list.findIndex(x => x && x.id === commentId);
+      if (idx < 0) return false;
+      list.splice(idx, 1);
+      // Kunci kosong dibuang supaya payload tidak menyimpan { 'A3': [] } selamanya.
+      if (!list.length && this.cellComments) delete this.cellComments[k];
+      this._afterCellCommentChange();
+      return true;
+    }
+
+    addCellCommentReply(coord, commentId, text, author) {
+      const body = String(text == null ? '' : text).trim();
+      if (!body) return null;
+      const c = this._cellCommentsOf(coord).find(x => x && x.id === commentId);
+      if (!c) return null;
+      if (!Array.isArray(c.replies)) c.replies = [];
+      const r = {
+        id: this._newCellCommentId(),
+        author: String(author || 'Saya'),
+        text: body,
+        createdAt: new Date().toISOString()
+      };
+      c.replies.push(r);
+      this._afterCellCommentChange();
+      return r;
+    }
+
+    // resolved opsional: tanpa argumen = toggle (paritas tombol "Selesaikan").
+    setCellCommentResolved(coord, commentId, resolved) {
+      const c = this._cellCommentsOf(coord).find(x => x && x.id === commentId);
+      if (!c) return false;
+      c.resolved = (resolved === undefined || resolved === null) ? !c.resolved : !!resolved;
+      this._afterCellCommentChange();
+      return c.resolved;
     }
 
     // ==== FORMATTING SEL ====

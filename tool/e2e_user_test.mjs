@@ -1201,6 +1201,90 @@ async function stopIsolatedServer() {
   const szSlides9 = await cdp.shot('test_user_slides_theme.png');
   check('S9 Slides: screenshot slide bertema gelap tersimpan', szSlides9 > 20000, szSlides9 + ' bytes');
 
+  // ================= S10: FITUR BARU (klik nyata) =================
+  console.log('\n--- S10: Fitur baru — pindah slide, ekspor bagan, butir bertingkat ---');
+
+  // --- S10a: Slides — PINDAH URUTAN slide lewat tombol toolbar ---
+  await cdp.click('document.getElementById("tab-drive")');
+  await sleep(300);
+  await cdp.click(`document.querySelector('#driveGridContainer .drive-card[data-doc-id="${slidesId}"]')`);
+  await sleep(1300);
+  const orderBefore = JSON.parse(await cdp.eval(`JSON.stringify({
+    n: window.workspaceApp.punch.slides.length,
+    titles: window.workspaceApp.punch.slides.map(s => s.title)
+  })`));
+  await cdp.eval('window.workspaceApp.punch.selectSlide(0)');
+  await sleep(400);
+  await cdp.click('document.getElementById("tbSlideDown")');
+  await sleep(800);
+  const orderAfter = JSON.parse(await cdp.eval(`JSON.stringify({
+    idx: window.workspaceApp.punch.activeSlideIdx,
+    titles: window.workspaceApp.punch.slides.map(s => s.title)
+  })`));
+  check('S10 Slides: tombol pindah-ke-bawah menukar urutan slide',
+    orderAfter.idx === 1 && orderAfter.titles[1] === orderBefore.titles[0] && orderAfter.titles[0] === orderBefore.titles[1],
+    `idx=${orderAfter.idx} urutan="${orderAfter.titles.join(' | ')}"`);
+  await cdp.click('document.getElementById("tbSlideUp")');
+  await sleep(800);
+  const orderBack = JSON.parse(await cdp.eval(`JSON.stringify({
+    idx: window.workspaceApp.punch.activeSlideIdx,
+    titles: window.workspaceApp.punch.slides.map(s => s.title)
+  })`));
+  check('S10 Slides: tombol pindah-ke-atas mengembalikan urutan semula',
+    orderBack.idx === 0 && JSON.stringify(orderBack.titles) === JSON.stringify(orderBefore.titles),
+    `idx=${orderBack.idx} urutan="${orderBack.titles.join(' | ')}"`);
+
+  // --- S10b: Sheets — tombol "Unduh SVG" pada kartu bagan ---
+  await cdp.click('document.getElementById("tab-drive")');
+  await sleep(300);
+  await cdp.click(`document.querySelector('#driveGridContainer .drive-card[data-doc-id="${sheetsId}"]')`);
+  await sleep(1300);
+  await cdp.click('document.getElementById("tbInsertChart")');
+  await sleep(900);
+  const exportBtn = JSON.parse(await cdp.eval(`(() => {
+    const b = document.getElementById('ritzChartExport');
+    if (!b) return JSON.stringify({ ok: false, reason: 'tombol ekspor tidak ada' });
+    const r = b.getBoundingClientRect();
+    return JSON.stringify({ ok: true, w: Math.round(r.width), h: Math.round(r.height), visible: r.width > 0 && r.height > 0 });
+  })()`));
+  check('S10 Sheets: kartu bagan menyediakan tombol "Unduh SVG" yang benar-benar terlihat',
+    exportBtn.ok === true && exportBtn.visible === true, JSON.stringify(exportBtn));
+  const svgLen = Number(await cdp.eval('(window.workspaceApp.ritz.chartSvgDocument() || "").length'));
+  check('S10 Sheets: dokumen SVG bagan berukuran wajar (bukan string kosong)',
+    svgLen > 500, svgLen + ' chars');
+  // CATATAN JUJUR: unduhan berkasnya sendiri tidak diverifikasi di Chrome headless
+  // (tanpa folder unduhan). Yang diuji: tombol ada, dapat diklik, dan kartu bagan
+  // tetap utuh setelah diklik — bukan "berkas berhasil tersimpan ke disk".
+  await cdp.click('document.getElementById("ritzChartExport")');
+  await sleep(800);
+  const afterExport = JSON.parse(await cdp.eval(`JSON.stringify({
+    stillThere: !!document.getElementById('ritzChartExport'),
+    charts: window.workspaceApp.ritz.getCharts().length
+  })`));
+  check('S10 Sheets: mengklik "Unduh SVG" tidak merusak kartu bagan',
+    afterExport.stillThere === true && afterExport.charts === 1, JSON.stringify(afterExport));
+
+  // --- S10c: Docs — butir bertingkat (penanda berubah per level indentasi) ---
+  await cdp.click('document.getElementById("tab-drive")');
+  await sleep(300);
+  await cdp.click(`document.querySelector('#driveGridContainer .drive-card[data-doc-id="${docsId}"]')`);
+  await sleep(1300);
+  await clickDocsLine(1);
+  // Baris ini mungkin sudah ber-list dari seksi sebelumnya; klik hanya bila perlu,
+  // karena tombol daftar bersifat TOGGLE (klik saat sudah butir = melepas).
+  const ltBefore10 = await cdp.eval('window.workspaceApp.kix.pages[0].lines[1].listType || ""');
+  if (ltBefore10 !== 'bullet') { await cdp.click('document.getElementById("tbBulletList")'); await sleep(700); }
+  const bulletLvl0 = await cdp.eval('window.workspaceApp.kix.listPrefixFor(window.workspaceApp.kix.pages[0], 1)');
+  check('S10 Docs: butir level 0 memakai penanda "\\u2022 "', bulletLvl0 === '\u2022 ', JSON.stringify(bulletLvl0));
+  await cdp.click('document.getElementById("tbIndentInc")');
+  await sleep(700);
+  const indentLvl10 = Number(await cdp.eval('window.workspaceApp.kix.pages[0].lines[1].indent || 0'));
+  const bulletLvl1 = await cdp.eval('window.workspaceApp.kix.listPrefixFor(window.workspaceApp.kix.pages[0], 1)');
+  check('S10 Docs: indentasi menaikkan level & penanda berubah jadi "\\u25cb "',
+    indentLvl10 >= 1 && bulletLvl1 === '\u25cb ', `indent=${indentLvl10} prefix=${JSON.stringify(bulletLvl1)}`);
+  const szDocs10 = await cdp.shot('test_user_docs_nested_bullet.png');
+  check('S10 Docs: screenshot butir bertingkat tersimpan', szDocs10 > 20000, szDocs10 + ' bytes');
+
   // ================= ERROR FRONTEND =================
   console.log('\n--- Error frontend yang tertangkap selama seluruh alur user ---');
   check('Tidak ada exception JS selama seluruh alur', pageErrors.length === 0, pageErrors.slice(0, 3).join(' | '));

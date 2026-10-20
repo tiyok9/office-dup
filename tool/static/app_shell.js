@@ -50,6 +50,9 @@
       // Diisi { targetId, payload } agar flush dapat menulis TANPA bergantung
       // pada currentDocId yang mungkin sudah berpindah.
       this.pendingSave = null;
+
+      // Zoom tampilan (dipakai <select id="tbZoom">). 1 = 100%.
+      this.zoomLevel = 1;
     }
 
     async init() {
@@ -688,6 +691,20 @@
       // --- Slides: catatan pembicara ---
       bind('tbSpeakerNotes', () => this.toggleSpeakerNotes());
 
+      // --- Slides: urut-ulang tumpukan elemen (paritas "Urutkan" Google Slides).
+      //     Beda dengan tbSlideUp/tbSlideDown yang menggeser SLIDE di filmstrip,
+      //     dua tombol ini menggeser ELEMEN di dalam slide aktif.
+      bind('tbBringFront', () => {
+        if (!this.punch) return;
+        const ok = this.punch.bringToFront();
+        this.showToast(ok ? 'Elemen dibawa ke depan.' : 'Pilih elemen terlebih dahulu.');
+      });
+      bind('tbSendBack', () => {
+        if (!this.punch) return;
+        const ok = this.punch.sendToBack();
+        this.showToast(ok ? 'Elemen dikirim ke belakang.' : 'Pilih elemen terlebih dahulu.');
+      });
+
       // --- Shell global ---
       bind('tbUndo', () => this.performUndo(this.currentApp));
       bind('tbRedo', () => this.performRedo(this.currentApp));
@@ -695,6 +712,38 @@
       bind('tbPresent', () => { if (this.punch) this.punch.startPresentationMode(); });
       bind('tbWordCount', () => this.openWordCountModal());
       bind('tbShortcuts', () => this.openShortcutsModal());
+
+      // --- Zoom (global, <select> → event 'change', bukan 'click') ---
+      const zoomSel = document.getElementById('tbZoom');
+      if (zoomSel) zoomSel.addEventListener('change', () => this.setZoom(zoomSel.value));
+    }
+
+    // Menerapkan zoom tampilan. Dipakai lewat CSS variable --app-zoom supaya
+    // elemen yang di-render ulang (halaman Kix dibangun kembali tiap render)
+    // tetap ikut ter-zoom tanpa perlu di-apply manual satu per satu.
+    setZoom(value) {
+      let scale = 1;
+      if (value === 'Fit') {
+        const view = document.getElementById(`view-${this.currentApp}`);
+        const w = view ? view.clientWidth : 0;
+        // Lebar acuan: halaman Docs 816px, grid Sheets bebas, slide 960px.
+        const base = this.currentApp === 'slides' ? 960 : (this.currentApp === 'docs' ? 816 : 0);
+        scale = (w > 0 && base > 0) ? Math.min(1, (w - 48) / base) : 1;
+      } else {
+        const n = parseFloat(value);
+        scale = Number.isFinite(n) ? n / 100 : 1;
+      }
+
+      this.zoomLevel = scale;
+      // Editor membaca nilai ini untuk mengompensasi hit-testing pointer:
+      // tanpa kompensasi, klik pada dokumen ter-zoom mendarat di sel/baris salah.
+      window.__appZoom = scale;
+      document.documentElement.style.setProperty('--app-zoom', String(scale));
+
+      // Kanvas Sheets tidak ikut CSS zoom pada bitmap-nya, jadi render ulang
+      // agar ukuran bitmap menyesuaikan ruang yang tersedia.
+      if (this.currentApp === 'sheets' && this.ritz) this.ritz.render();
+      if (this.currentApp === 'slides' && this.punch) this.punch.render();
     }
 
     applyFormatForActive(prop, value) {

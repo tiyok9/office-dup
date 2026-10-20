@@ -323,8 +323,13 @@
       // Mouse Click Selection
       this.canvas.addEventListener('mousedown', (e) => {
         const rect = this.canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+        // Kompensasi zoom/peregangan: getBoundingClientRect() mengembalikan
+        // ukuran SETELAH transform, sedangkan sistem koordinat kanvas tetap
+        // 1:1 (canvas.width). Rasio ini otomatis benar untuk zoom apa pun.
+        const sx = rect.width ? this.canvas.width / rect.width : 1;
+        const sy = rect.height ? this.canvas.height / rect.height : 1;
+        const x = (e.clientX - rect.left) * sx;
+        const y = (e.clientY - rect.top) * sy;
 
         if (x > this.headerWidth && y > this.headerHeight) {
           const clickedCol = Math.floor((x - this.headerWidth + this.scrollX) / this.colWidth);
@@ -346,8 +351,10 @@
       // Klik ganda pada sel aktif = sunting isi sel yang sudah ada (seperti Sheets).
       this.canvas.addEventListener('dblclick', (e) => {
         const rect = this.canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+        const sx = rect.width ? this.canvas.width / rect.width : 1;
+        const sy = rect.height ? this.canvas.height / rect.height : 1;
+        const x = (e.clientX - rect.left) * sx;
+        const y = (e.clientY - rect.top) * sy;
         if (x > this.headerWidth && y > this.headerHeight) {
           const clickedCol = Math.floor((x - this.headerWidth + this.scrollX) / this.colWidth);
           const clickedRow = Math.floor((y - this.headerHeight + this.scrollY) / this.rowHeight) + 1;
@@ -575,10 +582,14 @@
 
       this.render();
       this.updateFormulaBar();
+      // Bagan harus ikut berubah saat sel diedit. Tanpa ini overlay bagan
+      // tetap menampilkan angka lama sampai dokumen di-reload.
+      if (Array.isArray(this.charts) && this.charts.length) this.renderChartOverlay();
       if (typeof this.onCellChange === 'function') this.onCellChange(this.cells);
     }
 
     notifyChange() {
+      if (Array.isArray(this.charts) && this.charts.length) this.renderChartOverlay();
       if (typeof this.onCellChange === 'function') this.onCellChange(this.cells);
     }
 

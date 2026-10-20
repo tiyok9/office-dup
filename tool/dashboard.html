@@ -133,6 +133,16 @@
     .slides-stage { flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px; position: relative; }
     .slides-viewport { width: 960px; height: 540px; background: #ffffff; box-shadow: var(--shadow-md); border-radius: 4px; overflow: hidden; position: relative; }
     .punch-viewer-svg { width: 100%; height: 100%; display: block; }
+    /* === ZOOM (tbZoom) ===
+       Docs memakai `zoom` karena harus mengubah tinggi layout (scroll ikut
+       memanjang). Sheets & Slides memakai transform agar bitmap/vektor tidak
+       memicu reflow. Keduanya WAJIB dikompensasi di hit-testing pointer
+       (lihat window.__appZoom di ritz_editor.js & kix_editor.js), kalau tidak
+       klik pada dokumen ter-zoom mendarat di sel/baris yang salah. */
+    :root { --app-zoom: 1; }
+    #view-docs .docs-scroll-container { zoom: var(--app-zoom); }
+    #view-sheets .sheets-grid-wrapper { transform: scale(var(--app-zoom)); transform-origin: top left; }
+    #view-slides .slides-viewport { transform: scale(var(--app-zoom)); transform-origin: top center; }
 
     /* FLOATING REA TELEMETRY DRAWER */
     .telemetry-drawer { position: fixed; bottom: 16px; right: 16px; width: 440px; max-height: 520px; background: #1e293b; color: #f8fafc; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.36); border: 1px solid #334155; display: flex; flex-direction: column; z-index: 1000; overflow: hidden; transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1); }
@@ -323,6 +333,9 @@
       <div class="tb-btn" id="tbInsertCircle" title="Sisipkan Lingkaran"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="7" opacity="0.35"/><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg></div>
       <div class="tb-btn" id="tbInsertLine" title="Sisipkan Garis"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 11h16v2H4z"/></svg></div>
       <div class="tb-btn" id="tbInsertText" title="Sisipkan Teks">T</div>
+      <div class="tb-sep"></div>
+      <div class="tb-btn" id="tbBringFront" title="Bawa ke Depan (Bring to Front)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M11 3h2v9h4l-5 5-5-5h4V3z"/><path d="M4 20h16v2H4z"/></svg></div>
+      <div class="tb-btn" id="tbSendBack" title="Kirim ke Belakang (Send to Back)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M11 21h2v-9h4l-5-5-5 5h4v9z"/><path d="M4 2h16v2H4z"/></svg></div>
       <div class="tb-sep"></div>
       <select class="tb-select" id="tbSlideLayout" title="Tata Letak Slide (Layout)" style="width: 118px;">
         <option value="blank">Kosong</option>

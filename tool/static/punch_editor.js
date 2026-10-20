@@ -684,6 +684,49 @@
       return true;
     }
 
+    // ==== Z-ORDER (paritas "Urutkan" Google Slides) ====
+    // Elemen anak (label teks hasil insertShape) ikut bergerak bersama induknya
+    // supaya label tidak tertinggal di belakang saat shape dibawa ke depan.
+    _zTargets() {
+      const slide = this.getActiveSlide();
+      if (!slide || !this.selectedElementId) return null;
+      const id = this.selectedElementId;
+      const kids = slide.elements.filter(el => el.parentId === id);
+      const main = slide.elements.find(el => el.id === id);
+      if (!main) return null;
+      return { slide, group: [main, ...kids] };
+    }
+
+    _zBounds(slide) {
+      let min = 0, max = 0;
+      for (const el of slide.elements) {
+        if (typeof el.z === 'number') { min = Math.min(min, el.z); max = Math.max(max, el.z); }
+      }
+      return { min, max };
+    }
+
+    bringToFront() {
+      const t = this._zTargets();
+      if (!t) return false;
+      const { max } = this._zBounds(t.slide);
+      // +1 per elemen agar urutan internal grup (shape lalu label) terjaga.
+      t.group.forEach((el, i) => { el.z = max + 1 + i; });
+      this.render();
+      if (typeof this.onChange === 'function') this.onChange(this.slides);
+      return true;
+    }
+
+    sendToBack() {
+      const t = this._zTargets();
+      if (!t) return false;
+      const { min } = this._zBounds(t.slide);
+      const n = t.group.length;
+      t.group.forEach((el, i) => { el.z = min - n + i; });
+      this.render();
+      if (typeof this.onChange === 'function') this.onChange(this.slides);
+      return true;
+    }
+
     updateSelectedColor(color) {
       const slide = this.getActiveSlide();
       if (!slide || !this.selectedElementId) return false;
@@ -799,8 +842,16 @@
       let svgHtml = `<rect x="0" y="0" width="960" height="540" fill="${escapeXml(bg)}"/>`;
 
       // Shape digambar lebih dulu, lalu teks, agar teks selalu di atas.
-      const shapes = slide.elements.filter(el => el.type !== 'text');
-      const texts = slide.elements.filter(el => el.type === 'text');
+      // Setelah user memakai "Bawa ke Depan"/"Kirim ke Belakang", properti `z`
+      // mengambil alih urutan. Sort-nya STABLE (tiebreak = indeks asli) supaya
+      // slide yang belum pernah di-z-order tergambar persis seperti sebelumnya.
+      const ordered = slide.elements
+        .map((el, i) => ({ el, i, z: typeof el.z === 'number' ? el.z : 0 }))
+        .sort((a, b) => (a.z - b.z) || (a.i - b.i))
+        .map(x => x.el);
+
+      const shapes = ordered.filter(el => el.type !== 'text');
+      const texts = ordered.filter(el => el.type === 'text');
 
       shapes.forEach(el => { svgHtml += this.elementToSvg(el, slide); });
       texts.forEach(el => { svgHtml += this.elementToSvg(el, slide); });

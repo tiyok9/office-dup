@@ -128,7 +128,12 @@
           this.activePageIdx = pIdx;
 
           const rect = canvas.getBoundingClientRect();
-          const clickY = e.clientY - rect.top - LINE_TOP_OFFSET;
+          // Kompensasi zoom: rect mengembalikan ukuran SETELAH transform,
+          // sedangkan koordinat gambar kanvas tetap 1:1 (PAGE_CANVAS_WIDTH).
+          // Tanpa rasio ini, klik saat ter-zoom memilih baris yang salah.
+          const zx = rect.width ? canvas.width / rect.width : 1;
+          const zy = rect.height ? canvas.height / rect.height : 1;
+          const clickY = (e.clientY - rect.top) * zy - LINE_TOP_OFFSET;
           this.activeLineIdx = Math.max(0, Math.min(Math.floor(clickY / LINE_HEIGHT), (this.pages[pIdx]?.lines.length || 1) - 1));
 
           const line = this.pages[pIdx]?.lines[this.activeLineIdx];
@@ -139,7 +144,7 @@
           // mendarat tepat di area penanda itu diperlakukan sebagai klik ceklis
           // dan TIDAK memindahkan kursor.
           if (line && line.listType === 'checklist') {
-            const clickX = e.clientX - rect.left;
+            const clickX = (e.clientX - rect.left) * zx;
             const box = this.checklistBoxRect(pIdx, this.activeLineIdx);
             if (box && clickX >= box.left && clickX <= box.left + box.width) {
               this.toggleChecklistAt(pIdx, this.activeLineIdx);

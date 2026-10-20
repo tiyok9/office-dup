@@ -640,6 +640,68 @@ async function runTestSuite() {
   assert(indentPx2 > indentPx0,
     `Docs: indentasi menambah jarak kiri nyata :: ${indentPx0}px -> ${indentPx2}px`);
 
+  // 14g. DOCS: HYPERLINK — semantik KETAT getLinkNearCursor + pemetaan x->offset.
+  // KUIRK yang diperbaiki: dulu getLinkNearCursor() punya fallback "tautan mana
+  // pun di baris ini" (links[links.length-1]). Akibatnya kursor di kata LAIN
+  // tetap membuka tautan lama, lengkap dengan tombol "Hapus Tautan" yang
+  // berbahaya. Fallback itu dulu berfungsi sebagai PENYANGGA karena klik kanvas
+  // SELALU menaruh kursor di akhir baris. Dua-duanya dibereskan bersama:
+  // charIndexAtPoint() memetakan x -> offset, lalu getLinkNearCursor() hanya
+  // mengembalikan tautan yang benar-benar disentuh kursor.
+  kix14.setDocumentData({ pages: [{ lines: [{ text: 'Buka Google atau Yahoo sekarang' }] }] });
+  kix14.activePageIdx = 0; kix14.activeLineIdx = 0;
+  const linkLine = kix14.pages[0].lines[0];
+  kix14.setLinkRange(0, 0, 5, 11, 'https://google.com');    // "Google"
+  kix14.setLinkRange(0, 0, 17, 22, 'https://yahoo.com');     // "Yahoo"
+  const linksNow = (linkLine.links || []).map(L => `${L.start}-${L.end}`).join(',');
+  assert(linksNow === '5-11,17-22',
+    `Docs: dua tautan tersimpan berurutan :: ${linksNow}`);
+
+  const nearAt = (c) => { kix14.cursorCharIdx = c; return kix14.getLinkNearCursor(); };
+  assert((nearAt(5) || {}).url === 'https://google.com',
+    'Docs: kursor tepat di AWAL tautan -> tautan itu');
+  assert((nearAt(11) || {}).url === 'https://google.com',
+    'Docs: kursor tepat di AKHIR tautan -> masih tautan itu (batas INKLUSIF)');
+  assert(nearAt(12) === null,
+    'Docs: kursor 1 setelah akhir tautan -> null (bukan tautan lama)');
+  assert(nearAt(14) === null,
+    'Docs: kursor di ANTARA dua tautan -> null (bukan links[0]/links[last])');
+  assert((nearAt(19) || {}).url === 'https://yahoo.com',
+    'Docs: kursor di tautan KEDUA -> tautan kedua');
+  assert(nearAt(linkLine.text.length) === null,
+    'Docs: kursor di AKHIR baris padahal tautan di tengah -> null (MEMBALIK fallback lama)');
+  assert(nearAt(0) === null,
+    'Docs: kursor di awal baris sebelum tautan -> null');
+
+  // charIndexAtPoint: klik di tengah baris harus mendarat di TENGAH, bukan akhir.
+  // Sebelumnya handler klik menulis `cursorCharIdx = line.text.length` secara
+  // literal, sehingga Ctrl+K praktis hanya bisa menggenggam kata terakhir.
+  const cvs14 = docStub.getElementById('kixCanvas1');
+  const ctx14 = cvs14.getContext('2d');
+  const MARGIN14 = 30;
+  assert(kix14.charIndexAtPoint(0, 0, MARGIN14 - 5) === 0,
+    `Docs: klik di kiri margin -> offset 0 :: ${kix14.charIndexAtPoint(0, 0, MARGIN14 - 5)}`);
+  const afterThree = kix14.charIndexAtPoint(0, 0, MARGIN14 + ctx14.measureText('Buk').width);
+  assert(afterThree === 3,
+    `Docs: klik setelah 3 huruf -> offset 3 :: ${afterThree}`);
+  const farRight = kix14.charIndexAtPoint(0, 0, MARGIN14 + ctx14.measureText(linkLine.text).width + 50);
+  assert(farRight === linkLine.text.length,
+    `Docs: klik jauh di kanan -> offset akhir :: ${farRight}`);
+
+  // Konsekuensi langsung perbaikan kursor: wordRangeAtCursor() kini bisa
+  // menggenggam kata di TENGAH baris, bukan hanya kata terakhir.
+  kix14.cursorCharIdx = 8;
+  const wr14 = kix14.wordRangeAtCursor();
+  assert(wr14 && wr14.text === 'Google',
+    `Docs: wordRangeAtCursor di TENGAH baris menggenggam kata yang benar :: ${wr14 && wr14.text}`);
+
+  // Dan applyLinkAtCursor() benar-benar menautkan kata di tengah baris.
+  kix14.cursorCharIdx = 26;   // di "sekarang" (belum bertaut)
+  const applied14 = kix14.applyLinkAtCursor('https://contoh.id', 'sekarang');
+  const newLink14 = (kix14.pages[0].lines[0].links || []).find(L => L.url === 'https://contoh.id');
+  assert(applied14 === true && newLink14 && newLink14.start === 23 && newLink14.end === 31,
+    `Docs: applyLinkAtCursor menautkan kata di TENGAH baris :: ${newLink14 ? newLink14.start + '-' + newLink14.end : 'null'}`);
+
   // 14e. SLIDES: urut-ulang slide (moveSlide) — hanya menukar posisi.
   const punch14b = new Punch14('slideStage', 'filmstrip');
   punch14b.slides = [

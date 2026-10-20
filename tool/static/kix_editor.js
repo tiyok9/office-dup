@@ -154,13 +154,16 @@
           this.activeLineIdx = Math.max(0, Math.min(Math.floor(clickY / LINE_HEIGHT), (this.pages[pIdx]?.lines.length || 1) - 1));
 
           const line = this.pages[pIdx]?.lines[this.activeLineIdx];
-          this.cursorCharIdx = line ? line.text.length : 0;
+          const clickXl = (e.clientX - rect.left) * zx;
+          // Kursor mendarat pada karakter yang DIKLIK, bukan selalu di akhir baris.
+          // Sebelumnya `line.text.length` membuat Ctrl+K hanya mampu menggenggam
+          // kata terakhir, sehingga tautan di tengah baris mustahil disunting.
+          this.cursorCharIdx = line ? this.charIndexAtPoint(pIdx, this.activeLineIdx, clickXl) : 0;
 
           // ==== KLIK TAUTAN ====
           // Paritas Google Docs MODE EDIT: klik biasa = taruh kursor, hanya
           // Ctrl+Klik (Cmd+Klik di Mac) yang membuka tautan. Kalau klik biasa
           // langsung membuka, user tidak bisa menyunting teks di dalam tautan.
-          const clickXl = (e.clientX - rect.left) * zx;
           const clickYl = (e.clientY - rect.top) * zy;
           const hit = this.linkBoxAt(pIdx, clickXl, clickYl);
           this._lastHitLink = hit || null;
@@ -738,25 +741,29 @@
       return this._linksOf(line).find(L => charIdx >= L.start && charIdx < L.end) || null;
     }
 
-    // Tautan yang relevan dengan posisi kursor di baris aktif — dipakai modal
-    // untuk prefill URL/teks. Kursor Kix selalu di akhir baris (tidak ada API
-    // seleksi), jadi pencarian dilakukan berlapis: (1) tepat di kursor,
-    // (2) kata di sekitar kursor, (3) tautan terakhir di baris itu.
+    // Tautan yang sedang "dipegang" kursor — dipakai modal untuk prefill URL/teks
+    // sekaligus memunculkan tombol "Hapus Tautan".
+    //
+    // Semantik KETAT (paritas Google Docs): tautan hanya dianggap aktif bila
+    // kursor benar-benar berada di dalam atau menyentuh batasnya
+    // (start <= at <= end, INKLUSIF di end). Versi lama punya fallback
+    // "tautan mana pun di baris ini" (links[links.length-1]), sehingga kursor di
+    // kata LAIN pada baris yang sama tetap membuka tautan lama: user yang hendak
+    // menautkan kata baru malah disuguhi edit tautan yang tak dimaksud, lengkap
+    // dengan tombol Hapus yang berbahaya.
+    //
+    // Prasyarat semantik ini adalah kursor yang presisi — klik kanvas kini
+    // memetakan x -> offset lewat charIndexAtPoint(), bukan lagi selalu
+    // menaruh kursor di akhir baris. Tanpa perbaikan itu, menghapus fallback
+    // justru mematikan jalur edit tautan lewat Ctrl+K.
     getLinkNearCursor() {
-      const pIdx = this.activePageIdx, lIdx = this.activeLineIdx;
       const line = this.activeLineRef();
       if (!line) return null;
       const links = this._linksOf(line);
       if (!links.length) return null;
-      const at = Math.min(this.cursorCharIdx, (line.text || '').length);
-      const direct = links.find(L => at >= L.start && at < L.end);
-      if (direct) return direct;
-      const w = this.wordRangeAtCursor();
-      if (w) {
-        const byWord = links.find(L => L.start < w.end && L.end > w.start);
-        if (byWord) return byWord;
-      }
-      return links[links.length - 1];
+      const text = line.text || '';
+      const at = Math.max(0, Math.min(this.cursorCharIdx, text.length));
+      return links.find(L => at >= L.start && at <= L.end) || null;
     }
 
     removeLinkRange(pIdx, lIdx, start, end) {
@@ -951,6 +958,53 @@
     lineRectAt(pIdx, lIdx) {
       const top = LINE_TOP_OFFSET + lIdx * LINE_HEIGHT;
       return { top, height: LINE_HEIGHT, centerY: top + LINE_HEIGHT / 2 };
+    }
+
+    // Peta koordinat-x kanvas -> offset karakter di line.text.
+    // Kix tidak punya API seleksi, dan dulu klik SELALU menaruh kursor di AKHIR
+    // baris (cursorCharIdx = text.length). Akibatnya Ctrl+K hanya bisa
+    // "menggenggam" kata terakhir, dan tautan di tengah baris tak pernah bisa
+    // disunting. Geometri di sini memakai rumus yang SAMA dengan renderPage()
+    // (MARGIN + indent, segmen hasil wrapSegmentsFor, align center/right),
+    // sehingga kursor mendarat tepat di huruf yang diklik.
+    charIndexAtPoint(pIdx, lIdx, x) {
+      const page = this.pages[pIdx];
+      const line = page && page.lines[lIdx];
+      if (!line) return 0;
+      const text = line.text || '';
+      const canvas = document.getElementById(`kixCanvas${pIdx + 1}`);
+      if (!canvas) return text.length;
+      const m = this.measureLine(page, lIdx, canvas);
+      const fontSize = line.size || 13;
+      const fontFamily = line.fontFamily || 'Arial';
+      const ctx = canvas.getContext('2d');
+      let style = '';
+      if (line.italic) style += 'italic ';
+      if (line.bold) style += 'bold ';
+      ctx.font = `${style}${fontSize}px ${fontFamily}, sans-serif`;
+      const baseX = MARGIN + m.indent;
+      const prefixLen = m.prefix.length;
+      for (const seg of m.segs) {
+        const tw = ctx.measureText(seg.text).width;
+        let segX = baseX;
+        if (line.align === 'center') segX = Math.max(MARGIN, (canvas.width - tw) / 2);
+        else if (line.align === 'right') segX = Math.max(MARGIN, canvas.width - MARGIN - tw);
+        // Di kiri segmen ini: offset paling awal yang mungkin pada segmen itu.
+        if (x < segX) return Math.max(0, seg.start - prefixLen);
+        if (x <= segX + tw) {
+          const local = x - segX;
+          // Cari batas karakter TERDEKAT (bukan selalu karakter sebelumnya),
+          // supaya klik di paruh kanan sebuah huruf mendarat setelah huruf itu.
+          let best = 0, bestDiff = Infinity, acc = 0;
+          for (let i = 0; i <= seg.text.length; i++) {
+            const d = Math.abs(acc - local);
+            if (d < bestDiff) { bestDiff = d; best = i; }
+            if (i < seg.text.length) acc += ctx.measureText(seg.text[i]).width;
+          }
+          return Math.max(0, Math.min(text.length, seg.start + best - prefixLen));
+        }
+      }
+      return text.length;
     }
 
     // Geometri kotak centang (koordinat canvas). Satu sumber kebenaran yang

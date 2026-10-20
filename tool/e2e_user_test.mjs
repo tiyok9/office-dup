@@ -1285,6 +1285,139 @@ async function stopIsolatedServer() {
   const szDocs10 = await cdp.shot('test_user_docs_nested_bullet.png');
   check('S10 Docs: screenshot butir bertingkat tersimpan', szDocs10 > 20000, szDocs10 + ' bytes');
 
+  // ================= S11: DOCS — PEMISAH HALAMAN MANUAL (Ctrl+Enter) =================
+  // Unit test (14h) membuktikan MODEL terpotong, tetapi belum ada bukti bahwa
+  // Ctrl+Enter benar-benar sampai ke editor lewat keyboard nyata dan menghasilkan
+  // TILE KANVAS baru. Semua langkah di sini lewat CDP: klik kanvas asli,
+  // keydown asli, lalu periksa model + DOM + piksel + disk.
+  console.log('\n--- S11: Docs — pemisah halaman manual (Ctrl+Enter) ---');
+  await cdp.click('document.getElementById("tab-drive")');
+  await sleep(300);
+  await cdp.click(`document.querySelector('#driveGridContainer .drive-card[data-doc-id="${docsId}"]')`);
+  await sleep(1300);
+
+  // Klik pada BARIS dan POSISI X tertentu. Sejak charIndexAtPoint() dipasang,
+  // klik kanvas menaruh kursor di karakter yang diklik — jadi titik klik
+  // menentukan posisi potong. Koordinat diambil dari editor (lineRectAt),
+  // bukan angka ajaib, agar tidak meleset saat tinggi baris berubah.
+  const clickDocsAt = async (lIdx, fx) => {
+    const pos = JSON.parse(await cdp.eval(`(() => {
+      const app = window.workspaceApp.kix;
+      const c = document.querySelector('#docsScrollBox .kix-page canvas');
+      if (!c || !app) return JSON.stringify({ ok: false });
+      const r = c.getBoundingClientRect();
+      const row = app.lineRectAt(0, ${lIdx});
+      const scale = r.width / (c.width || r.width);
+      return JSON.stringify({
+        ok: true,
+        x: Math.round(r.left + r.width * ${fx}),
+        y: Math.round(r.top + row.centerY * scale)
+      });
+    })()`));
+    if (!pos.ok) throw new Error('Kanvas Docs tidak ditemukan untuk klik baris #' + lIdx);
+    await cdp.clickAt(pos.x, pos.y);
+    await sleep(350);
+  };
+
+  const pbBefore = JSON.parse(await cdp.eval(`JSON.stringify({
+    pages: window.workspaceApp.kix.pages.length,
+    tiles: document.querySelectorAll('#docsScrollBox .kix-page').length,
+    pageIdx: window.workspaceApp.kix.activePageIdx,
+    text: window.workspaceApp.kix.pages[0].lines[0].text
+  })`));
+  // Cari titik klik yang benar-benar mendarat di TENGAH teks (bukan ujung baris),
+  // supaya pemotongan halaman punya dua sisi yang bisa diperiksa. Kalau kursor
+  // selalu jatuh di akhir baris, itu sendiri pertanda charIndexAtPoint mati.
+  let cut11 = 0;
+  for (const fx of [0.32, 0.24, 0.16, 0.10, 0.40]) {
+    await clickDocsAt(0, fx);
+    cut11 = Number(await cdp.eval('window.workspaceApp.kix.cursorCharIdx'));
+    if (cut11 > 0 && cut11 < pbBefore.text.length) break;
+  }
+  check('S11 Docs: klik kanvas menaruh kursor di TENGAH teks (bukan ujung baris)',
+    cut11 > 0 && cut11 < pbBefore.text.length, `cut=${cut11} len=${pbBefore.text.length}`);
+  const focus11 = await cdp.eval('document.activeElement ? document.activeElement.id : ""');
+  check('S11 Docs: fokus ada di interceptor Kix sebelum Ctrl+Enter',
+    focus11 === 'kixHiddenInput', String(focus11));
+
+  await cdp.key('Enter', 2);   // modifiers 2 = Ctrl
+  await sleep(900);
+
+  const pbAfter = JSON.parse(await cdp.eval(`JSON.stringify({
+    pages: window.workspaceApp.kix.pages.length,
+    tiles: document.querySelectorAll('#docsScrollBox .kix-page').length,
+    left: window.workspaceApp.kix.pages[${pbBefore.pageIdx}].lines[0].text,
+    right: window.workspaceApp.kix.pages[${pbBefore.pageIdx + 1}].lines[0].text,
+    activePageIdx: window.workspaceApp.kix.activePageIdx,
+    activeLineIdx: window.workspaceApp.kix.activeLineIdx,
+    cursorCharIdx: window.workspaceApp.kix.cursorCharIdx
+  })`));
+  check('S11 Docs: Ctrl+Enter menambah HALAMAN di model',
+    pbAfter.pages === pbBefore.pages + 1, `${pbBefore.pages} -> ${pbAfter.pages}`);
+  check('S11 Docs: tile kanvas baru benar-benar dibuat di DOM',
+    pbAfter.tiles === pbBefore.tiles + 1, `${pbBefore.tiles} -> ${pbAfter.tiles}`);
+  check('S11 Docs: teks terpotong tepat di posisi kursor',
+    pbAfter.left === pbBefore.text.slice(0, cut11) && pbAfter.right === pbBefore.text.slice(cut11),
+    JSON.stringify([pbAfter.left, pbAfter.right]));
+  check('S11 Docs: kursor pindah ke awal halaman baru',
+    pbAfter.activePageIdx === pbBefore.pageIdx + 1 && pbAfter.activeLineIdx === 0 && pbAfter.cursorCharIdx === 0,
+    `p=${pbAfter.activePageIdx} l=${pbAfter.activeLineIdx} c=${pbAfter.cursorCharIdx}`);
+
+  // Model bisa benar sementara layar kosong; periksa piksel kanvas halaman baru.
+  const paint11 = JSON.parse(await cdp.eval(`(() => {
+    const c = document.getElementById('kixCanvas' + window.workspaceApp.kix.pages.length);
+    if (!c) return JSON.stringify({ ok: false, reason: 'kanvas halaman baru tidak ada' });
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    let n = 0;
+    for (let i = 3; i < d.length; i += 4) if (d[i] !== 0) n++;
+    return JSON.stringify({ ok: true, pixels: n });
+  })()`));
+  check('S11 Docs: kanvas halaman baru benar-benar ter-paint',
+    paint11.ok === true && paint11.pixels > 500, JSON.stringify(paint11));
+
+  // Screenshot harus BENAR-BENAR memperlihatkan sambungan dua halaman. Tanpa
+  // menggulir, viewport hanya menampilkan halaman 1 dan bukti visualnya jadi
+  // menyesatkan (nama berkas menjanjikan "dua halaman", gambar menunjukkan satu).
+  // Gulir sampai puncak halaman baru berada ~260px di bawah tepi atas scrollBox,
+  // sehingga ekor halaman lama dan kepala halaman baru terlihat bersamaan.
+  const seam11 = JSON.parse(await cdp.eval(`(() => {
+    const sb = document.getElementById('docsScrollBox');
+    const pg = document.getElementById('kixPage${pbBefore.pageIdx + 2}');
+    if (!sb || !pg) return JSON.stringify({ ok: false });
+    const delta = pg.getBoundingClientRect().top - sb.getBoundingClientRect().top - 260;
+    sb.scrollTop = Math.max(0, sb.scrollTop + delta);
+    return JSON.stringify({ ok: true, scrollTop: Math.round(sb.scrollTop) });
+  })()`));
+  await sleep(500);
+  check('S11 Docs: viewport digulir ke sambungan dua halaman', seam11.ok === true,
+    JSON.stringify(seam11));
+  const szPb = await cdp.shot('test_user_docs_pagebreak.png');
+  check('S11 Docs: screenshot sambungan dua halaman tersimpan', szPb > 20000, szPb + ' bytes');
+
+  // Persistensi: pemisah halaman harus ikut autosave, bukan hanya di memori.
+  await sleep(1400);
+  const pbDisk = await apiGet(docsId);
+  const pbDiskPages = pbDisk && pbDisk.data && Array.isArray(pbDisk.data.pages) ? pbDisk.data.pages.length : -1;
+  check('S11 Docs: jumlah halaman ikut tersimpan ke disk',
+    pbDiskPages === pbAfter.pages, `disk=${pbDiskPages} memori=${pbAfter.pages}`);
+
+  // Enter BIASA sesudahnya harus tetap menambah BARIS, bukan halaman —
+  // membuktikan cabang Ctrl+Enter tidak "bocor" ke perilaku normal.
+  // Asersi RELATIF: halaman baru bisa mewarisi baris lain dari halaman sumber
+  // (seksi S9/S10 sudah menambah baris), jadi patokannya "bertambah satu",
+  // bukan angka mutlak 2.
+  const linesBefore11 = Number(await cdp.eval(
+    `window.workspaceApp.kix.pages[${pbBefore.pageIdx + 1}].lines.length`));
+  await cdp.key('Enter', 0);
+  await sleep(700);
+  const enter11 = JSON.parse(await cdp.eval(`JSON.stringify({
+    pages: window.workspaceApp.kix.pages.length,
+    lines: window.workspaceApp.kix.pages[${pbBefore.pageIdx + 1}].lines.length
+  })`));
+  check('S11 Docs: Enter biasa setelah pemisah menambah BARIS (bukan halaman)',
+    enter11.pages === pbAfter.pages && enter11.lines === linesBefore11 + 1,
+    `${linesBefore11} -> ${enter11.lines} baris, pages=${enter11.pages}`);
+
   // ================= ERROR FRONTEND =================
   console.log('\n--- Error frontend yang tertangkap selama seluruh alur user ---');
   check('Tidak ada exception JS selama seluruh alur', pageErrors.length === 0, pageErrors.slice(0, 3).join(' | '));

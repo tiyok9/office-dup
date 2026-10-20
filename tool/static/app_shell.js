@@ -1075,9 +1075,17 @@
         ];
       }
       if (menu === 'view') {
+        const fz = this.ritz ? { rows: this.ritz.frozenRows || 0, cols: this.ritz.frozenCols || 0 } : { rows: 0, cols: 0 };
         return [
           { label: 'Mode Presentasi Slideshow', shortcut: 'F5', action: () => { if (this.punch) this.punch.startPresentationMode(); } },
           { label: 'Layar Penuh (Fullscreen)', shortcut: 'F11', action: () => this.toggleFullscreen() },
+          { sep: true },
+          // ==== FREEZE PANE (paritas Google Sheets: menu Tampilan > Bekukan) ====
+          // Item yang statusnya sudah aktif ditandai centang agar user tahu posisi.
+          { label: `${fz.rows === 1 ? '✓ ' : ''}Bekukan 1 baris (Sheets)`, action: () => { if (this.ritz) { this.ritz.setFrozen(1, this.ritz.frozenCols); this.syncToolbar(); } } },
+          { label: `${fz.rows === 2 ? '✓ ' : ''}Bekukan 2 baris (Sheets)`, action: () => { if (this.ritz) { this.ritz.setFrozen(2, this.ritz.frozenCols); this.syncToolbar(); } } },
+          { label: `${fz.cols === 1 ? '✓ ' : ''}Bekukan 1 kolom (Sheets)`, action: () => { if (this.ritz) { this.ritz.setFrozen(this.ritz.frozenRows, 1); this.syncToolbar(); } } },
+          { label: `${(fz.rows === 0 && fz.cols === 0) ? '✓ ' : ''}Tidak ada panel beku (Sheets)`, action: () => { if (this.ritz) { this.ritz.setFrozen(0, 0); this.syncToolbar(); } } },
           { sep: true },
           { label: 'Tampilkan/Sembunyikan Telemetry Drawer', action: () => window.toggleTelemetry() },
           { label: 'Buka Drive Hub', action: () => this.switchApp('drive') }

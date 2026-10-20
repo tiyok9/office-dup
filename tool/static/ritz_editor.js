@@ -49,6 +49,12 @@
       this.scrollX = 0;
       this.scrollY = 0;
 
+      // ==== FREEZE PANE (paritas Google Sheets: Bekukan baris/kolom) ====
+      // Jumlah baris teratas / kolom terkiri yang TIDAK ikut ter-scroll.
+      // 0 = tidak ada panel beku; perilaku identik dengan versi sebelumnya.
+      this.frozenRows = 0;
+      this.frozenCols = 0;
+
       // Mode sunting-di-sel (in-cell editing ala Google Sheets): user mengetik
       // langsung di sel, bukan wajib lewat formula bar.
       this.editing = false;
@@ -120,6 +126,11 @@
       s.charts = this.charts || [];
       // Lebar kolom ikut sheet ini (tiap tab bisa punya lebar berbeda).
       s.colWidths = { ...(this.colWidths || {}) };
+      // Panel beku milik sheet ini (tiap tab bisa punya freeze berbeda).
+      s.frozen = {
+        rows: Math.max(0, Number(this.frozenRows) || 0),
+        cols: Math.max(0, Number(this.frozenCols) || 0)
+      };
     }
 
     // Muat entri sheets[] aktif menjadi keadaan editor (cells/charts/seleksi).
@@ -190,8 +201,8 @@
       return x;
     }
 
-    // Kebalikan getColX: kolom mana yang berada pada x tertentu.
-    colFromX(x) {
+    // Kebalikan getColX: kolom mana yang berada pada x KONTEN (belum diskrol).
+    _colAtContentX(x) {
       if (x < this.headerWidth) return -1;
       let acc = this.headerWidth;
       for (let i = 0; i < this.totalCols; i++) {
@@ -200,6 +211,39 @@
         acc += w;
       }
       return -1;
+    }
+
+    // ==== FREEZE PANE: GEOMETRI TERPUSAT ====
+    // Dua helper di bawah adalah SATU-SATUNYA sumber koordinat sel. Semua render,
+    // hit-testing, overlay seleksi, fill handle, dan autofill wajib lewat sini.
+    // Saat frozenRows/frozenCols = 0 rumusnya IDENTIK dengan versi lama
+    // (headerHeight + (r-1)*rowHeight - scrollY), jadi tidak ada regresi.
+    freezeX() {
+      return this.headerWidth + this.colsWidthUpto(this.frozenCols);
+    }
+
+    freezeY() {
+      return this.headerHeight + this.frozenRows * this.rowHeight;
+    }
+
+    // x KIRI kolom c dalam koordinat kanvas. Kolom beku mengabaikan scrollX.
+    cellX(c) {
+      const raw = this.getColX(c);
+      return (c < this.frozenCols) ? raw : raw - this.scrollX;
+    }
+
+    // y ATAS baris r (1-based) dalam koordinat kanvas. Baris beku mengabaikan scrollY.
+    cellY(r) {
+      const raw = this.headerHeight + ((r - 1) * this.rowHeight);
+      return (r <= this.frozenRows) ? raw : raw - this.scrollY;
+    }
+
+    // Kebalikan cellX/cellY: x kanvas -> indeks kolom (menghormati panel beku).
+    colFromX(x) {
+      if (x < this.headerWidth) return -1;
+      // Di dalam area beku, konten tidak bergeser.
+      if (x < this.freezeX()) return this._colAtContentX(x);
+      return this._colAtContentX(x + this.scrollX);
     }
 
     colBoundaryX(c) {
@@ -211,7 +255,7 @@
     colResizeHit(x, y) {
       if (y > this.headerHeight || x < this.headerWidth) return -1;
       for (let i = 0; i < this.totalCols; i++) {
-        const bx = this.colBoundaryX(i) - this.scrollX;
+        const bx = this.cellX(i) + this.getColWidth(i);
         if (Math.abs(x - bx) <= 4) return i;
         if (bx > this.canvas.width + 40) break;
       }
@@ -232,10 +276,23 @@
     }
 
     // ==== AUTOFILL: GEOMETRI & HIT-TESTING ====
-    // Baris mana yang berada pada y tertentu (kebalikan dari rumus render).
+    // y ATAS baris r dalam koordinat kanvas (lihat cellY).
+    getRowY(r) {
+      return this.cellY(r);
+    }
+
+    // Kebalikan cellY: y kanvas -> nomor baris (menghormati panel beku).
+    // Saat frozenRows = 0 rumusnya IDENTIK dengan versi lama.
     rowFromY(y) {
       if (y < this.headerHeight) return -1;
-      const r = Math.floor((y - this.headerHeight + this.scrollY) / this.rowHeight) + 1;
+      let r;
+      if (this.frozenRows > 0 && y < this.freezeY()) {
+        // Di dalam area beku, konten tidak bergeser.
+        r = Math.floor((y - this.headerHeight) / this.rowHeight) + 1;
+      } else {
+        const rel = y - this.freezeY() + this.scrollY;
+        r = this.frozenRows + 1 + Math.floor(rel / this.rowHeight);
+      }
       return (r >= 1 && r <= this.totalRows) ? r : -1;
     }
 
@@ -245,8 +302,8 @@
     // cukup untuk keduanya.
     fillHandleRect() {
       const rb = this.getRangeBounds();
-      const rx = this.getColX(rb.minCol) - this.scrollX;
-      const ry = this.headerHeight + ((rb.minRow - 1) * this.rowHeight) - this.scrollY;
+      const rx = this.cellX(rb.minCol);
+      const ry = this.cellY(rb.minRow);
       const rw = this.getColX(rb.maxCol + 1) - this.getColX(rb.minCol);
       const rh = (rb.maxRow - rb.minRow + 1) * this.rowHeight;
       return { x: rx + rw - 4, y: ry + rh - 4, w: 6, h: 6 };
@@ -412,7 +469,11 @@
           cells: (s && s.cells) ? JSON.parse(JSON.stringify(s.cells)) : {},
           charts: (s && Array.isArray(s.charts)) ? JSON.parse(JSON.stringify(s.charts)) : [],
           // Lebar kolom per sheet ikut dipulihkan dari dokumen.
-          colWidths: (s && s.colWidths && typeof s.colWidths === 'object') ? { ...s.colWidths } : {}
+          colWidths: (s && s.colWidths && typeof s.colWidths === 'object') ? { ...s.colWidths } : {},
+          // Panel beku per sheet ikut dipulihkan (dokumen lama tanpa frozen -> 0).
+          frozen: (s && s.frozen && typeof s.frozen === 'object')
+            ? { rows: Math.max(0, Number(s.frozen.rows) || 0), cols: Math.max(0, Number(s.frozen.cols) || 0) }
+            : { rows: 0, cols: 0 }
         }));
         const idx = Number(activeIdx);
         this.activeSheetIdx = (Number.isInteger(idx) && idx >= 0 && idx < this.sheets.length) ? idx : 0;
@@ -433,6 +494,22 @@
     getActiveSheetName() {
       const s = this.sheets[this.activeSheetIdx];
       return s ? s.name : 'Sheet1';
+    }
+
+    // ==== FREEZE PANE: API PUBLIK ====
+    // rows/cols = jumlah baris/kolom teratas yang dibekukan. Nilai di-clamp ke
+    // ukuran grid supaya dokumen rusak (mis. frozen 9999) tidak mematikan render.
+    // State disimpan per sheet dan memicu autosave lewat notifyChange().
+    setFrozen(rows, cols) {
+      const rr = (rows === undefined || rows === null) ? this.frozenRows : rows;
+      const cc = (cols === undefined || cols === null) ? this.frozenCols : cols;
+      this.frozenRows = Math.max(0, Math.min(this.totalRows, Math.round(Number(rr) || 0)));
+      this.frozenCols = Math.max(0, Math.min(this.totalCols, Math.round(Number(cc) || 0)));
+      // Simpan ke sheet aktif SEKARANG, jangan menunggu switchSheet.
+      this._syncActiveSheet();
+      this.render();
+      this.notifyChange();
+      return { rows: this.frozenRows, cols: this.frozenCols };
     }
 
     // Pindah sheet: suntingan sheet lama WAJIB disimpan dulu ke sheets[].
@@ -838,9 +915,9 @@
             return;
           }
 
-          // colFromX() menghormati lebar kolom yang sudah di-resize.
-          const clickedCol = this.colFromX(x + this.scrollX);
-          const clickedRow = Math.floor((y - this.headerHeight + this.scrollY) / this.rowHeight) + 1;
+          // colFromX()/rowFromY() menghormati lebar kolom dan panel beku.
+          const clickedCol = this.colFromX(x);
+          const clickedRow = this.rowFromY(y);
 
           if (clickedCol >= 0 && clickedCol < this.totalCols && clickedRow >= 1 && clickedRow <= this.totalRows) {
             // Klik ke sel lain saat sedang menyunting = komit dulu (perilaku Sheets).
@@ -874,8 +951,8 @@
         const x = (e.clientX - rect.left) * sx;
         const y = (e.clientY - rect.top) * sy;
         if (x <= this.headerWidth || y <= this.headerHeight) return null;
-        const col = this.colFromX(x + this.scrollX);
-        const row = Math.floor((y - this.headerHeight + this.scrollY) / this.rowHeight) + 1;
+        const col = this.colFromX(x);
+        const row = this.rowFromY(y);
         if (col < 0 || col >= this.totalCols || row < 1 || row > this.totalRows) return null;
         return { col, row };
       };
@@ -906,7 +983,7 @@
         // oleh render() sebagai kotak putus-putus.
         if (this.isAutofilling && this.autofillOrigin) {
           const o = this.autofillOrigin;
-          const curCol = this.colFromX(mx + this.scrollX);
+          const curCol = this.colFromX(mx);
           const curRow = this.rowFromY(my);
           if (curCol < 0 || curRow < 0) return;
           const t = { ...o };
@@ -1015,17 +1092,27 @@
         const x = (e.clientX - rect.left) * sx;
         const y = (e.clientY - rect.top) * sy;
         if (x > this.headerWidth && y > this.headerHeight) {
-          const clickedCol = this.colFromX(x + this.scrollX);
-          const clickedRow = Math.floor((y - this.headerHeight + this.scrollY) / this.rowHeight) + 1;
+          const clickedCol = this.colFromX(x);
+          const clickedRow = this.rowFromY(y);
           if (clickedCol === this.activeCol && clickedRow === this.activeRow) {
             this.startCellEditExisting();
           }
         }
       });
 
-      // Scroll (roda mouse) — halaman vertikal
+      // Scroll (roda mouse) — Shift+roda = horizontal, roda biasa = vertikal.
+      // Scroll horizontal diperlukan agar panel beku KOLOM punya arti: tanpa
+      // scrollX yang bisa berubah, kolom beku dan kolom biasa tampak identik.
       this.canvas.addEventListener('wheel', (e) => {
-        this.scrollY = Math.max(0, this.scrollY + (e.deltaY > 0 ? 3 : -3) * this.rowHeight);
+        const horiz = e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY);
+        if (horiz) {
+          const viewW = this.canvas.width - this.headerWidth;
+          const maxX = Math.max(0, this.getColX(this.totalCols) - viewW);
+          const step = e.deltaX || (e.deltaY > 0 ? 3 : -3) * this.colWidth;
+          this.scrollX = Math.max(0, Math.min(maxX, this.scrollX + step));
+        } else {
+          this.scrollY = Math.max(0, this.scrollY + (e.deltaY > 0 ? 3 : -3) * this.rowHeight);
+        }
         e.preventDefault();
         this.render();
       }, { passive: false });
@@ -1354,10 +1441,20 @@
       ctx.textBaseline = 'middle';
       ctx.fillStyle = '#5f6368';
 
-      for (let c = 0; c < this.totalCols; c++) {
+      // ==== FREEZE PANE: BATAS REGION ====
+      // fRows/fCols = jumlah baris/kolom beku. Saat keduanya 0, bodyX/bodyY
+      // sama dengan headerWidth/headerHeight -> gambar identik versi lama.
+      const fRows = Math.max(0, Math.min(this.totalRows, Math.round(this.frozenRows) || 0));
+      const fCols = Math.max(0, Math.min(this.totalCols, Math.round(this.frozenCols) || 0));
+      const fRight = this.freezeX();
+      const fBottom = this.freezeY();
+      const bodyX = fCols > 0 ? fRight : this.headerWidth;
+      const bodyY = fRows > 0 ? fBottom : this.headerHeight;
+
+      const paintColHeader = (c) => {
         const cw = this.getColWidth(c);
-        const x = this.getColX(c) - this.scrollX;
-        if (x + cw < this.headerWidth || x > width) continue;
+        const x = this.cellX(c);
+        if (x + cw < this.headerWidth || x > width) return;
 
         ctx.fillStyle = (c === this.activeCol) ? '#e8f0fe' : '#f8f9fa';
         ctx.fillRect(x, 0, cw, this.headerHeight);
@@ -1366,84 +1463,162 @@
 
         ctx.fillStyle = (c === this.activeCol) ? '#1a73e8' : '#5f6368';
         ctx.fillText(this.colLabel(c), x + cw / 2, this.headerHeight / 2);
-      }
+      };
 
-      const visibleRows = Math.ceil(height / this.rowHeight) + 1;
-      for (let r = 1; r <= Math.min(this.totalRows, visibleRows); r++) {
-        const y = this.headerHeight + ((r - 1) * this.rowHeight) - this.scrollY;
-        if (y + this.rowHeight < this.headerHeight || y > height) continue;
+      // Kolom beku digambar statis (tanpa scrollX); sisanya di-clip ke kanannya.
+      for (let c = 0; c < fCols; c++) paintColHeader(c);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(bodyX, 0, Math.max(0, width - bodyX), this.headerHeight);
+      ctx.clip();
+      for (let c = fCols; c < this.totalCols; c++) paintColHeader(c);
+      ctx.restore();
 
+      // ==== PENGGAMBARAN SEL: DUA REGION (paritas Google Sheets freeze pane) ====
+      // Region bebas (r > fRows) digambar dengan scrollY dan di-clip ke bawah
+      // region beku. Region beku (r <= fRows) digambar statis dengan latar
+      // legok. Saat fRows=0, bodyY=headerHeight -> identik versi lama.
+      // startRow kini berbasis scrollY (memperbaiki bug kanvas kosong saat
+      // scrollY > tinggi viewport — bug bawaan sebelum refactor ini).
+      const paintRowHeader = (r) => {
+        const y = this.cellY(r);
+        if (y + this.rowHeight < this.headerHeight || y > height) return;
         ctx.fillStyle = (r === this.activeRow) ? '#e8f0fe' : '#f8f9fa';
         ctx.fillRect(0, y, this.headerWidth, this.rowHeight);
         ctx.strokeStyle = '#dadce0';
         ctx.strokeRect(0, y, this.headerWidth, this.rowHeight);
-
         ctx.fillStyle = (r === this.activeRow) ? '#1a73e8' : '#5f6368';
         ctx.fillText(r.toString(), this.headerWidth / 2, y + this.rowHeight / 2);
+      };
 
-        for (let c = 0; c < this.totalCols; c++) {
-          const cw = this.getColWidth(c);
-          const x = this.getColX(c) - this.scrollX;
-          if (x + cw < this.headerWidth || x > width) continue;
+      const paintCell = (r, c) => {
+        const cw = this.getColWidth(c);
+        const x = this.cellX(c);
+        const y = this.cellY(r);
+        if (x + cw < this.headerWidth || x > width) return;
+        if (y + this.rowHeight < this.headerHeight || y > height) return;
+        const coord = `${this.colLabel(c)}${r}`;
+        const cell = this.cells[coord];
 
-          const coord = `${this.colLabel(c)}${r}`;
-          const cell = this.cells[coord];
-
-          // Baris/kolom aktif mendapat sorotan penuh (ala Google Sheets).
-          if (r === this.activeRow || c === this.activeCol) {
-            ctx.save();
-            ctx.fillStyle = '#f1f8fe';
-            ctx.fillRect(x + 1, y + 1, cw - 1, this.rowHeight - 1);
-            ctx.restore();
-          }
-
-          // Latar sel (jika diformat) digambar sebelum garis grid.
-          if (cell && cell.bg) {
-            ctx.save();
-            ctx.fillStyle = cell.bg;
-            ctx.fillRect(x + 1, y + 1, cw - 1, this.rowHeight - 1);
-            ctx.restore();
-          }
-
-          ctx.strokeStyle = '#e8eaed';
-          ctx.strokeRect(x, y, cw, this.rowHeight);
-
-          // Saat menyunting di sel, buffer pengguna yang dirender (bukan nilai lama).
-          const isEditingThis = this.editing && coord === this.getActiveCoord();
-          const v = isEditingThis ? this.editBuffer : (cell ? cell.val : undefined);
-
-          if (v !== undefined && v !== null && v !== '') {
-            ctx.save();
-            const isNum = typeof v === 'number';
-            const align = cell && cell.align ? cell.align : (isNum ? 'right' : 'left');
-
-            let fontStyle = '';
-            if (cell && cell.italic) fontStyle += 'italic ';
-            if (cell && cell.bold) fontStyle += 'bold ';
-            ctx.font = `${fontStyle}12px Arial`;
-            ctx.fillStyle = (cell && cell.color) ? cell.color : '#202124';
-            // Token error formula (#DIV/0!, #NAME?, #VALUE!, #ERROR!) tampil
-            // merah seperti Google Sheets, bukan hitam seperti teks biasa.
-            if (typeof v === 'string' && /^#[A-Z0-9\/?!]+/.test(v)) {
-              ctx.fillStyle = '#d93025';
-            }
-
-            const label = isEditingThis ? v : this.formatDisplay(v, cell && cell.numFormat);
-            let printX;
-            if (align === 'center') {
-              ctx.textAlign = 'center';
-              printX = x + cw / 2;
-            } else if (align === 'right') {
-              ctx.textAlign = 'right';
-              printX = x + cw - 8;
-            } else {
-              ctx.textAlign = 'left';
-              printX = x + 8;
-            }
-            ctx.fillText(label, printX, y + this.rowHeight / 2);
-            ctx.restore();
-          }
+        if (r === this.activeRow || c === this.activeCol) {
+          ctx.save();
+          ctx.fillStyle = '#f1f8fe';
+          ctx.fillRect(x + 1, y + 1, cw - 1, this.rowHeight - 1);
+          ctx.restore();
         }
+        if (cell && cell.bg) {
+          ctx.save();
+          ctx.fillStyle = cell.bg;
+          ctx.fillRect(x + 1, y + 1, cw - 1, this.rowHeight - 1);
+          ctx.restore();
+        }
+        ctx.strokeStyle = '#e8eaed';
+        ctx.strokeRect(x, y, cw, this.rowHeight);
+
+        const isEditingThis = this.editing && coord === this.getActiveCoord();
+        const v = isEditingThis ? this.editBuffer : (cell ? cell.val : undefined);
+        if (v !== undefined && v !== null && v !== '') {
+          ctx.save();
+          const isNum = typeof v === 'number';
+          const align = cell && cell.align ? cell.align : (isNum ? 'right' : 'left');
+          let fontStyle = '';
+          if (cell && cell.italic) fontStyle += 'italic ';
+          if (cell && cell.bold) fontStyle += 'bold ';
+          ctx.font = `${fontStyle}12px Arial`;
+          ctx.fillStyle = (cell && cell.color) ? cell.color : '#202124';
+          if (typeof v === 'string' && /^#[A-Z0-9\\/?!]+/.test(v)) {
+            ctx.fillStyle = '#d93025';
+          }
+          const label = isEditingThis ? v : this.formatDisplay(v, cell && cell.numFormat);
+          let printX;
+          if (align === 'center') {
+            ctx.textAlign = 'center'; printX = x + cw / 2;
+          } else if (align === 'right') {
+            ctx.textAlign = 'right'; printX = x + cw - 8;
+          } else {
+            ctx.textAlign = 'left'; printX = x + 8;
+          }
+          ctx.fillText(label, printX, y + this.rowHeight / 2);
+          ctx.restore();
+        }
+      };
+
+      // --- EMPAT KUADRAN (paritas Google Sheets freeze pane) ---
+      // Tiap kuadran di-clip ke kotaknya sendiri supaya sel yang ter-scroll
+      // TIDAK PERNAH menimpa panel beku. cellX()/cellY() sudah membuat baris &
+      // kolom beku mengabaikan scroll, jadi tiap kuadran cukup memakai rentang
+      // baris/kolom yang tepat. Saat fRows=fCols=0 hanya kuadran 1 yang jalan
+      // dan hasilnya identik dengan versi lama.
+      const visCount = Math.ceil(height / this.rowHeight) + 2;
+      const firstBodyRow = fRows + 1 + Math.max(0, Math.floor(this.scrollY / this.rowHeight));
+      const lastBodyRow = Math.min(this.totalRows, firstBodyRow + visCount);
+      const bodyFrom = Math.max(fRows + 1, firstBodyRow);
+
+      // Header baris digambar terpisah: kolom header (x 0..headerWidth) berada
+      // DI LUAR klip sel, jadi tidak boleh ikut terpotong oleh clip kuadran.
+      const paintRowHeaders = (rFrom, rTo, cy, ch) => {
+        if (ch <= 0 || rTo < rFrom) return;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, cy, this.headerWidth, ch);
+        ctx.clip();
+        for (let r = rFrom; r <= rTo; r++) paintRowHeader(r);
+        ctx.restore();
+      };
+
+      const paintQuadrant = (rFrom, rTo, cFrom, cTo, cx, cy, cw, ch, opaque) => {
+        if (cw <= 0 || ch <= 0 || rTo < rFrom || cTo < cFrom) return;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(cx, cy, cw, ch);
+        ctx.clip();
+        // Latar legok: menutup sel ter-scroll yang ada di bawahnya (anti-ghosting).
+        if (opaque) {
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(cx, cy, cw, ch);
+        }
+        for (let r = rFrom; r <= rTo; r++) {
+          for (let c = cFrom; c <= cTo; c++) paintCell(r, c);
+        }
+        ctx.restore();
+      };
+
+      // 1) Badan: r > fRows, c > fCols — satu-satunya area yang bergerak 2 arah.
+      paintQuadrant(bodyFrom, lastBodyRow, fCols, this.totalCols - 1,
+        bodyX, bodyY, width - bodyX, height - bodyY, false);
+      // 2) Kolom beku: x statis, y ikut scroll.
+      if (fCols > 0) {
+        paintQuadrant(bodyFrom, lastBodyRow, 0, fCols - 1,
+          this.headerWidth, bodyY, bodyX - this.headerWidth, height - bodyY, false);
+      }
+      // 3) Baris beku: y statis, x ikut scroll.
+      if (fRows > 0) {
+        paintQuadrant(1, fRows, fCols, this.totalCols - 1,
+          bodyX, this.headerHeight, width - bodyX, bodyY - this.headerHeight, true);
+      }
+      // 4) Sudut beku: statis total (baris DAN kolom beku).
+      if (fRows > 0 && fCols > 0) {
+        paintQuadrant(1, fRows, 0, fCols - 1,
+          this.headerWidth, this.headerHeight,
+          bodyX - this.headerWidth, bodyY - this.headerHeight, true);
+      }
+
+      // Header baris: band badan (ter-scroll) lalu band beku (statis).
+      paintRowHeaders(bodyFrom, lastBodyRow, bodyY, height - bodyY);
+      if (fRows > 0) paintRowHeaders(1, fRows, this.headerHeight, bodyY - this.headerHeight);
+
+      // ==== GARIS PEMBATAS FREEZE (paritas Google Sheets) ====
+      if (fRows > 0) {
+        ctx.save();
+        ctx.strokeStyle = '#80868b'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(0, bodyY); ctx.lineTo(width, bodyY); ctx.stroke();
+        ctx.restore();
+      }
+      if (fCols > 0) {
+        ctx.save();
+        ctx.strokeStyle = '#80868b'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(bodyX, 0); ctx.lineTo(bodyX, height); ctx.stroke();
+        ctx.restore();
       }
 
       // ==== OVERLAY SELEKSI RENTANG (paritas Google Sheets) ====
@@ -1454,8 +1629,8 @@
       let handleX = 0, handleY = 0, handleVisible = false;
 
       if (rangeMulti) {
-        const rx = this.getColX(rb.minCol) - this.scrollX;
-        const ry = this.headerHeight + ((rb.minRow - 1) * this.rowHeight) - this.scrollY;
+        const rx = this.cellX(rb.minCol);
+        const ry = this.cellY(rb.minRow);
         const rw = this.getColX(rb.maxCol + 1) - this.getColX(rb.minCol);
         const rh = (rb.maxRow - rb.minRow + 1) * this.rowHeight;
 
@@ -1483,8 +1658,8 @@
 
       // Active Cell Selection Border (Google Green #0f9d58)
       const selW = this.getColWidth(this.activeCol);
-      const selX = this.getColX(this.activeCol) - this.scrollX;
-      const selY = this.headerHeight + ((this.activeRow - 1) * this.rowHeight) - this.scrollY;
+      const selX = this.cellX(this.activeCol);
+      const selY = this.cellY(this.activeRow);
 
       if (selX + selW >= this.headerWidth && selX <= width && selY + this.rowHeight >= this.headerHeight && selY <= height) {
         ctx.strokeStyle = '#0f9d58';
@@ -1513,8 +1688,8 @@
       // melepas mouse. Digambar di atas overlay seleksi, di bawah garis resize.
       if (this.isAutofilling && this.autofillTarget) {
         const t = this.autofillTarget;
-        const px = this.getColX(t.minCol) - this.scrollX;
-        const py = this.headerHeight + ((t.minRow - 1) * this.rowHeight) - this.scrollY;
+        const px = this.cellX(t.minCol);
+        const py = this.cellY(t.minRow);
         const pw = this.getColX(t.maxCol + 1) - this.getColX(t.minCol);
         const ph = (t.maxRow - t.minRow + 1) * this.rowHeight;
         ctx.save();
@@ -1545,7 +1720,7 @@
       // Digambar paling akhir supaya berada di atas grid, teks, dan overlay
       // seleksi. Hanya muncul selama drag berlangsung.
       if (this.isResizingCol && this.resizeColIdx >= 0) {
-        const gx = this.colBoundaryX(this.resizeColIdx) - this.scrollX;
+        const gx = this.cellX(this.resizeColIdx) + this.getColWidth(this.resizeColIdx);
         if (gx >= this.headerWidth && gx <= width) {
           ctx.save();
           // Garis vertikal penuh dari atas kanvas sampai bawah.

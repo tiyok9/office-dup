@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "files": [
+    {
+      "id": "docs-2002-nominee",
+      "type": "docs",
+      "title": "2002 Nominee List (1).docx",
+      "createdAt": "2026-10-19T11:00:28.124Z",
+      "updatedAt": "2026-10-20T02:04:37.215Z",
+      "starred": false
+    },
+    {
+      "id": "sheets-example",
+      "type": "sheets",
+      "title": "Example Spreadsheet",
+      "createdAt": "2026-10-19T11:00:28.128Z",
+      "updatedAt": "2026-10-20T02:04:37.215Z",
+      "starred": false
+    },
+    {
+      "id": "slides-krusevac",
+      "type": "slides",
+      "title": "KRUŠEVAC NEKRETNINE",
+      "createdAt": "2026-10-19T11:00:28.128Z",
+      "updatedAt": "2026-10-20T02:07:41.634Z",
+      "starred": false
+    }
+  ]
+}

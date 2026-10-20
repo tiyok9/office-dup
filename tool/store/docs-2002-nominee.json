@@ -1,0 +1,128 @@
+{
+  "pages": [
+    {
+      "pageNumber": 1,
+      "lines": [
+        {
+          "text": "2002 ACADEMY AWARDS NOMINEE LIST",
+          "bold": true,
+          "size": 20,
+          "color": "#1a73e8"
+        },
+        {
+          "text": "Kategori: Best Picture (Film Terbaik)",
+          "bold": true,
+          "size": 14,
+          "color": "#202124"
+        },
+        {
+          "text": "1. A Beautiful Mind — Brian Grazer & Ron Howard (PEMENANG)",
+          "bold": true,
+          "size": 13,
+          "color": "#0f9d58"
+        },
+        {
+          "text": "2. Gosford Park — Robert Altman, Bob Balaban",
+          "bold": false,
+          "size": 13,
+          "color": "#3c4043"
+        },
+        {
+          "text": "3. In the Bedroom — Graham Leader, Ross Katz",
+          "bold": false,
+          "size": 13,
+          "color": "#3c4043"
+        },
+        {
+          "text": "4. The Lord of the Rings: The Fellowship of the Ring",
+          "bold": false,
+          "size": 13,
+          "color": "#3c4043"
+        },
+        {
+          "text": "5. Moulin Rouge! — Martin Brown, Baz Luhrmann",
+          "bold": false,
+          "size": 13,
+          "color": "#3c4043"
+        },
+        {
+          "text": "",
+          "bold": false,
+          "size": 13,
+          "color": "#3c4043"
+        },
+        {
+          "text": "Kategori: Best Actor in a Leading Role",
+          "bold": true,
+          "size": 14,
+          "color": "#202124"
+        },
+        {
+          "text": "• Denzel Washington — Training Day (PEMENANG)",
+          "bold": true,
+          "size": 13,
+          "color": "#0f9d58"
+        },
+        {
+          "text": "• Russell Crowe — A Beautiful Mind",
+          "bold": false,
+          "size": 13,
+          "color": "#3c4043"
+        },
+        {
+          "text": "• Sean Penn — I Am Sam",
+          "bold": false,
+          "size": 13,
+          "color": "#3c4043"
+        },
+        {
+          "text": "• Will Smith — Ali",
+          "bold": false,
+          "size": 13,
+          "color": "#3c4043"
+        },
+        {
+          "text": "• Tom Wilkinson — In the Bedroom",
+          "bold": false,
+          "size": 13,
+          "color": "#3c4043"
+        }
+      ]
+    },
+    {
+      "pageNumber": 2,
+      "lines": [
+        {
+          "text": "2002 NOMINEES — BAGIAN 2 (TEKNIS)",
+          "bold": true,
+          "size": 18,
+          "color": "#1a73e8"
+        },
+        {
+          "text": "• Cinematography: The Lord of the Rings — Andrew Lesnie",
+          "bold": true,
+          "size": 13,
+          "color": "#0f9d58"
+        },
+        {
+          "text": "• Costume Design: Moulin Rouge! — Catherine Martin",
+          "bold": false,
+          "size": 13,
+          "color": "#3c4043"
+        },
+        {
+          "text": "• Film Editing: Black Hawk Down — Pietro Scalia",
+          "bold": false,
+          "size": 13,
+          "color": "#3c4043"
+        },
+        {
+          "text": "• Original Score: The Lord of the Rings — Howard Shore",
+          "bold": false,
+          "size": 13,
+          "color": "#3c4043"
+        }
+      ]
+    }
+  ]
+}

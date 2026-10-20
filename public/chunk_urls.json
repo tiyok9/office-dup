@@ -1,0 +1,710 @@
+{
+ "docs": {
+  "jsChunks": [
+   "https://docs.google.com/_/docs/_/js/k=docs.client_js_prod_integrated.id.y8PjesGgl4I.es5.O/am=ACAAYADA/d=0/wt=0/rs=AGWKN8mEt_6ioMEP68YUtZffNrg5M52bOw/m=kix_core",
+   "https://docs.google.com/_/docs/_/js/k=docs.client_js_prod_integrated.id.y8PjesGgl4I.es5.O/am=ACAAYADA/d=0/wt=0/rs=AGWKN8mEt_6ioMEP68YUtZffNrg5M52bOw/m=kix_nestedsketchycore",
+   "https://docs.google.com/_/docs/_/js/k=docs.client_js_prod_integrated.id.y8PjesGgl4I.es5.O/am=ACAAYADA/d=0/wt=0/rs=AGWKN8mEt_6ioMEP68YUtZffNrg5M52bOw/m=kix_app",
+   "https://www.gstatic.com/og/_/js/k=og.asy.en_US.RQWeQL4C_as.2019.O/rt=j/m=_ac,_awd,ada,lldp,qads/exm=/d=1/ed=1/rs=AA2YrTuGbsx8J9y5y-8vfZToQEl93Ak1HQ",
+   "https://docs.google.com/_/docs/_/js/k=docs.client_js_prod_integrated.id.y8PjesGgl4I.es5.O/am=ACAAYADA/d=0/wt=0/rs=AGWKN8mEt_6ioMEP68YUtZffNrg5M52bOw/m=kix_docos",
+   "https://docs.google.com/_/docs/_/js/k=docs.client_js_prod_integrated.id.y8PjesGgl4I.es5.O/am=ACAAYADA/d=0/wt=0/rs=AGWKN8mEt_6ioMEP68YUtZffNrg5M52bOw/m=kix_pre_tertiary_deps",
+   "https://docs.google.com/_/docs/_/js/k=docs.client_js_prod_integrated.id.y8PjesGgl4I.es5.O/am=ACAAYADA/d=0/wt=0/rs=AGWKN8mEt_6ioMEP68YUtZffNrg5M52bOw/m=kix_tertiary",
+   "https://docs.google.com/_/docs/_/js/k=docs.client_js_prod_integrated.id.y8PjesGgl4I.es5.O/am=ACAAYADA/d=0/wt=0/rs=AGWKN8mEt_6ioMEP68YUtZffNrg5M52bOw/m=officeeditingfileextension",
+   "https://docs.google.com/_/docs/_/js/k=docs.client_js_prod_integrated.id.y8PjesGgl4I.es5.O/am=ACAAYADA/d=0/wt=0/rs=AGWKN8mEt_6ioMEP68YUtZffNrg5M52bOw/m=datetimeresources",
+   "https://docs.google.com/_/docs/_/js/k=docs.client_js_prod_integrated.id.y8PjesGgl4I.es5.O/am=ACAAYADA/d=0/wt=0/rs=AGWKN8mEt_6ioMEP68YUtZffNrg5M52bOw/m=voice",
+   "https://docs.google.com/_/docs/_/js/k=docs.client_js_prod_integrated.id.y8PjesGgl4I.es5.O/am=ACAAYADA/d=0/wt=0/rs=AGWKN8mEt_6ioMEP68YUtZffNrg5M52bOw/m=kix_approvals",
+   "https://docs.google.com/_/docs/_/js/k=docs.client_js_prod_integrated.id.y8PjesGgl4I.es5.O/am=ACAAYADA/d=0/wt=0/rs=AGWKN8mEt_6ioMEP68YUtZffNrg5M52bOw/m=peoplehovercard",
+   "https://docs.google.com/_/docs/_/js/k=docs.client_js_prod_integrated.id.y8PjesGgl4I.es5.O/am=ACAAYADA/d=0/wt=0/rs=AGWKN8mEt_6ioMEP68YUtZffNrg5M52bOw/m=emojidata",
+   "https://apis.google.com/_/scs/abc-static/_/js/k=gapi.lb.en.etOqPKhAhvg.O/m=client/rt=j/sv=1/d=1/ed=1/rs=AHpOoo-l5JrVgGKVELwC844E6riBHX86-w/cb=gapi.loaded_0?le=scs,fedcm_migration_mod",
+   "https://apis.google.com/_/scs/abc-static/_/js/k=gapi.lb.en.etOqPKhAhvg.O/m=config/exm=card,client/rt=j/sv=1/d=1/ed=1/rs=AHpOoo-l5JrVgGKVELwC844E6riBHX86-w/cb=gapi.loaded_2?le=scs,fedcm_migration_mod",
+   "https://apis.google.com/_/scs/abc-static/_/js/k=gapi.lb.en.etOqPKhAhvg.O/m=card/exm=client/rt=j/sv=1/d=1/ed=1/rs=AHpOoo-l5JrVgGKVELwC844E6riBHX86-w/cb=gapi.loaded_1?le=scs,fedcm_migration_mod",
+   "https://contacts.google.com/_/scs/social-static/_/js/k=boq.SocialPeopleHovercardUi.en_US.6Ca8Zhsq464.2018.O/am=AAAAAEMa/d=1/excm=_b,_tp,hovercardwidget/ed=1/dg=0/wt=2/ujg=1/rs=AGLTcCMurxSpUyODDPwG-1jtxZKU0iEdMw/dti=1/m=_b,_tp",
+   "https://contacts.google.com/_/scs/social-static/_/js/k=boq.SocialPeopleHovercardUi.en_US.6Ca8Zhsq464.2018.O/ck=boq.SocialPeopleHovercardUi.0A1xk8eOeQ0.L.B1.O/am=AAAAAEMa/d=1/exm=A7fCU,BVgquf,EFQ78c,GkRiKb,IZT63,JNoxi,KUM7Z,LEikZe,MI6k7c,MdUzUe,MpJwZc,NwH0H,O1Gjze,O6y8ed,OTA3Ae,PrPYRd,QIhFr,RMhBfe,RyvaUb,SdcwHb,SpsfSb,UUJqVe,Uas9Hd,Ulmmrd,V3dDOb,WO9ee,XVMNvd,Xg7Hl,YYmHzb,Z5uLle,ZDZcre,ZwDk9d,_b,_tp,aW3pY,byfTOb,e5qFLc,gychg,hKSk3e,hc6Ubd,kjKdXe,lazG7b,lsjVmc,lwddkf,mI3LFb,mdR7q,n73qwf,pjICDe,pw70Gc,w9hDv,wmnU7d,ws9Tlc,xQtZb,xUdipf,zbML3c,zr1jrb/excm=_b,_tp,hovercardwidget/ed=1/wt=2/ujg=1/rs=AGLTcCO_-Oz45bn79ZuuznNuEo5ex7VHhw/ee=EVNhjf:pw70Gc;EmZ2Bf:zr1jrb;JsbNhc:Xd8iUd;K5nYTd:ZDZcre;LBgRLc:SdcwHb;Me32dd:MEeYgc;NJ1rfe:qTnoBf;NPKaK:SdcwHb;NSEoX:lazG7b;Pjplud:EEDORb;QGR0gd:Mlhmy;SNUn3:ZwDk9d;ScI3Yc:e7Hzgb;Uvc8o:VDovNc;YIZmRd:A1yn5d;a56pNe:JEfCwb;cEt90b:ws9Tlc;dIoSBb:SpsfSb;dowIGb:ebZ3mb;eBAeSb:zbML3c;iFQyKf:QIhFr;lOO0Vd:OTA3Ae;oGtAuc:sOXFj;pXdRYb:MdUzUe;qQEoOc:KUM7Z;qafBPd:yDVVkb;qddgKe:xQtZb;wR5FRb:O1Gjze;xqZiqf:wmnU7d;yxTchf:KUM7Z;zxnPse:GkRiKb/dti=1/m=Wt6vjf,hhhU8,FCpbqb,WhJNk",
+   "https://contacts.google.com/_/scs/social-static/_/js/k=boq.SocialPeopleHovercardUi.en_US.6Ca8Zhsq464.2018.O/ck=boq.SocialPeopleHovercardUi.0A1xk8eOeQ0.L.B1.O/am=AAAAAEMa/d=1/exm=_b,_tp/excm=_b,_tp,hovercardwidget/ed=1/wt=2/ujg=1/rs=AGLTcCO_-Oz45bn79ZuuznNuEo5ex7VHhw/ee=EVNhjf:pw70Gc;EmZ2Bf:zr1jrb;JsbNhc:Xd8iUd;K5nYTd:ZDZcre;LBgRLc:SdcwHb;Me32dd:MEeYgc;NJ1rfe:qTnoBf;NPKaK:SdcwHb;NSEoX:lazG7b;Pjplud:EEDORb;QGR0gd:Mlhmy;SNUn3:ZwDk9d;ScI3Yc:e7Hzgb;Uvc8o:VDovNc;YIZmRd:A1yn5d;a56pNe:JEfCwb;cEt90b:ws9Tlc;dIoSBb:SpsfSb;dowIGb:ebZ3mb;eBAeSb:zbML3c;iFQyKf:QIhFr;lOO0Vd:OTA3Ae;oGtAuc:sOXFj;pXdRYb:MdUzUe;qQEoOc:KUM7Z;qafBPd:yDVVkb;qddgKe:xQtZb;wR5FRb:O1Gjze;xqZiqf:wmnU7d;yxTchf:KUM7Z;zxnPse:GkRiKb/dti=1/m=ws9Tlc,O6y8ed,aW3pY,GkRiKb,e5qFLc,IZT63,YYmHzb,pw70Gc,n73qwf,UUJqVe,KUM7Z,O1Gjze,byfTOb,lsjVmc,xUdipf,ZDZcre,OTA3Ae,ZwDk9d,V3dDOb,WO9ee,RyvaUb,mI3LFb,Xg7Hl,PrPYRd,MpJwZc,LEikZe,NwH0H,lazG7b,XVMNvd,QIhFr,xQtZb,lwddkf,gychg,w9hDv,RMhBfe,SdcwHb,EFQ78c,Ulmmrd,A7fCU,mdR7q,wmnU7d,hc6Ubd,JNoxi,MI6k7c,BVgquf,SpsfSb,kjKdXe,Z5uLle,hKSk3e,MdUzUe,zbML3c,zr1jrb,Uas9Hd,pjICDe",
+   "https://contacts.google.com/_/scs/social-static/_/js/k=boq.SocialPeopleHovercardUi.en_US.6Ca8Zhsq464.2018.O/ck=boq.SocialPeopleHovercardUi.0A1xk8eOeQ0.L.B1.O/am=AAAAAEMa/d=1/exm=A7fCU,BVgquf,EFQ78c,FCpbqb,GkRiKb,IZT63,JNoxi,KUM7Z,LEikZe,MI6k7c,MdUzUe,MpJwZc,NwH0H,O1Gjze,O6y8ed,OTA3Ae,PrPYRd,QIhFr,RMhBfe,RyvaUb,SdcwHb,SpsfSb,UUJqVe,Uas9Hd,Ulmmrd,V3dDOb,WO9ee,WhJNk,Wt6vjf,XVMNvd,Xg7Hl,YYmHzb,Z5uLle,ZDZcre,ZwDk9d,_b,_tp,aW3pY,byfTOb,e5qFLc,gychg,hKSk3e,hc6Ubd,hhhU8,kjKdXe,lazG7b,lsjVmc,lwddkf,mI3LFb,mdR7q,n73qwf,pjICDe,pw70Gc,w9hDv,wmnU7d,ws9Tlc,xQtZb,xUdipf,zbML3c,zr1jrb/excm=_b,_tp,hovercardwidget/ed=1/wt=2/ujg=1/rs=AGLTcCO_-Oz45bn79ZuuznNuEo5ex7VHhw/ee=EVNhjf:pw70Gc;EmZ2Bf:zr1jrb;JsbNhc:Xd8iUd;K5nYTd:ZDZcre;LBgRLc:SdcwHb;Me32dd:MEeYgc;NJ1rfe:qTnoBf;NPKaK:SdcwHb;NSEoX:lazG7b;Pjplud:EEDORb;QGR0gd:Mlhmy;SNUn3:ZwDk9d;ScI3Yc:e7Hzgb;Uvc8o:VDovNc;YIZmRd:A1yn5d;a56pNe:JEfCwb;cEt90b:ws9Tlc;dIoSBb:SpsfSb;dowIGb:ebZ3mb;eBAeSb:zbML3c;iFQyKf:QIhFr;lOO0Vd:OTA3Ae;oGtAuc:sOXFj;pXdRYb:MdUzUe;qQEoOc:KUM7Z;qafBPd:yDVVkb;qddgKe:xQtZb;wR5FRb:O1Gjze;xqZiqf:wmnU7d;yxTchf:KUM7Z;zxnPse:GkRiKb/dti=1/m=p3hmRc,LvGhrf,RqjULd",
+   "https://contacts.google.com/_/scs/social-static/_/js/k=boq.SocialPeopleHovercardUi.en_US.6Ca8Zhsq464.2018.O/ck=boq.SocialPeopleHovercardUi.0A1xk8eOeQ0.L.B1.O/am=AAAAAEMa/d=1/exm=A7fCU,BVgquf,EFQ78c,FCpbqb,GkRiKb,IZT63,JNoxi,KUM7Z,LEikZe,LvGhrf,MI6k7c,MdUzUe,MpJwZc,NwH0H,O1Gjze,O6y8ed,OTA3Ae,PrPYRd,QIhFr,RMhBfe,RqjULd,RyvaUb,SdcwHb,SpsfSb,UUJqVe,Uas9Hd,Ulmmrd,V3dDOb,WO9ee,WhJNk,Wt6vjf,XVMNvd,Xg7Hl,YYmHzb,Z5uLle,ZDZcre,ZwDk9d,_b,_tp,aW3pY,byfTOb,e5qFLc,gychg,hKSk3e,hc6Ubd,hhhU8,kjKdXe,lazG7b,lsjVmc,lwddkf,mI3LFb,mdR7q,n73qwf,p3hmRc,pjICDe,pw70Gc,w9hDv,wmnU7d,ws9Tlc,xQtZb,xUdipf,zbML3c,zr1jrb/excm=_b,_tp,hovercardwidget/ed=1/wt=2/ujg=1/rs=AGLTcCO_-Oz45bn79ZuuznNuEo5ex7VHhw/ee=EVNhjf:pw70Gc;EmZ2Bf:zr1jrb;JsbNhc:Xd8iUd;K5nYTd:ZDZcre;LBgRLc:SdcwHb;Me32dd:MEeYgc;NJ1rfe:qTnoBf;NPKaK:SdcwHb;NSEoX:lazG7b;Pjplud:EEDORb;QGR0gd:Mlhmy;SNUn3:ZwDk9d;ScI3Yc:e7Hzgb;Uvc8o:VDovNc;YIZmRd:A1yn5d;a56pNe:JEfCwb;cEt90b:ws9Tlc;dIoSBb:SpsfSb;dowIGb:ebZ3mb;eBAeSb:zbML3c;iFQyKf:QIhFr;lOO0Vd:OTA3Ae;oGtAuc:sOXFj;pXdRYb:MdUzUe;qQEoOc:KUM7Z;qafBPd:yDVVkb;qddgKe:xQtZb;wR5FRb:O1Gjze;xqZiqf:wmnU7d;yxTchf:KUM7Z;zxnPse:GkRiKb/dti=1/m=P6sQOc",
+   "https://apis.google.com/_/scs/abc-static/_/js/k=gapi.lb.en.etOqPKhAhvg.O/m=gapi_iframes/rt=j/sv=1/d=1/ed=1/rs=AHpOoo-l5JrVgGKVELwC844E6riBHX86-w/cb=gapi.loaded_0?le=scs,fedcm_migration_mod"
+  ],
+  "wasmResponses": [],
+  "hosts": [
+   "docs.google.com",
+   "ghbmnnjooekpmoecnnnilnnbdlolhkhi",
+   "ssl.gstatic.com",
+   "fonts.gstatic.com",
+   "www.gstatic.com",
+   "play.google.com",
+   "apis.google.com",
+   "accounts.google.com",
+   "ogads-pa.clients6.google.com",
+   "peoplestackwebexperiments-pa.clients6.google.com",
+   "appsgenaiserver-pa.clients6.google.com",
+   "peoplestack-pa.clients6.google.com",
+   "contacts.google.com",
+   "fonts.googleapis.com"
+  ],
+  "proto": [
+   {
+    "url": "https://docs.google.com/document/d/0B2DZqTRLDhefWTFjWTVKeWMwalE/edit",
+    "status": 200,
+    "mime": "text/html",
+    "type": "Document",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/document/manifest.json",
+    "status": 200,
+    "mime": "application/manifest+json",
+    "type": "Manifest",
+    "fromSW": false
+   },
+   {
+    "url": "https://www.gstatic.com/og/_/ss/k=og.asy.AJxojUGSPBk.L.W.O/m=adcgm3/excm=/d=1/ed=1/ct=zgms/rs=AA2YrTuGFRpKduKNm9VQnb3PWaoCmWEzEQ",
+    "status": 200,
+    "mime": "text/css",
+    "type": "Stylesheet",
+    "fromSW": false
+   },
+   {
+    "url": "https://fonts.gstatic.com/l/font?kit=J7afnpV-BGlaFfdAhLcY6w&skey=a1029226f80653a8&v=v15",
+    "status": 200,
+    "mime": "text/html",
+    "type": "Font",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/document/d/0B2DZqTRLDhefWTFjWTVKeWMwalE/docos/p/sync?sid=36fbf7546599f694&vc=1&c=0&w=0&flr=0&smb=%5B2147483647%2C%20oAMQAg%3D%3D%5D&includes_info_params=true",
+    "status": 200,
+    "mime": "application/json",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/document/font/getmetadata?includes_info_params=true&resourcekey=0-UmwOCM5rt3wbSo3U04KajQ&cros_files=false&nded=false",
+    "status": 200,
+    "mime": "application/json",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/document/d/0B2DZqTRLDhefWTFjWTVKeWMwalE/trash/read?id=0B2DZqTRLDhefWTFjWTVKeWMwalE&includes_info_params=true&resourcekey=0-UmwOCM5rt3wbSo3U04KajQ&cros_files=false&nded=false",
+    "status": 200,
+    "mime": "application/json",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/document/d/0B2DZqTRLDhefWTFjWTVKeWMwalE/test?id=0B2DZqTRLDhefWTFjWTVKeWMwalE&sid=36fbf7546599f694&includes_info_params=true&resourcekey=0-UmwOCM5rt3wbSo3U04KajQ&cros_files=false&nded=false&VER=8&lsq=-1&u=PREF_04357697844150595594&vc=1&flr=0&gsi&smb=%5B2147483647%2C%20oAMQAg%3D%3D%5D&cimpl=0&MODE=init&zx=2rgqev6itu&t=1",
+    "status": 200,
+    "mime": "text/plain",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/document/d/0B2DZqTRLDhefWTFjWTVKeWMwalE/peruserchrome?id=0B2DZqTRLDhefWTFjWTVKeWMwalE&includes_info_params=true&resourcekey=0-UmwOCM5rt3wbSo3U04KajQ&cros_files=false&nded=false",
+    "status": 200,
+    "mime": "application/json",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://play.google.com/log?format=json&hasfast=true&authuser=0",
+    "status": 200,
+    "mime": "text/plain",
+    "type": "Fetch",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/document/d/0B2DZqTRLDhefWTFjWTVKeWMwalE/test?id=0B2DZqTRLDhefWTFjWTVKeWMwalE&sid=36fbf7546599f694&includes_info_params=true&resourcekey=0-UmwOCM5rt3wbSo3U04KajQ&cros_files=false&nded=false&VER=8&lsq=-1&u=PREF_04357697844150595594&vc=1&flr=0&gsi&ar=10&arat=XItgTeFIDMxnpA&smb=%5B2147483647%2C%20oAMQAg%3D%3D%5D&cimpl=0&TYPE=xmlhttp&zx=70nlh8mb4l35&t=1",
+    "status": 200,
+    "mime": "text/plain",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://accounts.google.com/ServiceLogin?passive=1209600&continue=https://docs.google.com/drivesharing/clientmodel?id%3D0B2DZqTRLDhefWTFjWTVKeWMwalE%26foreignService%3Dkix%26authuser%3D0%26origin%3Dhttps://docs.google.com&followup=https://docs.google.com/drivesharing/clientmodel?id%3D0B2DZqTRLDhefWTFjWTVKeWMwalE%26foreignService%3Dkix%26authuser%3D0%26origin%3Dhttps://docs.google.com",
+    "status": 401,
+    "mime": "text/html",
+    "type": "Document",
+    "fromSW": false
+   },
+   {
+    "url": "https://ogads-pa.clients6.google.com/$rpc/google.internal.onegoogle.asyncdata.v1.AsyncDataService/GetAsyncData",
+    "status": 200,
+    "mime": "application/json+protobuf",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/document/d/0B2DZqTRLDhefWTFjWTVKeWMwalE/prefs?id=0B2DZqTRLDhefWTFjWTVKeWMwalE&includes_info_params=true&resourcekey=0-UmwOCM5rt3wbSo3U04KajQ&cros_files=false&nded=false",
+    "status": 200,
+    "mime": "application/json",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/document/d/0B2DZqTRLDhefWTFjWTVKeWMwalE/bind?id=0B2DZqTRLDhefWTFjWTVKeWMwalE&sid=36fbf7546599f694&includes_info_params=true&resourcekey=0-UmwOCM5rt3wbSo3U04KajQ&cros_files=false&nded=false&VER=8&lsq=-1&u=PREF_04357697844150595594&vc=1&flr=0&gsi&smb=%5B2147483647%2C%20oAMQAg%3D%3D%5D&cimpl=0&RID=97349&CVER=1&zx=n8osy98yj8d&t=1",
+    "status": 200,
+    "mime": "text/plain",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/document/d/0B2DZqTRLDhefWTFjWTVKeWMwalE/bind?id=0B2DZqTRLDhefWTFjWTVKeWMwalE&sid=36fbf7546599f694&includes_info_params=true&resourcekey=0-UmwOCM5rt3wbSo3U04KajQ&cros_files=false&nded=false&VER=8&lsq=1792390318251&u=PREF_04357697844150595594&vc=1&flr=0&gsi&smb=%5B2147483647%2C%20oAMQAg%3D%3D%5D&cimpl=0&RID=rpc&SID=EFED32ABE92144C3&CI=0&AID=1&TYPE=xmlhttp&zx=t026i3tao1we&t=1",
+    "status": 200,
+    "mime": "text/plain",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/document/d/0B2DZqTRLDhefWTFjWTVKeWMwalE/docos/p/sync?id=0B2DZqTRLDhefWTFjWTVKeWMwalE&reqid=0&sid=36fbf7546599f694&vc=1&c=0&w=0&flr=0&smb=%5B2147483647%2C%20oAMQAg%3D%3D%5D&includes_info_params=true&resourcekey=0-UmwOCM5rt3wbSo3U04KajQ&cros_files=false&nded=false",
+    "status": 200,
+    "mime": "application/json",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://play.google.com/log?format=json&hasfast=true",
+    "status": 200,
+    "mime": "text/plain",
+    "type": "Fetch",
+    "fromSW": false
+   },
+   {
+    "url": "https://peoplestackwebexperiments-pa.clients6.google.com/$rpc/peoplestackwebexperiments.PeopleStackExperimentsService/GetExperimentFlags",
+    "status": 401,
+    "mime": "application/json+protobuf",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://appsgenaiserver-pa.clients6.google.com/v1/genai/getSettings?key=AIzaSyCmh4zG9srkxnlT2O2FRJLrxBOBRaWWxNk",
+    "status": 401,
+    "mime": "application/json+protobuf",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://appsgenaiserver-pa.clients6.google.com/v1/genai/quotaSummary?key=AIzaSyCmh4zG9srkxnlT2O2FRJLrxBOBRaWWxNk",
+    "status": 401,
+    "mime": "application/json+protobuf",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://peoplestack-pa.clients6.google.com/$rpc/peoplestack.PeopleStackAutocompleteService/Autocomplete",
+    "status": 401,
+    "mime": "application/json+protobuf",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://contacts.google.com/widget/hovercard/v/2?theme=light&origin=https%3A%2F%2Fdocs.google.com&usegapi=1&jsh=m%3B%2F_%2Fscs%2Fabc-static%2F_%2Fjs%2Fk%3Dgapi.lb.en.etOqPKhAhvg.O%2Fd%3D1%2Frs%3DAHpOoo-l5JrVgGKVELwC844E6riBHX86-w%2Fm%3D__features__",
+    "status": 200,
+    "mime": "text/html",
+    "type": "Document",
+    "fromSW": false
+   },
+   {
+    "url": "https://fonts.googleapis.com/css2?family=Google+Sans+Text:wght@400;500;700",
+    "status": 200,
+    "mime": "text/css",
+    "type": "Stylesheet",
+    "fromSW": false
+   }
+  ]
+ },
+ "slides": {
+  "jsChunks": [
+   "https://docs.google.com/_/presentations/_/js/k=presentations.editor_js_prod_integrated.id.NuoQwn01k6Q.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB6fld2g93nIVtVfhpIwGIUScuJG2KCt6w/m=core",
+   "https://docs.google.com/_/presentations/_/js/k=presentations.editor_js_prod_integrated.id.NuoQwn01k6Q.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB6fld2g93nIVtVfhpIwGIUScuJG2KCt6w/m=app",
+   "https://www.gstatic.com/og/_/js/k=og.asy.en_US.RQWeQL4C_as.2019.O/rt=j/m=_ac,_awd,ada,lldp,qads/exm=/d=1/ed=1/rs=AA2YrTuGbsx8J9y5y-8vfZToQEl93Ak1HQ",
+   "https://docs.google.com/_/presentations/_/js/k=presentations.viewer_integrated.id.a4sQOwF2ZFE.es5.O/am=AAIABjA/d=0/wt=0/rs=AB6fld0I54UjzkDWwvig7IJVehh_LIZRoQ/m=core",
+   "https://docs.google.com/_/presentations/_/js/k=presentations.editor_js_prod_integrated.id.NuoQwn01k6Q.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB6fld2g93nIVtVfhpIwGIUScuJG2KCt6w/m=pretertiarydeps",
+   "https://docs.google.com/_/presentations/_/js/k=presentations.editor_js_prod_integrated.id.NuoQwn01k6Q.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB6fld2g93nIVtVfhpIwGIUScuJG2KCt6w/m=docos",
+   "https://docs.google.com/_/presentations/_/js/k=presentations.editor_js_prod_integrated.id.NuoQwn01k6Q.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB6fld2g93nIVtVfhpIwGIUScuJG2KCt6w/m=tertiary",
+   "https://docs.google.com/_/presentations/_/js/k=presentations.editor_js_prod_integrated.id.NuoQwn01k6Q.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB6fld2g93nIVtVfhpIwGIUScuJG2KCt6w/m=approvals",
+   "https://docs.google.com/_/presentations/_/js/k=presentations.editor_js_prod_integrated.id.NuoQwn01k6Q.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB6fld2g93nIVtVfhpIwGIUScuJG2KCt6w/m=peoplehovercard",
+   "https://apis.google.com/_/scs/abc-static/_/js/k=gapi.lb.en.gh7qIZtzO5w.O/m=client/rt=j/sv=1/d=1/ed=1/rs=AHpOoo84YKT1RVy0T6hcXi5rH3LooB1WCw/cb=gapi.loaded_0?le=scs,fedcm_migration_mod",
+   "https://apis.google.com/_/scs/abc-static/_/js/k=gapi.lb.en.gh7qIZtzO5w.O/m=card/exm=client/rt=j/sv=1/d=1/ed=1/rs=AHpOoo84YKT1RVy0T6hcXi5rH3LooB1WCw/cb=gapi.loaded_1?le=scs,fedcm_migration_mod",
+   "https://apis.google.com/_/scs/abc-static/_/js/k=gapi.lb.en.gh7qIZtzO5w.O/m=config/exm=card,client/rt=j/sv=1/d=1/ed=1/rs=AHpOoo84YKT1RVy0T6hcXi5rH3LooB1WCw/cb=gapi.loaded_2?le=scs,fedcm_migration_mod",
+   "https://contacts.google.com/_/scs/social-static/_/js/k=boq.SocialPeopleHovercardUi.en_US.6Ca8Zhsq464.2018.O/am=AAAAAEMa/d=1/excm=_b,_tp,hovercardwidget/ed=1/dg=0/wt=2/ujg=1/rs=AGLTcCMurxSpUyODDPwG-1jtxZKU0iEdMw/dti=1/m=_b,_tp",
+   "https://contacts.google.com/_/scs/social-static/_/js/k=boq.SocialPeopleHovercardUi.en_US.6Ca8Zhsq464.2018.O/ck=boq.SocialPeopleHovercardUi.0A1xk8eOeQ0.L.B1.O/am=AAAAAEMa/d=1/exm=A7fCU,BVgquf,EFQ78c,GkRiKb,IZT63,JNoxi,KUM7Z,LEikZe,MI6k7c,MdUzUe,MpJwZc,NwH0H,O1Gjze,O6y8ed,OTA3Ae,PrPYRd,QIhFr,RMhBfe,RyvaUb,SdcwHb,SpsfSb,UUJqVe,Uas9Hd,Ulmmrd,V3dDOb,WO9ee,XVMNvd,Xg7Hl,YYmHzb,Z5uLle,ZDZcre,ZwDk9d,_b,_tp,aW3pY,byfTOb,e5qFLc,gychg,hKSk3e,hc6Ubd,kjKdXe,lazG7b,lsjVmc,lwddkf,mI3LFb,mdR7q,n73qwf,pjICDe,pw70Gc,w9hDv,wmnU7d,ws9Tlc,xQtZb,xUdipf,zbML3c,zr1jrb/excm=_b,_tp,hovercardwidget/ed=1/wt=2/ujg=1/rs=AGLTcCO_-Oz45bn79ZuuznNuEo5ex7VHhw/ee=EVNhjf:pw70Gc;EmZ2Bf:zr1jrb;JsbNhc:Xd8iUd;K5nYTd:ZDZcre;LBgRLc:SdcwHb;Me32dd:MEeYgc;NJ1rfe:qTnoBf;NPKaK:SdcwHb;NSEoX:lazG7b;Pjplud:EEDORb;QGR0gd:Mlhmy;SNUn3:ZwDk9d;ScI3Yc:e7Hzgb;Uvc8o:VDovNc;YIZmRd:A1yn5d;a56pNe:JEfCwb;cEt90b:ws9Tlc;dIoSBb:SpsfSb;dowIGb:ebZ3mb;eBAeSb:zbML3c;iFQyKf:QIhFr;lOO0Vd:OTA3Ae;oGtAuc:sOXFj;pXdRYb:MdUzUe;qQEoOc:KUM7Z;qafBPd:yDVVkb;qddgKe:xQtZb;wR5FRb:O1Gjze;xqZiqf:wmnU7d;yxTchf:KUM7Z;zxnPse:GkRiKb/dti=1/m=Wt6vjf,hhhU8,FCpbqb,WhJNk",
+   "https://contacts.google.com/_/scs/social-static/_/js/k=boq.SocialPeopleHovercardUi.en_US.6Ca8Zhsq464.2018.O/ck=boq.SocialPeopleHovercardUi.0A1xk8eOeQ0.L.B1.O/am=AAAAAEMa/d=1/exm=_b,_tp/excm=_b,_tp,hovercardwidget/ed=1/wt=2/ujg=1/rs=AGLTcCO_-Oz45bn79ZuuznNuEo5ex7VHhw/ee=EVNhjf:pw70Gc;EmZ2Bf:zr1jrb;JsbNhc:Xd8iUd;K5nYTd:ZDZcre;LBgRLc:SdcwHb;Me32dd:MEeYgc;NJ1rfe:qTnoBf;NPKaK:SdcwHb;NSEoX:lazG7b;Pjplud:EEDORb;QGR0gd:Mlhmy;SNUn3:ZwDk9d;ScI3Yc:e7Hzgb;Uvc8o:VDovNc;YIZmRd:A1yn5d;a56pNe:JEfCwb;cEt90b:ws9Tlc;dIoSBb:SpsfSb;dowIGb:ebZ3mb;eBAeSb:zbML3c;iFQyKf:QIhFr;lOO0Vd:OTA3Ae;oGtAuc:sOXFj;pXdRYb:MdUzUe;qQEoOc:KUM7Z;qafBPd:yDVVkb;qddgKe:xQtZb;wR5FRb:O1Gjze;xqZiqf:wmnU7d;yxTchf:KUM7Z;zxnPse:GkRiKb/dti=1/m=ws9Tlc,O6y8ed,aW3pY,GkRiKb,e5qFLc,IZT63,YYmHzb,pw70Gc,n73qwf,UUJqVe,KUM7Z,O1Gjze,byfTOb,lsjVmc,xUdipf,ZDZcre,OTA3Ae,ZwDk9d,V3dDOb,WO9ee,RyvaUb,mI3LFb,Xg7Hl,PrPYRd,MpJwZc,LEikZe,NwH0H,lazG7b,XVMNvd,QIhFr,xQtZb,lwddkf,gychg,w9hDv,RMhBfe,SdcwHb,EFQ78c,Ulmmrd,A7fCU,mdR7q,wmnU7d,hc6Ubd,JNoxi,MI6k7c,BVgquf,SpsfSb,kjKdXe,Z5uLle,hKSk3e,MdUzUe,zbML3c,zr1jrb,Uas9Hd,pjICDe",
+   "https://contacts.google.com/_/scs/social-static/_/js/k=boq.SocialPeopleHovercardUi.en_US.6Ca8Zhsq464.2018.O/ck=boq.SocialPeopleHovercardUi.0A1xk8eOeQ0.L.B1.O/am=AAAAAEMa/d=1/exm=A7fCU,BVgquf,EFQ78c,FCpbqb,GkRiKb,IZT63,JNoxi,KUM7Z,LEikZe,MI6k7c,MdUzUe,MpJwZc,NwH0H,O1Gjze,O6y8ed,OTA3Ae,PrPYRd,QIhFr,RMhBfe,RyvaUb,SdcwHb,SpsfSb,UUJqVe,Uas9Hd,Ulmmrd,V3dDOb,WO9ee,WhJNk,Wt6vjf,XVMNvd,Xg7Hl,YYmHzb,Z5uLle,ZDZcre,ZwDk9d,_b,_tp,aW3pY,byfTOb,e5qFLc,gychg,hKSk3e,hc6Ubd,hhhU8,kjKdXe,lazG7b,lsjVmc,lwddkf,mI3LFb,mdR7q,n73qwf,pjICDe,pw70Gc,w9hDv,wmnU7d,ws9Tlc,xQtZb,xUdipf,zbML3c,zr1jrb/excm=_b,_tp,hovercardwidget/ed=1/wt=2/ujg=1/rs=AGLTcCO_-Oz45bn79ZuuznNuEo5ex7VHhw/ee=EVNhjf:pw70Gc;EmZ2Bf:zr1jrb;JsbNhc:Xd8iUd;K5nYTd:ZDZcre;LBgRLc:SdcwHb;Me32dd:MEeYgc;NJ1rfe:qTnoBf;NPKaK:SdcwHb;NSEoX:lazG7b;Pjplud:EEDORb;QGR0gd:Mlhmy;SNUn3:ZwDk9d;ScI3Yc:e7Hzgb;Uvc8o:VDovNc;YIZmRd:A1yn5d;a56pNe:JEfCwb;cEt90b:ws9Tlc;dIoSBb:SpsfSb;dowIGb:ebZ3mb;eBAeSb:zbML3c;iFQyKf:QIhFr;lOO0Vd:OTA3Ae;oGtAuc:sOXFj;pXdRYb:MdUzUe;qQEoOc:KUM7Z;qafBPd:yDVVkb;qddgKe:xQtZb;wR5FRb:O1Gjze;xqZiqf:wmnU7d;yxTchf:KUM7Z;zxnPse:GkRiKb/dti=1/m=p3hmRc,LvGhrf,RqjULd",
+   "https://contacts.google.com/_/scs/social-static/_/js/k=boq.SocialPeopleHovercardUi.en_US.6Ca8Zhsq464.2018.O/ck=boq.SocialPeopleHovercardUi.0A1xk8eOeQ0.L.B1.O/am=AAAAAEMa/d=1/exm=A7fCU,BVgquf,EFQ78c,FCpbqb,GkRiKb,IZT63,JNoxi,KUM7Z,LEikZe,LvGhrf,MI6k7c,MdUzUe,MpJwZc,NwH0H,O1Gjze,O6y8ed,OTA3Ae,PrPYRd,QIhFr,RMhBfe,RqjULd,RyvaUb,SdcwHb,SpsfSb,UUJqVe,Uas9Hd,Ulmmrd,V3dDOb,WO9ee,WhJNk,Wt6vjf,XVMNvd,Xg7Hl,YYmHzb,Z5uLle,ZDZcre,ZwDk9d,_b,_tp,aW3pY,byfTOb,e5qFLc,gychg,hKSk3e,hc6Ubd,hhhU8,kjKdXe,lazG7b,lsjVmc,lwddkf,mI3LFb,mdR7q,n73qwf,p3hmRc,pjICDe,pw70Gc,w9hDv,wmnU7d,ws9Tlc,xQtZb,xUdipf,zbML3c,zr1jrb/excm=_b,_tp,hovercardwidget/ed=1/wt=2/ujg=1/rs=AGLTcCO_-Oz45bn79ZuuznNuEo5ex7VHhw/ee=EVNhjf:pw70Gc;EmZ2Bf:zr1jrb;JsbNhc:Xd8iUd;K5nYTd:ZDZcre;LBgRLc:SdcwHb;Me32dd:MEeYgc;NJ1rfe:qTnoBf;NPKaK:SdcwHb;NSEoX:lazG7b;Pjplud:EEDORb;QGR0gd:Mlhmy;SNUn3:ZwDk9d;ScI3Yc:e7Hzgb;Uvc8o:VDovNc;YIZmRd:A1yn5d;a56pNe:JEfCwb;cEt90b:ws9Tlc;dIoSBb:SpsfSb;dowIGb:ebZ3mb;eBAeSb:zbML3c;iFQyKf:QIhFr;lOO0Vd:OTA3Ae;oGtAuc:sOXFj;pXdRYb:MdUzUe;qQEoOc:KUM7Z;qafBPd:yDVVkb;qddgKe:xQtZb;wR5FRb:O1Gjze;xqZiqf:wmnU7d;yxTchf:KUM7Z;zxnPse:GkRiKb/dti=1/m=P6sQOc",
+   "https://apis.google.com/_/scs/abc-static/_/js/k=gapi.lb.en.gh7qIZtzO5w.O/m=gapi_iframes/rt=j/sv=1/d=1/ed=1/rs=AHpOoo84YKT1RVy0T6hcXi5rH3LooB1WCw/cb=gapi.loaded_0?le=scs,fedcm_migration_mod"
+  ],
+  "wasmResponses": [],
+  "hosts": [
+   "docs.google.com",
+   "ghbmnnjooekpmoecnnnilnnbdlolhkhi",
+   "ssl.gstatic.com",
+   "",
+   "fonts.gstatic.com",
+   "www.gstatic.com",
+   "play.google.com",
+   "ogads-pa.clients6.google.com",
+   "accounts.google.com",
+   "csp.withgoogle.com",
+   "apis.google.com",
+   "contacts.google.com",
+   "fonts.googleapis.com",
+   "drive.usercontent.google.com"
+  ],
+  "proto": [
+   {
+    "url": "https://docs.google.com/presentation/d/1--vRBDTp0pf_Eck2Ga8XffBWn7gbUpnbuehkRnJE8vg/edit",
+    "status": 200,
+    "mime": "text/html",
+    "type": "Document",
+    "fromSW": false
+   },
+   {
+    "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgAQMAAABJtOi3AAAAAXNSR0IArs4c6QAAAAZQTFRF9/f3////TOsULwAAABRJREFUCNdjYGD4/5+BigR1TWMAAO29P8H0ss2LAAAAAElFTkSuQmCC",
+    "status": 200,
+    "mime": "image/png",
+    "type": "Image",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/slides-images-rt/AE1YXSYpuS1h6RpErAJwjl6YnHZ1ew5mQH8K_G7ERv7wb2kE6RcmjEjGlKwkeetVmVqwZGkVBtmWE2O2Z1o66T9Ltc4XgD-BnkakXnHFJNIXZzEumaylVJmhVfAXTfY4sBzYHJAPn1CZfv8iOVUWm9Qyphp3asTqnOtEFJ7q-_4=s2048",
+    "status": 200,
+    "mime": "image/jpeg",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/presentation/manifest.json",
+    "status": 200,
+    "mime": "application/manifest+json",
+    "type": "Manifest",
+    "fromSW": false
+   },
+   {
+    "url": "blob:https://docs.google.com/d67070f1-56b6-4587-8c7e-941a59e4173d",
+    "status": 200,
+    "mime": "image/jpeg",
+    "type": "Image",
+    "fromSW": false
+   },
+   {
+    "url": "https://www.gstatic.com/og/_/ss/k=og.asy.AJxojUGSPBk.L.W.O/m=adcgm3/excm=/d=1/ed=1/ct=zgms/rs=AA2YrTuGFRpKduKNm9VQnb3PWaoCmWEzEQ",
+    "status": 200,
+    "mime": "text/css",
+    "type": "Stylesheet",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/presentation/d/1--vRBDTp0pf_Eck2Ga8XffBWn7gbUpnbuehkRnJE8vg/docos/p/sync?sid=f1e3244e104057&vc=0&c=0&w=0&flr=0&smb=%5B2147483647%2C%20AAAAIA%3D%3D%5D&includes_info_params=1",
+    "status": 401,
+    "mime": "application/json",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/slides-images-rt/AE1YXSZvM9vbSbL_AwhS1wbCt9ArcpRLXk2QWkZJso-hSt7Hx3KvGi2ojoO90D2j-ChcRGNNvR0eWz_SMMoHbjN5n-FBZbOnMVPhGzkAi5MpYZTZsP5rAR1SK6MtUe-MN64EQQjT2fwWBydiubBplwvM_Oydwf0uSfOe1F9zwZqfSg=s2048",
+    "status": 200,
+    "mime": "image/jpeg",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/slides-images-rt/AE1YXSbR4cl1gzol-GBxH3PoRcw4Px-ZuaFfatPLiNosH3F5muoGQHqA7K9osARu9dyTHM7ZfUfvonAwa7Dtzxb3qNx_OJizIEfeCIdFQuiQV2Jwqb2U-PmRg15GGUnLK6EEeLa4Z4IuCrGjC1sSnxz5OMCjjzBi07O91E1yK8bosg=s2048",
+    "status": 200,
+    "mime": "image/jpeg",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "blob:https://docs.google.com/09dd5c7a-4bf6-406c-8c8a-cbd65010034b",
+    "status": 200,
+    "mime": "image/jpeg",
+    "type": "Image",
+    "fromSW": false
+   },
+   {
+    "url": "https://play.google.com/log?format=json&hasfast=true&authuser=0",
+    "status": 200,
+    "mime": "text/plain",
+    "type": "Fetch",
+    "fromSW": false
+   },
+   {
+    "url": "blob:https://docs.google.com/1d61118b-a2f9-4567-bda2-ac65a5e928fc",
+    "status": 200,
+    "mime": "image/jpeg",
+    "type": "Image",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/presentation/d/1--vRBDTp0pf_Eck2Ga8XffBWn7gbUpnbuehkRnJE8vg/peruserchrome?id=1--vRBDTp0pf_Eck2Ga8XffBWn7gbUpnbuehkRnJE8vg&includes_info_params=1&cros_files=false&nded=false",
+    "status": 200,
+    "mime": "application/json",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/presentation/d/1--vRBDTp0pf_Eck2Ga8XffBWn7gbUpnbuehkRnJE8vg/test?id=1--vRBDTp0pf_Eck2Ga8XffBWn7gbUpnbuehkRnJE8vg&sid=f1e3244e104057&includes_info_params=1&cros_files=false&nded=false&VER=8&lsq=-1&u=PREF_08039859423119481666&flr=0&gsi&smb=%5B2147483647%2C%20AAAAIA%3D%3D%5D&cimpl=0&MODE=init&zx=m35ezwp54kgp&t=1",
+    "status": 200,
+    "mime": "text/plain",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/presentation/d/1--vRBDTp0pf_Eck2Ga8XffBWn7gbUpnbuehkRnJE8vg/trash/read?id=1--vRBDTp0pf_Eck2Ga8XffBWn7gbUpnbuehkRnJE8vg&includes_info_params=1&cros_files=false&nded=false",
+    "status": 200,
+    "mime": "application/json",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/presentation/font/getmetadata?includes_info_params=1&cros_files=false&nded=false",
+    "status": 200,
+    "mime": "application/json",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://ogads-pa.clients6.google.com/$rpc/google.internal.onegoogle.asyncdata.v1.AsyncDataService/GetAsyncData",
+    "status": 503,
+    "mime": "application/json+protobuf",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://accounts.google.com/ServiceLogin?passive=1209600&continue=https://docs.google.com/drivesharing/clientmodel?id%3D1--vRBDTp0pf_Eck2Ga8XffBWn7gbUpnbuehkRnJE8vg%26foreignService%3Dpunch%26authuser%3D0%26origin%3Dhttps://docs.google.com&followup=https://docs.google.com/drivesharing/clientmodel?id%3D1--vRBDTp0pf_Eck2Ga8XffBWn7gbUpnbuehkRnJE8vg%26foreignService%3Dpunch%26authuser%3D0%26origin%3Dhttps://docs.google.com",
+    "status": 401,
+    "mime": "text/html",
+    "type": "Document",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/slides-images-rt/AE1YXSYXlk7I4ttS96PexStEyIZxbB4rXQk3srhJ5ZuF8o999mqHFUPmSYzvXuENqVa9CEsCgOEr0VyY0GfOos5Ch0NskQpiiUqP_gxpdpXCay4QaC4SdoO4_9qnfrfWhMYgoRSt2XOsZ3kB4hoAYv4rQ2QQHqvULcAKFgIOFADIWA=s2048",
+    "status": 200,
+    "mime": "image/jpeg",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/presentation/d/1--vRBDTp0pf_Eck2Ga8XffBWn7gbUpnbuehkRnJE8vg/test?id=1--vRBDTp0pf_Eck2Ga8XffBWn7gbUpnbuehkRnJE8vg&sid=f1e3244e104057&includes_info_params=1&cros_files=false&nded=false&VER=8&lsq=-1&u=PREF_08039859423119481666&flr=0&gsi&smb=%5B2147483647%2C%20AAAAIA%3D%3D%5D&cimpl=0&TYPE=xmlhttp&zx=gkojdebuoed6&t=1",
+    "status": 200,
+    "mime": "text/plain",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/slides-images-rt/AE1YXSZgL9-qLQWrxvvqhi66GnqYNERwQhXNoOmAp8yTBN18yMVosZ9MpcNqsyFA0Ozo6tboWcUYWz716nyFwKkackdDtmGDJhZxPEQ7G-dcr8ICo-v6wPj2uKcA1IzurQiZi0kzAo256Cno3_PjkTT7kOhmLg-kGgR_3QrxS33jVw=s2048",
+    "status": 200,
+    "mime": "image/jpeg",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/presentation/d/1--vRBDTp0pf_Eck2Ga8XffBWn7gbUpnbuehkRnJE8vg/bind?id=1--vRBDTp0pf_Eck2Ga8XffBWn7gbUpnbuehkRnJE8vg&sid=f1e3244e104057&includes_info_params=1&cros_files=false&nded=false&VER=8&lsq=-1&u=PREF_08039859423119481666&flr=0&gsi&smb=%5B2147483647%2C%20AAAAIA%3D%3D%5D&cimpl=0&RID=30113&CVER=1&zx=yq97svwtqk79&t=1",
+    "status": 200,
+    "mime": "text/plain",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "blob:https://docs.google.com/f5b39424-7cec-47c5-b2f9-ff8585aabd5f",
+    "status": 200,
+    "mime": "image/jpeg",
+    "type": "Image",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/presentation/d/1--vRBDTp0pf_Eck2Ga8XffBWn7gbUpnbuehkRnJE8vg/bind?id=1--vRBDTp0pf_Eck2Ga8XffBWn7gbUpnbuehkRnJE8vg&sid=f1e3244e104057&includes_info_params=1&cros_files=false&nded=false&VER=8&lsq=1792390381895&u=PREF_08039859423119481666&flr=0&gsi&smb=%5B2147483647%2C%20AAAAIA%3D%3D%5D&cimpl=0&RID=rpc&SID=D1C3D34A2E74049C&CI=0&AID=2&TYPE=xmlhttp&zx=1uso9ngt1sf2&t=1",
+    "status": 200,
+    "mime": "text/plain",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://play.google.com/log?format=json&hasfast=true",
+    "status": 200,
+    "mime": "text/plain",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "blob:https://docs.google.com/ebcf6e45-56b9-473f-9cc3-7cdda951dc3a",
+    "status": 200,
+    "mime": "image/jpeg",
+    "type": "Image",
+    "fromSW": false
+   },
+   {
+    "url": "https://csp.withgoogle.com/csp/proto/26981ed0d57bbad37e728ff58134270c",
+    "status": 204,
+    "mime": "text/html",
+    "type": "Ping",
+    "fromSW": false
+   },
+   {
+    "url": "https://contacts.google.com/widget/hovercard/v/2?theme=light&origin=https%3A%2F%2Fdocs.google.com&usegapi=1&jsh=m%3B%2F_%2Fscs%2Fabc-static%2F_%2Fjs%2Fk%3Dgapi.lb.en.gh7qIZtzO5w.O%2Fd%3D1%2Frs%3DAHpOoo84YKT1RVy0T6hcXi5rH3LooB1WCw%2Fm%3D__features__",
+    "status": 200,
+    "mime": "text/html",
+    "type": "Document",
+    "fromSW": false
+   },
+   {
+    "url": "https://fonts.googleapis.com/css2?family=Google+Sans+Text:wght@400;500;700",
+    "status": 200,
+    "mime": "text/css",
+    "type": "Stylesheet",
+    "fromSW": false
+   },
+   {
+    "url": "https://drive.usercontent.google.com/auth_warmup",
+    "status": 200,
+    "mime": "text/html",
+    "type": "Document",
+    "fromSW": false
+   }
+  ]
+ },
+ "sheets": {
+  "jsChunks": [
+   "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=ritzmain",
+   "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=core",
+   "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=edit",
+   "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=docos",
+   "https://www.gstatic.com/og/_/js/k=og.asy.en_US.RQWeQL4C_as.2019.O/rt=j/m=_ac,_awd,ada,lldp,qads/exm=/d=1/ed=1/rs=AA2YrTuGbsx8J9y5y-8vfZToQEl93Ak1HQ",
+   "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=postshellbase",
+   "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=revisions",
+   "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=assistant",
+   "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=onepick",
+   "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=ritzfilter",
+   "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=namedtables",
+   "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=columnsmith",
+   "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=chips",
+   "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=inlineinsert",
+   "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=ritzgenblocks",
+   "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=ritzbuildingblocks",
+   "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=ritzfunctionhelpcontent",
+   "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=meet",
+   "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=ritzmaestro",
+   "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=peoplehovercard",
+   "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=approvals",
+   "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=emojidata",
+   "https://apis.google.com/_/scs/abc-static/_/js/k=gapi.lb.en.gh7qIZtzO5w.O/m=client/rt=j/sv=1/d=1/ed=1/rs=AHpOoo84YKT1RVy0T6hcXi5rH3LooB1WCw/cb=gapi.loaded_0?le=scs,fedcm_migration_mod",
+   "https://apis.google.com/_/scs/abc-static/_/js/k=gapi.lb.en.gh7qIZtzO5w.O/m=config/exm=card,client/rt=j/sv=1/d=1/ed=1/rs=AHpOoo84YKT1RVy0T6hcXi5rH3LooB1WCw/cb=gapi.loaded_2?le=scs,fedcm_migration_mod",
+   "https://apis.google.com/_/scs/abc-static/_/js/k=gapi.lb.en.gh7qIZtzO5w.O/m=card/exm=client/rt=j/sv=1/d=1/ed=1/rs=AHpOoo84YKT1RVy0T6hcXi5rH3LooB1WCw/cb=gapi.loaded_1?le=scs,fedcm_migration_mod",
+   "https://contacts.google.com/_/scs/social-static/_/js/k=boq.SocialPeopleHovercardUi.en_US.6Ca8Zhsq464.2018.O/am=AAAAAEMa/d=1/excm=_b,_tp,hovercardwidget/ed=1/dg=0/wt=2/ujg=1/rs=AGLTcCMurxSpUyODDPwG-1jtxZKU0iEdMw/dti=1/m=_b,_tp",
+   "https://contacts.google.com/_/scs/social-static/_/js/k=boq.SocialPeopleHovercardUi.en_US.6Ca8Zhsq464.2018.O/ck=boq.SocialPeopleHovercardUi.0A1xk8eOeQ0.L.B1.O/am=AAAAAEMa/d=1/exm=A7fCU,BVgquf,EFQ78c,GkRiKb,IZT63,JNoxi,KUM7Z,LEikZe,MI6k7c,MdUzUe,MpJwZc,NwH0H,O1Gjze,O6y8ed,OTA3Ae,PrPYRd,QIhFr,RMhBfe,RyvaUb,SdcwHb,SpsfSb,UUJqVe,Uas9Hd,Ulmmrd,V3dDOb,WO9ee,XVMNvd,Xg7Hl,YYmHzb,Z5uLle,ZDZcre,ZwDk9d,_b,_tp,aW3pY,byfTOb,e5qFLc,gychg,hKSk3e,hc6Ubd,kjKdXe,lazG7b,lsjVmc,lwddkf,mI3LFb,mdR7q,n73qwf,pjICDe,pw70Gc,w9hDv,wmnU7d,ws9Tlc,xQtZb,xUdipf,zbML3c,zr1jrb/excm=_b,_tp,hovercardwidget/ed=1/wt=2/ujg=1/rs=AGLTcCO_-Oz45bn79ZuuznNuEo5ex7VHhw/ee=EVNhjf:pw70Gc;EmZ2Bf:zr1jrb;JsbNhc:Xd8iUd;K5nYTd:ZDZcre;LBgRLc:SdcwHb;Me32dd:MEeYgc;NJ1rfe:qTnoBf;NPKaK:SdcwHb;NSEoX:lazG7b;Pjplud:EEDORb;QGR0gd:Mlhmy;SNUn3:ZwDk9d;ScI3Yc:e7Hzgb;Uvc8o:VDovNc;YIZmRd:A1yn5d;a56pNe:JEfCwb;cEt90b:ws9Tlc;dIoSBb:SpsfSb;dowIGb:ebZ3mb;eBAeSb:zbML3c;iFQyKf:QIhFr;lOO0Vd:OTA3Ae;oGtAuc:sOXFj;pXdRYb:MdUzUe;qQEoOc:KUM7Z;qafBPd:yDVVkb;qddgKe:xQtZb;wR5FRb:O1Gjze;xqZiqf:wmnU7d;yxTchf:KUM7Z;zxnPse:GkRiKb/dti=1/m=Wt6vjf,hhhU8,FCpbqb,WhJNk",
+   "https://contacts.google.com/_/scs/social-static/_/js/k=boq.SocialPeopleHovercardUi.en_US.6Ca8Zhsq464.2018.O/ck=boq.SocialPeopleHovercardUi.0A1xk8eOeQ0.L.B1.O/am=AAAAAEMa/d=1/exm=_b,_tp/excm=_b,_tp,hovercardwidget/ed=1/wt=2/ujg=1/rs=AGLTcCO_-Oz45bn79ZuuznNuEo5ex7VHhw/ee=EVNhjf:pw70Gc;EmZ2Bf:zr1jrb;JsbNhc:Xd8iUd;K5nYTd:ZDZcre;LBgRLc:SdcwHb;Me32dd:MEeYgc;NJ1rfe:qTnoBf;NPKaK:SdcwHb;NSEoX:lazG7b;Pjplud:EEDORb;QGR0gd:Mlhmy;SNUn3:ZwDk9d;ScI3Yc:e7Hzgb;Uvc8o:VDovNc;YIZmRd:A1yn5d;a56pNe:JEfCwb;cEt90b:ws9Tlc;dIoSBb:SpsfSb;dowIGb:ebZ3mb;eBAeSb:zbML3c;iFQyKf:QIhFr;lOO0Vd:OTA3Ae;oGtAuc:sOXFj;pXdRYb:MdUzUe;qQEoOc:KUM7Z;qafBPd:yDVVkb;qddgKe:xQtZb;wR5FRb:O1Gjze;xqZiqf:wmnU7d;yxTchf:KUM7Z;zxnPse:GkRiKb/dti=1/m=ws9Tlc,O6y8ed,aW3pY,GkRiKb,e5qFLc,IZT63,YYmHzb,pw70Gc,n73qwf,UUJqVe,KUM7Z,O1Gjze,byfTOb,lsjVmc,xUdipf,ZDZcre,OTA3Ae,ZwDk9d,V3dDOb,WO9ee,RyvaUb,mI3LFb,Xg7Hl,PrPYRd,MpJwZc,LEikZe,NwH0H,lazG7b,XVMNvd,QIhFr,xQtZb,lwddkf,gychg,w9hDv,RMhBfe,SdcwHb,EFQ78c,Ulmmrd,A7fCU,mdR7q,wmnU7d,hc6Ubd,JNoxi,MI6k7c,BVgquf,SpsfSb,kjKdXe,Z5uLle,hKSk3e,MdUzUe,zbML3c,zr1jrb,Uas9Hd,pjICDe",
+   "https://contacts.google.com/_/scs/social-static/_/js/k=boq.SocialPeopleHovercardUi.en_US.6Ca8Zhsq464.2018.O/ck=boq.SocialPeopleHovercardUi.0A1xk8eOeQ0.L.B1.O/am=AAAAAEMa/d=1/exm=A7fCU,BVgquf,EFQ78c,FCpbqb,GkRiKb,IZT63,JNoxi,KUM7Z,LEikZe,MI6k7c,MdUzUe,MpJwZc,NwH0H,O1Gjze,O6y8ed,OTA3Ae,PrPYRd,QIhFr,RMhBfe,RyvaUb,SdcwHb,SpsfSb,UUJqVe,Uas9Hd,Ulmmrd,V3dDOb,WO9ee,WhJNk,Wt6vjf,XVMNvd,Xg7Hl,YYmHzb,Z5uLle,ZDZcre,ZwDk9d,_b,_tp,aW3pY,byfTOb,e5qFLc,gychg,hKSk3e,hc6Ubd,hhhU8,kjKdXe,lazG7b,lsjVmc,lwddkf,mI3LFb,mdR7q,n73qwf,pjICDe,pw70Gc,w9hDv,wmnU7d,ws9Tlc,xQtZb,xUdipf,zbML3c,zr1jrb/excm=_b,_tp,hovercardwidget/ed=1/wt=2/ujg=1/rs=AGLTcCO_-Oz45bn79ZuuznNuEo5ex7VHhw/ee=EVNhjf:pw70Gc;EmZ2Bf:zr1jrb;JsbNhc:Xd8iUd;K5nYTd:ZDZcre;LBgRLc:SdcwHb;Me32dd:MEeYgc;NJ1rfe:qTnoBf;NPKaK:SdcwHb;NSEoX:lazG7b;Pjplud:EEDORb;QGR0gd:Mlhmy;SNUn3:ZwDk9d;ScI3Yc:e7Hzgb;Uvc8o:VDovNc;YIZmRd:A1yn5d;a56pNe:JEfCwb;cEt90b:ws9Tlc;dIoSBb:SpsfSb;dowIGb:ebZ3mb;eBAeSb:zbML3c;iFQyKf:QIhFr;lOO0Vd:OTA3Ae;oGtAuc:sOXFj;pXdRYb:MdUzUe;qQEoOc:KUM7Z;qafBPd:yDVVkb;qddgKe:xQtZb;wR5FRb:O1Gjze;xqZiqf:wmnU7d;yxTchf:KUM7Z;zxnPse:GkRiKb/dti=1/m=p3hmRc,LvGhrf,RqjULd",
+   "https://contacts.google.com/_/scs/social-static/_/js/k=boq.SocialPeopleHovercardUi.en_US.6Ca8Zhsq464.2018.O/ck=boq.SocialPeopleHovercardUi.0A1xk8eOeQ0.L.B1.O/am=AAAAAEMa/d=1/exm=A7fCU,BVgquf,EFQ78c,FCpbqb,GkRiKb,IZT63,JNoxi,KUM7Z,LEikZe,LvGhrf,MI6k7c,MdUzUe,MpJwZc,NwH0H,O1Gjze,O6y8ed,OTA3Ae,PrPYRd,QIhFr,RMhBfe,RqjULd,RyvaUb,SdcwHb,SpsfSb,UUJqVe,Uas9Hd,Ulmmrd,V3dDOb,WO9ee,WhJNk,Wt6vjf,XVMNvd,Xg7Hl,YYmHzb,Z5uLle,ZDZcre,ZwDk9d,_b,_tp,aW3pY,byfTOb,e5qFLc,gychg,hKSk3e,hc6Ubd,hhhU8,kjKdXe,lazG7b,lsjVmc,lwddkf,mI3LFb,mdR7q,n73qwf,p3hmRc,pjICDe,pw70Gc,w9hDv,wmnU7d,ws9Tlc,xQtZb,xUdipf,zbML3c,zr1jrb/excm=_b,_tp,hovercardwidget/ed=1/wt=2/ujg=1/rs=AGLTcCO_-Oz45bn79ZuuznNuEo5ex7VHhw/ee=EVNhjf:pw70Gc;EmZ2Bf:zr1jrb;JsbNhc:Xd8iUd;K5nYTd:ZDZcre;LBgRLc:SdcwHb;Me32dd:MEeYgc;NJ1rfe:qTnoBf;NPKaK:SdcwHb;NSEoX:lazG7b;Pjplud:EEDORb;QGR0gd:Mlhmy;SNUn3:ZwDk9d;ScI3Yc:e7Hzgb;Uvc8o:VDovNc;YIZmRd:A1yn5d;a56pNe:JEfCwb;cEt90b:ws9Tlc;dIoSBb:SpsfSb;dowIGb:ebZ3mb;eBAeSb:zbML3c;iFQyKf:QIhFr;lOO0Vd:OTA3Ae;oGtAuc:sOXFj;pXdRYb:MdUzUe;qQEoOc:KUM7Z;qafBPd:yDVVkb;qddgKe:xQtZb;wR5FRb:O1Gjze;xqZiqf:wmnU7d;yxTchf:KUM7Z;zxnPse:GkRiKb/dti=1/m=P6sQOc",
+   "https://apis.google.com/_/scs/abc-static/_/js/k=gapi.lb.en.gh7qIZtzO5w.O/m=gapi_iframes/rt=j/sv=1/d=1/ed=1/rs=AHpOoo84YKT1RVy0T6hcXi5rH3LooB1WCw/cb=gapi.loaded_0?le=scs,fedcm_migration_mod"
+  ],
+  "wasmResponses": [],
+  "hosts": [
+   "docs.google.com",
+   "ghbmnnjooekpmoecnnnilnnbdlolhkhi",
+   "fonts.googleapis.com",
+   "",
+   "ssl.gstatic.com",
+   "fonts.gstatic.com",
+   "www.gstatic.com",
+   "play.google.com",
+   "ogads-pa.clients6.google.com",
+   "peoplestack-pa.clients6.google.com",
+   "apis.google.com",
+   "appsgenaiserver-pa.clients6.google.com",
+   "contacts.google.com",
+   "csp.withgoogle.com",
+   "accounts.google.com"
+  ],
+  "proto": [
+   {
+    "url": "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit",
+    "status": 200,
+    "mime": "text/html",
+    "type": "Document",
+    "fromSW": false
+   },
+   {
+    "url": "https://fonts.googleapis.com/css?family=Inconsolata:400,700",
+    "status": 200,
+    "mime": "text/css",
+    "type": "Stylesheet",
+    "fromSW": false
+   },
+   {
+    "url": "https://fonts.googleapis.com/css?family=Google+Sans",
+    "status": 200,
+    "mime": "text/css",
+    "type": "Stylesheet",
+    "fromSW": false
+   },
+   {
+    "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAC4AAAAECAYAAADxjg1nAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAiSURBVHgB7c4BDQAACAJBtH+vj6Ut2Ni4BDfAKdAqVONuD6UlA1xby9J5AAAAAElFTkSuQmCC",
+    "status": 200,
+    "mime": "image/png",
+    "type": "Image",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/spreadsheets/manifest.json",
+    "status": 200,
+    "mime": "application/manifest+json",
+    "type": "Manifest",
+    "fromSW": false
+   },
+   {
+    "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAYCAYAAADd5VyeAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAiSURBVHgB7cgxEQAACAOxgn9fLwtWDgNdmjEFjI7Wk3DEAm1dA4R92xIIAAAAAElFTkSuQmCC",
+    "status": 200,
+    "mime": "image/png",
+    "type": "Image",
+    "fromSW": false
+   },
+   {
+    "url": "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20'%3E%3Cpath fill='%23444746' d='M10 12 6 8h8Z'/%3E%3C/svg%3E",
+    "status": 200,
+    "mime": "image/svg+xml",
+    "type": "Image",
+    "fromSW": false
+   },
+   {
+    "url": "https://www.gstatic.com/og/_/ss/k=og.asy.AJxojUGSPBk.L.W.O/m=adcgm3/excm=/d=1/ed=1/ct=zgms/rs=AA2YrTuGFRpKduKNm9VQnb3PWaoCmWEzEQ",
+    "status": 200,
+    "mime": "text/css",
+    "type": "Stylesheet",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/spreadsheets/font/getmetadata?includes_info_params=true&cros_files=false&nded=false",
+    "status": 200,
+    "mime": "application/json",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/peruserchrome?id=1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms&includes_info_params=true&cros_files=false&nded=false",
+    "status": 200,
+    "mime": "application/json",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/trash/read?id=1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms&includes_info_params=true&cros_files=false&nded=false",
+    "status": 200,
+    "mime": "application/json",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/test?id=1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms&sid=7564c3c36bed1ab6&includes_info_params=true&cros_files=false&nded=false&VER=8&lsq=-1&u=PREF_11199181761269635534&flr=0&gsi&smb=%5B2147483647%2C%20APzr3A%3D%3D%5D&cimpl=0&MODE=init&zx=pgcfvqaam1eg&t=1",
+    "status": 200,
+    "mime": "text/plain",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://play.google.com/log?format=json&hasfast=true&authuser=0",
+    "status": 200,
+    "mime": "text/plain",
+    "type": "Fetch",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/streamrows?id=1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms&smb=%5B2147483647%2C%20APzr3A%3D%3D%5D&includes_info_params=true&rpwf=a",
+    "status": 200,
+    "mime": "application/json",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHByZXNlcnZlQXNwZWN0UmF0aW89InhNaW5ZTWluIG1lZXQiIHZpZXdCb3g9IjAgMCAxIDEiPjxwYXRoIGZpbGw9IiNmZmYiIGQ9Ik0uMDQuNjI3LjE0Ni41Mi40My44MDQuMzIzLjkxem0uMTc3LjE3N0wuODU0LjE2Ny45Ni4yNzMuMzIzLjkxeiIvPjwvc3ZnPg==",
+    "status": 200,
+    "mime": "image/svg+xml",
+    "type": "Image",
+    "fromSW": false
+   },
+   {
+    "url": "https://ogads-pa.clients6.google.com/$rpc/google.internal.onegoogle.asyncdata.v1.AsyncDataService/GetAsyncData",
+    "status": 200,
+    "mime": "application/json+protobuf",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/externaldata/fetchData?id=1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms&rpwf=a&sid=7564c3c36bed1ab6&vc=0&c=0&w=0&flr=0&smb=%5B2147483647%2C%20APzr3A%3D%3D%5D&includes_info_params=true&cros_files=false&nded=false",
+    "status": 200,
+    "mime": "application/json",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://peoplestack-pa.clients6.google.com/$rpc/peoplestack.PeopleStackAutocompleteService/Autocomplete",
+    "status": 401,
+    "mime": "application/json+protobuf",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://appsgenaiserver-pa.clients6.google.com/v1/genai/quotaSummary?key=AIzaSyAkthrhpXoRv6M12CMqGivGO-rCfsy2AxU",
+    "status": 401,
+    "mime": "application/json+protobuf",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://contacts.google.com/widget/hovercard/v/2?theme=light&origin=https%3A%2F%2Fdocs.google.com&usegapi=1&jsh=m%3B%2F_%2Fscs%2Fabc-static%2F_%2Fjs%2Fk%3Dgapi.lb.en.gh7qIZtzO5w.O%2Fd%3D1%2Frs%3DAHpOoo84YKT1RVy0T6hcXi5rH3LooB1WCw%2Fm%3D__features__",
+    "status": 200,
+    "mime": "text/html",
+    "type": "Document",
+    "fromSW": false
+   },
+   {
+    "url": "https://fonts.googleapis.com/css2?family=Google+Sans+Text:wght@400;500;700",
+    "status": 200,
+    "mime": "text/css",
+    "type": "Stylesheet",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/test?id=1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms&sid=7564c3c36bed1ab6&includes_info_params=true&cros_files=false&nded=false&VER=8&lsq=-1&u=PREF_11199181761269635534&flr=0&gsi&smb=%5B2147483647%2C%20APzr3A%3D%3D%5D&cimpl=0&TYPE=xmlhttp&zx=26pjvq4dlixi&t=1",
+    "status": 200,
+    "mime": "text/plain",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/bind?id=1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms&sid=7564c3c36bed1ab6&includes_info_params=true&cros_files=false&nded=false&VER=8&lsq=-1&u=PREF_11199181761269635534&flr=0&gsi&smb=%5B2147483647%2C%20APzr3A%3D%3D%5D&cimpl=0&RID=51424&CVER=1&zx=ng6gzgiqxsm&t=1",
+    "status": 200,
+    "mime": "text/plain",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://play.google.com/log?format=json&hasfast=true",
+    "status": 200,
+    "mime": "text/plain",
+    "type": "Fetch",
+    "fromSW": false
+   },
+   {
+    "url": "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/bind?id=1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms&sid=7564c3c36bed1ab6&includes_info_params=true&cros_files=false&nded=false&VER=8&lsq=1792362925256&u=PREF_11199181761269635534&flr=0&gsi&smb=%5B2147483647%2C%20APzr3A%3D%3D%5D&cimpl=0&RID=rpc&SID=783D09A94586B1BA&CI=0&AID=7&TYPE=xmlhttp&zx=gqynjwy3rrmh&t=1",
+    "status": 200,
+    "mime": "text/plain",
+    "type": "XHR",
+    "fromSW": false
+   },
+   {
+    "url": "https://csp.withgoogle.com/csp/proto/26981ed0d57bbad37e728ff58134270c",
+    "status": 204,
+    "mime": "text/html",
+    "type": "Ping",
+    "fromSW": false
+   },
+   {
+    "url": "https://accounts.google.com/ServiceLogin?passive=1209600&continue=https://docs.google.com/drivesharing/clientmodel?id%3D1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms%26foreignService%3Dritz%26authuser%3D0%26origin%3Dhttps://docs.google.com&followup=https://docs.google.com/drivesharing/clientmodel?id%3D1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms%26foreignService%3Dritz%26authuser%3D0%26origin%3Dhttps://docs.google.com",
+    "status": 401,
+    "mime": "text/html",
+    "type": "Document",
+    "fromSW": false
+   }
+  ]
+ }
+}

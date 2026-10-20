@@ -1,0 +1,28 @@
+# Dependensi
+node_modules/
+
+# ==== Artefak pengembangan (JANGAN diunggah) ====
+# CATATAN: pola yang mengandung "/" ter-anchor ke root .gitignore ini, sehingga
+# "dev/*.log" TIDAK menjangkau "tool/dev/*.log". Pakai pola ber-anchor eksplisit.
+tool/dev/
+**/dev/store-e2e/
+**/dev/store-unit/
+*.tmp
+nul
+
+# Log & berkas probe di root
+*.log
+*.err
+
+# Profil browser / sesi login (JANGAN pernah diunggah)
+chrome-rea-debug/
+**/User Data/
+scratch-*/
+
+# Berkas sistem
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Catatan: tool/store/*.json TETAP di-track (3 dokumen contoh kanonik),
+# karena aplikasi membutuhkannya untuk data demo saat pertama dijalankan.

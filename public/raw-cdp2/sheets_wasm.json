@@ -1,0 +1,8 @@
+{
+ "file": "public/sheets/calcworker_wasm_cd.wasm",
+ "bytes": 3945915,
+ "magic": "0061736d",
+ "version": 1,
+ "compiled": false,
+ "compileError": "WebAssembly.Module(): type 24 has invalid explicit supertype 23 @+198811"
+}

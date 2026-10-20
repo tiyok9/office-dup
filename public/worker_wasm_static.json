@@ -1,0 +1,479 @@
+{
+ "docs": {
+  "chunkCount": 12,
+  "aggregateHits": {
+   "SharedWorker": 3,
+   "postMessage": 92,
+   "calcworker": 2,
+   "onmessage(worker)": 4,
+   "OT mutation": 226,
+   "BrowserChannel/bind": 1,
+   "webchannel": 7
+  },
+  "chunks": [
+   {
+    "url": "https://docs.google.com/_/docs/_/js/k=docs.client_js_prod_integrated.id.y8PjesGgl4I.es5.O/am=ACAAYADA/d=0/wt=0/rs=AGWKN8mEt_6ioMEP68YUtZffNrg5M52bOw/m=kix_core",
+    "status": 200,
+    "bytes": 3576046,
+    "sha256": "2062e08d82429f1c",
+    "hits": {
+     "SharedWorker": 3,
+     "postMessage": 20,
+     "calcworker": 2,
+     "onmessage(worker)": 2,
+     "OT mutation": 83
+    },
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/docs/_/js/k=docs.client_js_prod_integrated.id.y8PjesGgl4I.es5.O/am=ACAAYADA/d=0/wt=0/rs=AGWKN8mEt_6ioMEP68YUtZffNrg5M52bOw/m=kix_nestedsketchycore",
+    "status": 200,
+    "bytes": 363105,
+    "sha256": "68f756a941016883",
+    "hits": {},
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/docs/_/js/k=docs.client_js_prod_integrated.id.y8PjesGgl4I.es5.O/am=ACAAYADA/d=0/wt=0/rs=AGWKN8mEt_6ioMEP68YUtZffNrg5M52bOw/m=kix_app",
+    "status": 200,
+    "bytes": 3197404,
+    "sha256": "a361e7ddebef8dcd",
+    "hits": {
+     "postMessage": 20,
+     "BrowserChannel/bind": 1,
+     "OT mutation": 17
+    },
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/docs/_/js/k=docs.client_js_prod_integrated.id.y8PjesGgl4I.es5.O/am=ACAAYADA/d=0/wt=0/rs=AGWKN8mEt_6ioMEP68YUtZffNrg5M52bOw/m=kix_docos",
+    "status": 200,
+    "bytes": 1354712,
+    "sha256": "e6cbd51272bac049",
+    "hits": {
+     "postMessage": 6,
+     "OT mutation": 2
+    },
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/docs/_/js/k=docs.client_js_prod_integrated.id.y8PjesGgl4I.es5.O/am=ACAAYADA/d=0/wt=0/rs=AGWKN8mEt_6ioMEP68YUtZffNrg5M52bOw/m=kix_pre_tertiary_deps",
+    "status": 200,
+    "bytes": 170358,
+    "sha256": "b2f7781e4f7f4b9c",
+    "hits": {
+     "postMessage": 1,
+     "onmessage(worker)": 1,
+     "OT mutation": 17
+    },
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/docs/_/js/k=docs.client_js_prod_integrated.id.y8PjesGgl4I.es5.O/am=ACAAYADA/d=0/wt=0/rs=AGWKN8mEt_6ioMEP68YUtZffNrg5M52bOw/m=kix_tertiary",
+    "status": 200,
+    "bytes": 7726566,
+    "sha256": "bfb5e94b704511a2",
+    "hits": {
+     "postMessage": 41,
+     "onmessage(worker)": 1,
+     "webchannel": 7,
+     "OT mutation": 102
+    },
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/docs/_/js/k=docs.client_js_prod_integrated.id.y8PjesGgl4I.es5.O/am=ACAAYADA/d=0/wt=0/rs=AGWKN8mEt_6ioMEP68YUtZffNrg5M52bOw/m=officeeditingfileextension",
+    "status": 200,
+    "bytes": 10782,
+    "sha256": "42dea6aaba636af6",
+    "hits": {
+     "postMessage": 2,
+     "OT mutation": 3
+    },
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/docs/_/js/k=docs.client_js_prod_integrated.id.y8PjesGgl4I.es5.O/am=ACAAYADA/d=0/wt=0/rs=AGWKN8mEt_6ioMEP68YUtZffNrg5M52bOw/m=datetimeresources",
+    "status": 200,
+    "bytes": 177126,
+    "sha256": "011e667cf20c3770",
+    "hits": {},
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/docs/_/js/k=docs.client_js_prod_integrated.id.y8PjesGgl4I.es5.O/am=ACAAYADA/d=0/wt=0/rs=AGWKN8mEt_6ioMEP68YUtZffNrg5M52bOw/m=voice",
+    "status": 200,
+    "bytes": 39431,
+    "sha256": "883231cb6d677eff",
+    "hits": {
+     "postMessage": 2
+    },
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/docs/_/js/k=docs.client_js_prod_integrated.id.y8PjesGgl4I.es5.O/am=ACAAYADA/d=0/wt=0/rs=AGWKN8mEt_6ioMEP68YUtZffNrg5M52bOw/m=kix_approvals",
+    "status": 200,
+    "bytes": 8116,
+    "sha256": "b1ea6ecdf166372c",
+    "hits": {
+     "OT mutation": 2
+    },
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/docs/_/js/k=docs.client_js_prod_integrated.id.y8PjesGgl4I.es5.O/am=ACAAYADA/d=0/wt=0/rs=AGWKN8mEt_6ioMEP68YUtZffNrg5M52bOw/m=peoplehovercard",
+    "status": 200,
+    "bytes": 24668,
+    "sha256": "28409a3512990cd3",
+    "hits": {},
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/docs/_/js/k=docs.client_js_prod_integrated.id.y8PjesGgl4I.es5.O/am=ACAAYADA/d=0/wt=0/rs=AGWKN8mEt_6ioMEP68YUtZffNrg5M52bOw/m=emojidata",
+    "status": 200,
+    "bytes": 341253,
+    "sha256": "fb1a6c36bf7d7a28",
+    "hits": {},
+    "module": null
+   }
+  ]
+ },
+ "slides": {
+  "chunkCount": 8,
+  "aggregateHits": {
+   "SharedWorker": 3,
+   "postMessage": 118,
+   "calcworker": 4,
+   "onmessage(worker)": 11,
+   "OT mutation": 225,
+   "BrowserChannel/bind": 2
+  },
+  "chunks": [
+   {
+    "url": "https://docs.google.com/_/presentations/_/js/k=presentations.editor_js_prod_integrated.id.NuoQwn01k6Q.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB6fld2g93nIVtVfhpIwGIUScuJG2KCt6w/m=core",
+    "status": 200,
+    "bytes": 2820108,
+    "sha256": "086a4c54d39ea51a",
+    "hits": {
+     "SharedWorker": 3,
+     "postMessage": 20,
+     "calcworker": 2,
+     "onmessage(worker)": 2,
+     "OT mutation": 57
+    },
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/presentations/_/js/k=presentations.editor_js_prod_integrated.id.NuoQwn01k6Q.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB6fld2g93nIVtVfhpIwGIUScuJG2KCt6w/m=app",
+    "status": 200,
+    "bytes": 6719844,
+    "sha256": "03ff325ea1fc2c42",
+    "hits": {
+     "postMessage": 71,
+     "onmessage(worker)": 2,
+     "BrowserChannel/bind": 1,
+     "OT mutation": 118
+    },
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/presentations/_/js/k=presentations.viewer_integrated.id.a4sQOwF2ZFE.es5.O/am=AAIABjA/d=0/wt=0/rs=AB6fld0I54UjzkDWwvig7IJVehh_LIZRoQ/m=core",
+    "status": 200,
+    "bytes": 1495090,
+    "sha256": "042e0a5c9702baea",
+    "hits": {
+     "postMessage": 7,
+     "calcworker": 2,
+     "onmessage(worker)": 2,
+     "BrowserChannel/bind": 1,
+     "OT mutation": 40
+    },
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/presentations/_/js/k=presentations.editor_js_prod_integrated.id.NuoQwn01k6Q.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB6fld2g93nIVtVfhpIwGIUScuJG2KCt6w/m=pretertiarydeps",
+    "status": 200,
+    "bytes": 187504,
+    "sha256": "75db72f8b6748cbc",
+    "hits": {
+     "postMessage": 6,
+     "onmessage(worker)": 4,
+     "OT mutation": 1
+    },
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/presentations/_/js/k=presentations.editor_js_prod_integrated.id.NuoQwn01k6Q.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB6fld2g93nIVtVfhpIwGIUScuJG2KCt6w/m=docos",
+    "status": 200,
+    "bytes": 975132,
+    "sha256": "0263686adf07272d",
+    "hits": {
+     "postMessage": 1,
+     "OT mutation": 2
+    },
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/presentations/_/js/k=presentations.editor_js_prod_integrated.id.NuoQwn01k6Q.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB6fld2g93nIVtVfhpIwGIUScuJG2KCt6w/m=tertiary",
+    "status": 200,
+    "bytes": 3978725,
+    "sha256": "18f089bbfba84510",
+    "hits": {
+     "postMessage": 13,
+     "onmessage(worker)": 1,
+     "OT mutation": 5
+    },
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/presentations/_/js/k=presentations.editor_js_prod_integrated.id.NuoQwn01k6Q.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB6fld2g93nIVtVfhpIwGIUScuJG2KCt6w/m=approvals",
+    "status": 200,
+    "bytes": 16423,
+    "sha256": "693a71fb291cef61",
+    "hits": {
+     "OT mutation": 2
+    },
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/presentations/_/js/k=presentations.editor_js_prod_integrated.id.NuoQwn01k6Q.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB6fld2g93nIVtVfhpIwGIUScuJG2KCt6w/m=peoplehovercard",
+    "status": 200,
+    "bytes": 24541,
+    "sha256": "124184e367776c9d",
+    "hits": {},
+    "module": null
+   }
+  ]
+ },
+ "sheets": {
+  "chunkCount": 21,
+  "aggregateHits": {
+   "postMessage": 100,
+   "onmessage(worker)": 12,
+   "OT mutation": 711,
+   "new Worker(": 1,
+   "SharedWorker": 3,
+   "importScripts": 2,
+   "WebAssembly": 5,
+   "wasmBinary": 1,
+   "calcworker": 7,
+   "BrowserChannel/bind": 1
+  },
+  "chunks": [
+   {
+    "url": "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=ritzmain",
+    "status": 200,
+    "bytes": 2891872,
+    "sha256": "bc7250a1dcab84cc",
+    "hits": {
+     "postMessage": 3,
+     "onmessage(worker)": 2,
+     "OT mutation": 20
+    },
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=core",
+    "status": 200,
+    "bytes": 3058935,
+    "sha256": "9cc2452972083b64",
+    "hits": {
+     "new Worker(": 1,
+     "SharedWorker": 3,
+     "importScripts": 2,
+     "postMessage": 41,
+     "WebAssembly": 5,
+     "wasmBinary": 1,
+     "calcworker": 7,
+     "onmessage(worker)": 5,
+     "BrowserChannel/bind": 1,
+     "OT mutation": 184
+    },
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=edit",
+    "status": 200,
+    "bytes": 4674109,
+    "sha256": "9470fca2765ca429",
+    "hits": {
+     "postMessage": 19,
+     "onmessage(worker)": 1,
+     "OT mutation": 199
+    },
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=docos",
+    "status": 200,
+    "bytes": 1450300,
+    "sha256": "6980193b7542ab12",
+    "hits": {
+     "postMessage": 6,
+     "OT mutation": 8
+    },
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=postshellbase",
+    "status": 200,
+    "bytes": 2661560,
+    "sha256": "8205961e74437c53",
+    "hits": {
+     "postMessage": 13,
+     "onmessage(worker)": 3,
+     "OT mutation": 9
+    },
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=revisions",
+    "status": 200,
+    "bytes": 98908,
+    "sha256": "31ce155ba1101da6",
+    "hits": {
+     "postMessage": 5,
+     "OT mutation": 282
+    },
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=assistant",
+    "status": 200,
+    "bytes": 428330,
+    "sha256": "df0a6a4c283155f5",
+    "hits": {
+     "OT mutation": 2
+    },
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=onepick",
+    "status": 200,
+    "bytes": 57187,
+    "sha256": "9c899f7f3231a691",
+    "hits": {
+     "postMessage": 5
+    },
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=ritzfilter",
+    "status": 200,
+    "bytes": 10265,
+    "sha256": "fbde491a392a11f2",
+    "hits": {},
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=namedtables",
+    "status": 200,
+    "bytes": 35314,
+    "sha256": "e9944c889cd608ae",
+    "hits": {},
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=columnsmith",
+    "status": 200,
+    "bytes": 61431,
+    "sha256": "d4f3c45e451894e2",
+    "hits": {},
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=chips",
+    "status": 200,
+    "bytes": 123050,
+    "sha256": "34ae038e1bd2df27",
+    "hits": {},
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=inlineinsert",
+    "status": 200,
+    "bytes": 72535,
+    "sha256": "d4d94f304db10297",
+    "hits": {
+     "OT mutation": 1
+    },
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=ritzgenblocks",
+    "status": 200,
+    "bytes": 43555,
+    "sha256": "c6fac8ea1fd7a34a",
+    "hits": {},
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=ritzbuildingblocks",
+    "status": 200,
+    "bytes": 101506,
+    "sha256": "736892d5defc41a3",
+    "hits": {
+     "OT mutation": 1
+    },
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=ritzfunctionhelpcontent",
+    "status": 200,
+    "bytes": 735844,
+    "sha256": "6d820c88336b6c8e",
+    "hits": {},
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=meet",
+    "status": 200,
+    "bytes": 71904,
+    "sha256": "af087eff987f562b",
+    "hits": {
+     "postMessage": 1,
+     "onmessage(worker)": 1,
+     "OT mutation": 1
+    },
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=ritzmaestro",
+    "status": 200,
+    "bytes": 108743,
+    "sha256": "0d42342d916c4377",
+    "hits": {
+     "postMessage": 7,
+     "OT mutation": 1
+    },
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=peoplehovercard",
+    "status": 200,
+    "bytes": 23576,
+    "sha256": "f675ae1635fe6223",
+    "hits": {},
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=approvals",
+    "status": 200,
+    "bytes": 15643,
+    "sha256": "3e40a530fe34d208",
+    "hits": {
+     "OT mutation": 3
+    },
+    "module": null
+   },
+   {
+    "url": "https://docs.google.com/_/spreadsheets/_/js/k=spreadsheets.waffle_js_prod.id.f319zT8dg1w.es5.O/am=ACAAYADA/d=0/wt=0/rs=AB9W7jsXJuDR9a5g87QPUjMdXdcIwwtkJA/m=emojidata",
+    "status": 200,
+    "bytes": 340827,
+    "sha256": "f4b60c2d9b416b7e",
+    "hits": {},
+    "module": null
+   }
+  ]
+ }
+}

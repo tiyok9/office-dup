@@ -1,0 +1,326 @@
+{
+ "docs": {
+  "target_url": "https://docs.google.com/document/d/0B2d6r6Mo5NUua3l0eUpFYURSY1E/edit",
+  "title": "Halaman Tidak Ditemukan",
+  "dom_total_nodes": 44,
+  "dom_nodes_returned": 44,
+  "top_tags": [
+   [
+    "#text",
+    13
+   ],
+   [
+    "div",
+    6
+   ],
+   [
+    "p",
+    5
+   ],
+   [
+    "style",
+    4
+   ],
+   [
+    "meta",
+    3
+   ],
+   [
+    "html",
+    2
+   ],
+   [
+    "link",
+    2
+   ],
+   [
+    "a",
+    2
+   ],
+   [
+    "#document",
+    1
+   ],
+   [
+    "head",
+    1
+   ],
+   [
+    "script",
+    1
+   ],
+   [
+    "title",
+    1
+   ],
+   [
+    "body",
+    1
+   ],
+   [
+    "img",
+    1
+   ]
+  ],
+  "canvas_count": 0,
+  "svg_count": 0,
+  "iframe_count": 0,
+  "table_tr_td": [
+   0,
+   0,
+   0
+  ],
+  "a11y_total": 34,
+  "a11y_text": true,
+  "scripts_total": 1,
+  "frames": 1,
+  "resources": 0,
+  "network_requests": 0,
+  "ws_conns": 0,
+  "workers": 0,
+  "console_events": 0,
+  "completeness_status": "policy_filtered",
+  "policy_filtered": [
+   "json_body_shapes",
+   "metadata",
+   "resources",
+   "script_sources",
+   "storage_keys",
+   "websocket_shapes"
+  ],
+  "attach_limited": [
+   "console_events",
+   "metadata",
+   "network_requests",
+   "websocket_connections",
+   "websocket_frames"
+  ],
+  "truncated": [],
+  "unavailable": [],
+  "storage_usage_bytes": 0,
+  "local_storage_keys": [],
+  "indexed_db_names": [],
+  "cache_names": [],
+  "values_redacted": true,
+  "canvases": []
+ },
+ "slides": {
+  "target_url": "https://docs.google.com/presentation/d/1--vRBDTp0pf_Eck2Ga8XffBWn7gbUpnbuehkRnJE8vg/edit?slide=id.p",
+  "title": "KRU\u0160EVAC NEKRETNINE - Google Slide",
+  "dom_total_nodes": 1910,
+  "dom_nodes_returned": 1910,
+  "top_tags": [
+   [
+    "g",
+    662
+   ],
+   [
+    "div",
+    404
+   ],
+   [
+    "#text",
+    352
+   ],
+   [
+    "text",
+    182
+   ],
+   [
+    "span",
+    60
+   ],
+   [
+    "script",
+    52
+   ],
+   [
+    "rect",
+    40
+   ],
+   [
+    "path",
+    35
+   ],
+   [
+    "svg",
+    18
+   ],
+   [
+    "meta",
+    16
+   ],
+   [
+    "link",
+    11
+   ],
+   [
+    "::before",
+    9
+   ],
+   [
+    "defs",
+    8
+   ],
+   [
+    "clippath",
+    8
+   ]
+  ],
+  "canvas_count": 0,
+  "svg_count": 18,
+  "iframe_count": 6,
+  "table_tr_td": [
+   1,
+   2,
+   2
+  ],
+  "a11y_total": 808,
+  "a11y_text": true,
+  "scripts_total": 18,
+  "frames": 3,
+  "resources": 13,
+  "network_requests": 0,
+  "ws_conns": 0,
+  "workers": 0,
+  "console_events": 0,
+  "completeness_status": "policy_filtered",
+  "policy_filtered": [
+   "dom",
+   "frames",
+   "json_body_shapes",
+   "metadata",
+   "resources",
+   "script_sources",
+   "scripts",
+   "storage_keys",
+   "websocket_shapes"
+  ],
+  "attach_limited": [
+   "console_events",
+   "metadata",
+   "network_requests",
+   "websocket_connections",
+   "websocket_frames"
+  ],
+  "truncated": [],
+  "unavailable": [],
+  "storage_usage_bytes": 0,
+  "local_storage_keys": [],
+  "indexed_db_names": [],
+  "cache_names": [],
+  "values_redacted": true,
+  "canvases": []
+ },
+ "sheets": {
+  "target_url": "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit?gid=0",
+  "title": "Example Spreadsheet - Google Spreadsheet",
+  "dom_total_nodes": 2135,
+  "dom_nodes_returned": 2135,
+  "top_tags": [
+   [
+    "div",
+    1300
+   ],
+   [
+    "#text",
+    436
+   ],
+   [
+    "span",
+    241
+   ],
+   [
+    "script",
+    42
+   ],
+   [
+    "meta",
+    15
+   ],
+   [
+    "::before",
+    14
+   ],
+   [
+    "link",
+    10
+   ],
+   [
+    "path",
+    9
+   ],
+   [
+    "label",
+    8
+   ],
+   [
+    "style",
+    7
+   ],
+   [
+    "input",
+    7
+   ],
+   [
+    "svg",
+    6
+   ],
+   [
+    "td",
+    6
+   ],
+   [
+    "a",
+    4
+   ]
+  ],
+  "canvas_count": 1,
+  "svg_count": 6,
+  "iframe_count": 3,
+  "table_tr_td": [
+   1,
+   2,
+   6
+  ],
+  "a11y_total": 392,
+  "a11y_text": true,
+  "scripts_total": 33,
+  "frames": 1,
+  "resources": 22,
+  "network_requests": 0,
+  "ws_conns": 0,
+  "workers": 0,
+  "console_events": 0,
+  "completeness_status": "policy_filtered",
+  "policy_filtered": [
+   "dom",
+   "frames",
+   "json_body_shapes",
+   "metadata",
+   "resources",
+   "script_sources",
+   "scripts",
+   "storage_keys",
+   "websocket_shapes",
+   "workers"
+  ],
+  "attach_limited": [
+   "console_events",
+   "metadata",
+   "network_requests",
+   "websocket_connections",
+   "websocket_frames"
+  ],
+  "truncated": [],
+  "unavailable": [],
+  "storage_usage_bytes": 0,
+  "local_storage_keys": [],
+  "indexed_db_names": [],
+  "cache_names": [],
+  "values_redacted": true,
+  "canvases": [
+   {}
+  ]
+ }
+}

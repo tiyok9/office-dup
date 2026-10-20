@@ -1,0 +1,65 @@
+{
+ "docs": {
+  "evidence": "ev_9547b83ae6a65610f57",
+  "confidence": "observed",
+  "target_url": "https://docs.google.com/document/d/0B2d6r6Mo5NUua3l0eUpFYURSY1E/edit",
+  "scripts_observed": 1,
+  "scripts_analyzed": 1,
+  "artifacts": 1,
+  "total_bytes": 4823,
+  "largest": 4823,
+  "completeness": {
+   "status": "complete",
+   "parsed_scripts": 1,
+   "parse_failures": 0,
+   "visited_ast_nodes": 1385
+  },
+  "unknowns": 0,
+  "routes": 0,
+  "endpoints": 0,
+  "inferences": 0,
+  "sections": 1
+ },
+ "slides": {
+  "evidence": "ev_f62e0a4dfb3cc31e20e",
+  "confidence": "observed",
+  "target_url": "https://docs.google.com/presentation/d/1--vRBDTp0pf_Eck2Ga8XffBWn7gbUpnbuehkRnJE8vg/edit?slide=id.p",
+  "scripts_observed": 49,
+  "scripts_analyzed": 49,
+  "artifacts": 49,
+  "total_bytes": 14902940,
+  "largest": 6719844,
+  "completeness": {
+   "status": "complete",
+   "parsed_scripts": 49,
+   "parse_failures": 0,
+   "visited_ast_nodes": 5888736
+  },
+  "unknowns": 0,
+  "routes": 3,
+  "endpoints": 1,
+  "inferences": 1764,
+  "sections": 49
+ },
+ "sheets": {
+  "evidence": "ev_c17126643fdfe8cb9ea",
+  "confidence": "observed",
+  "target_url": "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit?gid=0",
+  "scripts_observed": 53,
+  "scripts_analyzed": 53,
+  "artifacts": 53,
+  "total_bytes": 17237559,
+  "largest": 4674109,
+  "completeness": {
+   "status": "complete",
+   "parsed_scripts": 53,
+   "parse_failures": 0,
+   "visited_ast_nodes": 5837339
+  },
+  "unknowns": 0,
+  "routes": 3,
+  "endpoints": 0,
+  "inferences": 777,
+  "sections": 53
+ }
+}

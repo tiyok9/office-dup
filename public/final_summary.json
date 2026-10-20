@@ -1,0 +1,182 @@
+{
+ "docs": {
+  "url": "https://docs.google.com/document/d/0B2DZqTRLDhefWTFjWTVKeWMwalE/edit?resourcekey=0-UmwOCM5rt3wbSo3U04KajQ",
+  "title": "2002 Nominee List (1).docx - Google Dokumen",
+  "scripts": 51,
+  "bytes": 17250107,
+  "modules": [
+   "kix_app",
+   "kix_docos",
+   "voice",
+   "kix_approvals",
+   "kix_pre_tertiary_deps",
+   "kix_core",
+   "peoplehovercard",
+   "kix_nestedsketchycore",
+   "datetimeresources",
+   "kix_tertiary",
+   "officeeditingfileextension",
+   "emojidata"
+  ],
+  "dom": 2229,
+  "a11y": 361,
+  "canvas": 2,
+  "svg": 2,
+  "iframe": 4,
+  "top_tags": [
+   [
+    "div",
+    1126
+   ],
+   [
+    "#text",
+    571
+   ],
+   [
+    "span",
+    405
+   ],
+   [
+    "script",
+    47
+   ],
+   [
+    "meta",
+    18
+   ],
+   [
+    "link",
+    13
+   ],
+   [
+    "::before",
+    7
+   ],
+   [
+    "style",
+    5
+   ]
+  ]
+ },
+ "slides": {
+  "url": "https://docs.google.com/presentation/d/1--vRBDTp0pf_Eck2Ga8XffBWn7gbUpnbuehkRnJE8vg/edit?slide=id.p",
+  "title": "KRU\u0160EVAC NEKRETNINE - Google Slide",
+  "scripts": 49,
+  "bytes": 14902940,
+  "modules": [
+   "tertiary",
+   "peoplehovercard",
+   "app",
+   "approvals",
+   "core",
+   "docos",
+   "pretertiarydeps"
+  ],
+  "dom": 1910,
+  "a11y": 808,
+  "canvas": 0,
+  "svg": 18,
+  "iframe": 6,
+  "top_tags": [
+   [
+    "g",
+    662
+   ],
+   [
+    "div",
+    404
+   ],
+   [
+    "#text",
+    352
+   ],
+   [
+    "text",
+    182
+   ],
+   [
+    "span",
+    60
+   ],
+   [
+    "script",
+    52
+   ],
+   [
+    "rect",
+    40
+   ],
+   [
+    "path",
+    35
+   ]
+  ]
+ },
+ "sheets": {
+  "url": "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit?gid=0",
+  "title": "Example Spreadsheet - Google Spreadsheet",
+  "scripts": 53,
+  "bytes": 17237559,
+  "modules": [
+   "ritzgenblocks",
+   "chips",
+   "core",
+   "docos",
+   "approvals",
+   "revisions",
+   "ritzmaestro",
+   "onepick",
+   "ritzmain",
+   "edit",
+   "peoplehovercard",
+   "ritzbuildingblocks",
+   "emojidata",
+   "assistant",
+   "postshellbase",
+   "namedtables",
+   "columnsmith",
+   "ritzfilter",
+   "ritzfunctionhelpcontent",
+   "inlineinsert"
+  ],
+  "dom": 2135,
+  "a11y": 392,
+  "canvas": 1,
+  "svg": 6,
+  "iframe": 3,
+  "top_tags": [
+   [
+    "div",
+    1300
+   ],
+   [
+    "#text",
+    436
+   ],
+   [
+    "span",
+    241
+   ],
+   [
+    "script",
+    42
+   ],
+   [
+    "meta",
+    15
+   ],
+   [
+    "::before",
+    14
+   ],
+   [
+    "link",
+    10
+   ],
+   [
+    "path",
+    9
+   ]
+  ]
+ }
+}

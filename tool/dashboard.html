@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Google Workspace · Docs, Sheets, Slides, Drive</title>
+  <style>
+    :root {
+      --g-blue: #1a73e8; --g-blue-hover: #1557b0; --g-blue-light: #e8f0fe;
+      --g-green: #0f9d58; --g-green-light: #e6f4ea;
+      --g-yellow: #f29900; --g-yellow-light: #fef7e0;
+      --g-red: #d93025;
+      --g-bg: #f8f9fa; --g-surface: #ffffff;
+      --g-border: #dadce0; --g-border-light: #ebebeb;
+      --g-text: #202124; --g-muted: #5f6368; --g-hover: #f1f3f4;
+      --shadow-sm: 0 1px 2px 0 rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15);
+      --shadow-md: 0 1px 3px 0 rgba(60,64,67,0.3), 0 4px 8px 3px rgba(60,64,67,0.15);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Google Sans", sans-serif; }
+    body { background: var(--g-bg); color: var(--g-text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+    /* TOP MASTER BAR */
+    .top-nav { height: 64px; background: var(--g-surface); border-bottom: 1px solid var(--g-border); display: flex; align-items: center; justify-content: space-between; padding: 0 16px; flex-shrink: 0; }
+    .brand-group { display: flex; align-items: center; gap: 12px; }
+    .app-icon { width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.15s; }
+    .app-icon:hover { background: var(--g-hover); }
+    .app-icon svg { width: 30px; height: 30px; }
+    .title-col { display: flex; flex-direction: column; }
+    .title-row { display: flex; align-items: center; gap: 8px; }
+    .doc-title-input { font-size: 18px; font-weight: 400; color: var(--g-text); border: 1px solid transparent; border-radius: 4px; padding: 2px 6px; outline: none; max-width: 380px; }
+    .doc-title-input:hover { border-color: var(--g-border); }
+    .doc-title-input:focus { border-color: var(--g-blue); background: var(--g-surface); }
+    .save-status { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--g-muted); user-select: none; }
+    .menu-row { display: flex; gap: 2px; margin-top: 2px; }
+    .menu-item { font-size: 13px; color: var(--g-muted); padding: 2px 8px; border-radius: 4px; cursor: pointer; user-select: none; }
+    .menu-item:hover { background: var(--g-hover); color: var(--g-text); }
+
+    .nav-actions { display: flex; align-items: center; gap: 12px; }
+    .telemetry-btn { display: flex; align-items: center; gap: 6px; background: #e8f0fe; color: #1a73e8; border: 1px solid #d2e3fc; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 500; cursor: pointer; }
+    .telemetry-btn:hover { background: #d2e3fc; }
+    .share-btn { display: flex; align-items: center; gap: 8px; background: #c2e7ff; color: #001d35; border: none; padding: 8px 18px; border-radius: 24px; font-size: 14px; font-weight: 500; cursor: pointer; }
+    .share-btn:hover { background: #b3dbf5; box-shadow: var(--shadow-sm); }
+    .avatar { width: 32px; height: 32px; border-radius: 50%; background: #0b57d0; color: white; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 500; }
+
+    /* APP SWITCHER TAB BAR */
+    .app-tabs { display: flex; align-items: center; gap: 4px; padding: 0 16px; background: var(--g-surface); border-bottom: 1px solid var(--g-border); height: 42px; flex-shrink: 0; }
+    .app-tab { display: flex; align-items: center; gap: 8px; padding: 6px 16px; border-radius: 8px 8px 0 0; font-size: 13px; font-weight: 500; color: var(--g-muted); cursor: pointer; border-bottom: 3px solid transparent; user-select: none; }
+    .app-tab:hover { background: var(--g-hover); color: var(--g-text); }
+    .app-tab.active-docs { color: var(--g-blue); border-bottom-color: var(--g-blue); background: var(--g-blue-light); }
+    .app-tab.active-sheets { color: var(--g-green); border-bottom-color: var(--g-green); background: var(--g-green-light); }
+    .app-tab.active-slides { color: var(--g-yellow); border-bottom-color: var(--g-yellow); background: var(--g-yellow-light); }
+    .app-tab.active-drive { color: #5f6368; border-bottom-color: #5f6368; background: #e8eaed; }
+    .app-tab svg { width: 16px; height: 16px; }
+
+    /* TOOLBAR */
+    .toolbar { min-height: 40px; background: #edf2fa; border-bottom: 1px solid var(--g-border); display: flex; align-items: center; gap: 4px; padding: 0 12px; flex-shrink: 0; flex-wrap: nowrap; overflow-x: auto; }
+    .tb-group-docs, .tb-group-sheets, .tb-group-slides { align-items: center; gap: 4px; flex-wrap: nowrap; }
+    .tb-btn { width: 28px; height: 28px; border-radius: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--g-muted); user-select: none; position: relative; }
+    .tb-btn:hover { background: rgba(0,0,0,0.06); color: var(--g-text); }
+    .tb-btn.active { background: #d2e3fc; color: #174ea6; }
+    .tb-btn svg { width: 16px; height: 16px; }
+    .tb-sep { width: 1px; height: 20px; background: var(--g-border); margin: 0 4px; }
+    /* Kartu bagan mengambang di atas grid Sheets (SVG murni, tanpa pustaka). */
+    .ritz-chart-overlay { position: absolute; z-index: 15; background: #fff; border: 1px solid #dadce0;
+      border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,.15); padding: 8px; font-family: Arial, sans-serif; }
+    .ritz-chart-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+    .ritz-chart-title { flex: 1; font-size: 12px; font-weight: 600; color: #202124; }
+    .ritz-chart-type { font-size: 11px; border: 1px solid #dadce0; border-radius: 4px; padding: 2px; }
+    .ritz-chart-close { border: 0; background: transparent; font-size: 16px; line-height: 1; cursor: pointer; color: #5f6368; }
+    .ritz-chart-body svg { display: block; }
+    .tb-select { border: none; background: transparent; font-size: 13px; color: var(--g-text); padding: 4px 6px; border-radius: 4px; outline: none; cursor: pointer; }
+    .tb-select:hover { background: rgba(0,0,0,0.06); }
+    .tb-dot { position: absolute; bottom: 2px; left: 6px; right: 6px; height: 3px; border-radius: 2px; }
+
+    /* WORKSPACE BODY */
+    .workspace-area { flex: 1; display: flex; overflow: hidden; position: relative; }
+
+    /* VIEW: DRIVE HUB */
+    .view-drive { flex: 1; overflow-y: auto; padding: 24px 40px; display: none; }
+    .drive-header { margin-bottom: 18px; display: flex; justify-content: space-between; align-items: flex-end; }
+    .drive-header h2 { font-size: 22px; font-weight: 400; color: var(--g-text); margin-bottom: 4px; }
+    .new-doc-btn { display: flex; align-items: center; gap: 8px; background: #1a73e8; color: #fff; padding: 8px 18px; border-radius: 20px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; }
+    .new-doc-btn:hover { background: #1557b0; }
+    .drive-controls { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+    .drive-search-wrapper { position: relative; flex: 1; max-width: 520px; }
+    .drive-search { width: 100%; height: 44px; border: 1px solid var(--g-border); border-radius: 22px; padding: 0 16px 0 44px; font-size: 14px; outline: none; background: #f1f3f4; }
+    .drive-search:focus { background: #fff; border-color: #4285f4; box-shadow: 0 1px 6px rgba(32,33,36,0.28); }
+    .drive-search-icon { position: absolute; left: 16px; top: 13px; color: #5f6368; width: 18px; height: 18px; }
+    .filter-chip { padding: 6px 14px; border: 1px solid var(--g-border); border-radius: 16px; font-size: 13px; color: var(--g-muted); cursor: pointer; background: #fff; user-select: none; }
+    .filter-chip:hover { background: var(--g-hover); }
+    .filter-chip.chip-active { background: #e8f0fe; border-color: #1a73e8; color: #1a73e8; font-weight: 600; }
+    .drive-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+    .drive-card:hover { box-shadow: var(--shadow-md) !important; border-color: #4285f4 !important; }
+    .drive-card .card-action:hover { background: #f1f3f4; }
+    .tag-kix { background: #e8f0fe; color: #1a73e8; }
+    .tag-ritz { background: #e6f4ea; color: #137333; }
+    .tag-punch { background: #fef7e0; color: #b06000; }
+
+    /* VIEW: DOCS (KIX) */
+    .view-docs { flex: 1; display: none; flex-direction: column; overflow: hidden; background: #f8f9fa; position: relative; }
+    .ruler-bar { height: 20px; background: #f1f3f4; border-bottom: 1px solid #dadce0; display: flex; align-items: center; justify-content: center; font-size: 9px; color: #70757a; letter-spacing: 20px; user-select: none; }
+    .docs-scroll-container { flex: 1; overflow-y: auto; display: flex; flex-direction: column; align-items: center; padding: 28px 0; outline: none; }
+    .kix-page { width: 816px; min-height: 1056px; background: var(--g-surface); box-shadow: 0 1px 3px rgba(60,64,67,0.15), 0 2px 8px 4px rgba(60,64,67,0.1); margin-bottom: 24px; position: relative; padding: 72px 90px; cursor: text; }
+    .kix-page-header { font-size: 11px; color: #9aa0a6; position: absolute; top: 32px; left: 90px; text-transform: uppercase; }
+    .kix-canvas-tile-content { width: 100%; height: 900px; display: block; border: 1px dashed rgba(66,133,244,0.3); border-radius: 2px; }
+    .docs-status-bar { height: 28px; background: var(--g-surface); border-top: 1px solid var(--g-border); display: flex; align-items: center; justify-content: space-between; padding: 0 16px; font-size: 12px; color: var(--g-muted); }
+    #kixHiddenInput { position: absolute; top: -9999px; left: -9999px; opacity: 0; width: 1px; height: 1px; }
+
+    /* VIEW: SHEETS (RITZ) */
+    .view-sheets { flex: 1; display: none; flex-direction: column; overflow: hidden; background: #ffffff; }
+    .formula-bar-container { height: 36px; border-bottom: 1px solid var(--g-border); display: flex; align-items: center; padding: 0 8px; background: #ffffff; gap: 8px; }
+    .cell-name-box { width: 64px; height: 26px; border: 1px solid var(--g-border); border-radius: 4px; text-align: center; font-size: 13px; font-weight: 500; color: var(--g-text); line-height: 24px; background: #f8f9fa; }
+    .fx-symbol { font-style: italic; font-weight: bold; color: #70757a; font-size: 14px; padding: 0 4px; user-select: none; }
+    .formula-input { flex: 1; border: 1px solid var(--g-border); border-radius: 4px; padding: 4px 8px; font-size: 13px; font-family: 'Roboto Mono', monospace; }
+
+    /* CATATAN PEMBICARA (Slides) */
+    .speaker-notes-panel { border-top: 1px solid var(--g-border); background: #fff; padding: 8px 12px 10px; flex-shrink: 0; }
+    .speaker-notes-label { font-size: 11px; font-weight: 600; color: var(--g-muted); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 4px; }
+    .speaker-notes-input { width: 100%; min-height: 62px; resize: vertical; border: 1px solid var(--g-border); border-radius: 4px; padding: 6px 8px; font-size: 13px; font-family: inherit; color: var(--g-text); outline: none; box-sizing: border-box; }
+    .speaker-notes-input:focus { border-color: #1a73e8; box-shadow: 0 0 0 2px rgba(26,115,232,0.15); }
+    .formula-input:focus { border-color: var(--g-green); background: #fcfcfc; }
+    .calc-btn { background: #137333; color: white; border: none; padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: 500; cursor: pointer; }
+    .calc-btn:hover { background: #0d5c28; }
+    .sheets-grid-wrapper { flex: 1; position: relative; overflow: hidden; background: #f8f9fa; }
+    #sheetsGridCanvas { width: 100%; height: 100%; display: block; }
+    .sheets-tab-bar { height: 34px; background: #f1f3f4; border-top: 1px solid var(--g-border); display: flex; align-items: center; padding: 0 8px; gap: 4px; }
+    .sheet-tab-item { background: #ffffff; border-radius: 4px 4px 0 0; padding: 5px 16px; font-size: 12px; font-weight: 500; color: #137333; border-top: 3px solid #137333; box-shadow: 0 1px 2px rgba(0,0,0,0.1); cursor: pointer; }
+
+    /* VIEW: SLIDES (PUNCH) */
+    .view-slides { flex: 1; display: none; overflow: hidden; background: #e9eef6; }
+    .slides-layout { display: flex; width: 100%; height: 100%; }
+    .slides-filmstrip { width: 180px; background: #ffffff; border-right: 1px solid var(--g-border); overflow-y: auto; padding: 16px 12px; display: flex; flex-direction: column; gap: 14px; }
+    .slides-stage { flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px; position: relative; }
+    .slides-viewport { width: 960px; height: 540px; background: #ffffff; box-shadow: var(--shadow-md); border-radius: 4px; overflow: hidden; position: relative; }
+    .punch-viewer-svg { width: 100%; height: 100%; display: block; }
+
+    /* FLOATING REA TELEMETRY DRAWER */
+    .telemetry-drawer { position: fixed; bottom: 16px; right: 16px; width: 440px; max-height: 520px; background: #1e293b; color: #f8fafc; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.36); border: 1px solid #334155; display: flex; flex-direction: column; z-index: 1000; overflow: hidden; transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1); }
+    .telemetry-drawer.minimized { transform: translateY(calc(100% - 44px)); }
+    .drawer-header { height: 44px; background: #0f172a; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #334155; cursor: pointer; user-select: none; }
+    .drawer-header h3 { font-size: 13px; font-weight: 600; color: #38bdf8; display: flex; align-items: center; gap: 8px; }
+    .drawer-body { padding: 14px; overflow-y: auto; flex: 1; font-size: 12px; line-height: 1.5; }
+    .drawer-metric { background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 10px; margin-bottom: 10px; }
+    .drawer-metric h4 { color: #94a3b8; font-size: 11px; text-transform: uppercase; margin-bottom: 4px; }
+    .code-snippet { background: #000; color: #34d399; padding: 8px; border-radius: 4px; font-family: monospace; font-size: 11px; white-space: pre-wrap; margin-top: 6px; }
+    .drawer-test-btn { background: #1a73e8; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; width: 100%; margin-top: 4px; }
+    .drawer-test-btn:hover { background: #1557b0; }
+
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    @media print { .top-nav, .app-tabs, .toolbar, .telemetry-drawer, .slides-filmstrip { display: none !important; } }
+  </style>
+</head>
+<body>
+
+  <!-- MASTER TOPBAR -->
+  <header class="top-nav">
+    <div class="brand-group">
+      <div class="app-icon" id="mainAppIcon" onclick="window.workspaceApp.switchApp('drive')">
+        <svg id="appLogoSvg" viewBox="0 0 24 24" fill="#1a73e8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/></svg>
+      </div>
+      <div class="title-col">
+        <div class="title-row">
+          <input type="text" id="docTitle" class="doc-title-input" value="Memuat judul...">
+          <div class="save-status" id="saveStatusIndicator">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="#5f6368"><path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM10 17l-3.5-3.5 1.41-1.41L10 14.17l5.59-5.59L17 10l-7 7z"/></svg>
+            <span>Semua perubahan disimpan ke Drive</span>
+          </div>
+        </div>
+        <div class="menu-row">
+          <span class="menu-item" data-menu="file">File</span>
+          <span class="menu-item" data-menu="edit">Edit</span>
+          <span class="menu-item" data-menu="view">View</span>
+          <span class="menu-item" data-menu="insert">Insert</span>
+          <span class="menu-item" data-menu="format">Format</span>
+          <span class="menu-item" data-menu="tools">Tools</span>
+          <span class="menu-item" data-menu="help">Help</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="nav-actions">
+      <button class="telemetry-btn" onclick="toggleTelemetry()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M13 3v6h8V3h-8zm0 18h8v-10h-8v10zM3 21h8v-6H3v6zm0-8h8V3H3v10z"/></svg>
+        <span>Engine Telemetry</span>
+      </button>
+      <button class="share-btn" id="shareModalBtn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92c0-1.61-1.31-2.92-2.92-2.92z"/></svg>
+        <span>Bagikan</span>
+      </button>
+      <div class="avatar">G</div>
+    </div>
+  </header>
+
+  <!-- APP SWITCHER TABS -->
+  <div class="app-tabs">
+    <div class="app-tab active-docs" id="tab-docs" onclick="window.workspaceApp.switchApp('docs')">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/></svg>
+      <span>Google Dokumen (Kix Engine)</span>
+    </div>
+    <div class="app-tab" id="tab-sheets" onclick="window.workspaceApp.switchApp('sheets')">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H6v-3h3v3zm0-5H6V9h3v3zm0-5H6V6h3v1zm5 10h-3v-3h3v3zm0-5h-3V9h3v3zm0-5h-3V6h3v1zm5 10h-3v-3h3v3zm0-5h-3V9h3v3zm0-5h-3V6h3v1z"/></svg>
+      <span>Google Spreadsheet (Ritz / Waffle)</span>
+    </div>
+    <div class="app-tab" id="tab-slides" onclick="window.workspaceApp.switchApp('slides')">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM8 7h8v2H8zm0 4h8v2H8zm0 4h5v2H8z"/></svg>
+      <span>Google Slide (Punch Engine)</span>
+    </div>
+    <div class="app-tab" id="tab-drive" onclick="window.workspaceApp.switchApp('drive')">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+      <span>Drive Hub (Galeri Dokumen)</span>
+    </div>
+  </div>
+
+  <!-- TOOLBAR (kontekstual per aplikasi) -->
+  <div class="toolbar" id="appToolbar">
+    <!-- Global: selalu tampil -->
+    <div class="tb-btn" id="tbUndo" title="Undo (Ctrl+Z)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg></div>
+    <div class="tb-btn" id="tbRedo" title="Redo (Ctrl+Y)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.4 10.6C16.55 8.99 14.15 8 11.5 8c-4.65 0-8.58 3.03-9.96 7.22L3.9 16c1.05-3.19 4.05-5.5 7.6-5.5 1.95 0 3.73.72 5.12 1.88L13 16h9V7l-3.6 3.6z"/></svg></div>
+    <div class="tb-btn" id="tbPrint" title="Cetak / Print (Ctrl+P)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg></div>
+    <div class="tb-btn" id="tbWordCount" title="Penghitung Kata"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4z"/></svg></div>
+    <div class="tb-btn" id="tbShortcuts" title="Pintasan Keyboard"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 5H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-9 3h2v2h-2V8zm0 3h2v2h-2v-2zM8 8h2v2H8V8zm0 3h2v2H8v-2zm-1 2H5v-2h2v2zm0-3H5V8h2v2zm9 7H8v-2h8v2zm0-4h-2v-2h2v2zm0-3h-2V8h2v2zm3 3h-2v-2h2v2zm0-3h-2V8h2v2z"/></svg></div>
+    <div class="tb-sep"></div>
+
+    <!-- ZOOM (global) -->
+    <select class="tb-select" id="tbZoom" title="Zoom"><option>100%</option><option>75%</option><option>125%</option><option>Fit</option></select>
+    <div class="tb-sep tb-sep-global"></div>
+
+    <!-- GRUP DOCS -->
+    <span class="tb-group-docs" style="display:flex; align-items:center; gap:4px;">
+      <select class="tb-select" id="tbFontFamily" title="Font" style="width: 110px;">
+        <option value="Arial">Arial</option>
+        <option value="Google Sans">Google Sans</option>
+        <option value="Roboto">Roboto</option>
+        <option value="Times New Roman">Times New Roman</option>
+        <option value="Courier New">Courier New</option>
+      </select>
+      <select class="tb-select" id="tbFontSize" title="Ukuran Font" style="width: 56px;">
+        <option>10</option><option>12</option><option>13</option><option>14</option><option>16</option><option>18</option><option>20</option><option>24</option><option>32</option>
+      </select>
+      <div class="tb-sep"></div>
+      <div class="tb-btn" id="tbBold" style="font-weight:bold;" title="Tebal (Ctrl+B)">B</div>
+      <div class="tb-btn" id="tbItalic" style="font-style:italic;" title="Miring (Ctrl+I)">I</div>
+      <div class="tb-btn" id="tbUnderline" style="text-decoration:underline;" title="Garis Bawah (Ctrl+U)">U</div>
+      <div class="tb-btn" id="tbStrike" style="text-decoration:line-through;" title="Coret">S</div>
+      <div class="tb-btn" id="tbColor" title="Warna Teks"><span>A</span><span class="tb-dot" id="tbColorDot" style="background:#ea4335;"></span></div>
+      <div class="tb-btn" id="tbBg" title="Warna Latar Teks"><span style="background:#fef7e0; padding:0 3px;">A</span><span class="tb-dot" id="tbBgDot" style="background:#fef7e0;"></span></div>
+      <div class="tb-sep"></div>
+      <div class="tb-btn" id="tbAlignLeft" title="Rata Kiri"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M15 15H3v2h12v-2zm0-8H3v2h12V7zM3 13h18v-2H3v2zm0 8h18v-2H3v2zM3 3v2h18V3H3z"/></svg></div>
+      <div class="tb-btn" id="tbAlignCenter" title="Rata Tengah"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 15v2h10v-2H7zm-4 6h18v-2H3v2zm0-8h18v-2H3v2zm4-6v2h10V7H7zM3 3v2h18V3H3z"/></svg></div>
+      <div class="tb-btn" id="tbAlignRight" title="Rata Kanan"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 21h18v-2H3v2zm6-4h12v-2H9v2zm-6-4h18v-2H3v2zm6-4h12V7H9v2zM3 3v2h18V3H3z"/></svg></div>
+      <div class="tb-sep"></div>
+      <select class="tb-select" id="tbParagraphStyle" title="Gaya Teks (Normal / Judul / Heading)" style="width: 124px;">
+        <option value="normal">Teks normal</option>
+        <option value="title">Judul (Title)</option>
+        <option value="heading1">Heading 1</option>
+        <option value="heading2">Heading 2</option>
+        <option value="heading3">Heading 3</option>
+      </select>
+      <div class="tb-btn" id="tbBulletList" title="Daftar Butir (Bullet List)">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 6h2v2H4zm0 5h2v2H4zm0 5h2v2H4zM8 6h12v2H8zm0 5h12v2H8zm0 5h12v2H8z"/></svg>
+      </div>
+      <div class="tb-btn" id="tbNumberedList" title="Daftar Bernomor (Numbered List)">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M2 17h2v.5H3v1h1v.5H2v1h3v-4H2zm1-9h1V4H2v1h1zm-1 3h1.8L2 13.1v.9h3v-1H3.2L5 10.9V10H2zm5-6v2h14V5zm0 14h14v-2H7zm0-6h14v-2H7z"/></svg>
+      </div>
+      <div class="tb-btn" id="tbChecklist" title="Daftar Periksa (Checklist)">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M22 5.18 10.59 16.6l-4.24-4.24 1.41-1.41 2.83 2.83 10-10L22 5.18zm-2.21 5.04c.13.57.21 1.17.21 1.78 0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8c1.58 0 3.04.46 4.28 1.25l1.44-1.44C16.1 2.67 14.13 2 12 2 6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10c0-1.19-.22-2.33-.6-3.39l-1.61 1.61z"/></svg>
+      </div>
+      <div class="tb-btn" id="tbCheckAll" title="Centang Semua Butir Ceklis" style="width:auto; padding:0 8px; font-size:12px; font-weight:500;">Centang</div>
+      <div class="tb-btn" id="tbIndentDec" title="Kurangi Indentasi">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M11 17h10v-2H11zm0-6h10v-2H11zm0 10h10v-2H11zM3 8v8l4-4zm1-4h16V2H4z"/></svg>
+      </div>
+      <div class="tb-btn" id="tbIndentInc" title="Tambah Indentasi">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 21h18v-2H3zm0-4h10v-2H3zm0-6h10v-2H3zm0-6v2h18V5zm10 5 4 4-4 4z"/></svg>
+      </div>
+      <select class="tb-select" id="tbLineSpacing" title="Spasi Baris" style="width: 78px;">
+        <option value="1">1,0</option>
+        <option value="1.15">1,15</option>
+        <option value="1.5">1,5</option>
+        <option value="2">2,0</option>
+      </select>
+      <div class="tb-btn" id="tbClearFormat" title="Hapus Format (Clear Formatting)">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3.27 5 2 6.27l6.97 6.97L6.5 19h3l1.57-3.66L16.73 21 18 19.73 3.55 5.27 3.27 5zM6 5v.18L8.82 8h2.4l-.72 1.68 2.1 2.1L14.21 8H20V5H6z"/></svg>
+      </div>
+    </span>
+
+    <!-- GRUP SHEETS -->
+    <span class="tb-group-sheets" style="display:none; align-items:center; gap:4px;">
+      <select class="tb-select" id="tbSheetSum" title="Fungsi Cepat (Sigma)" style="width: 66px;">
+        <option value="">Σ</option>
+        <option value="SUM">SUM</option>
+        <option value="AVERAGE">AVERAGE</option>
+        <option value="COUNT">COUNT</option>
+        <option value="MAX">MAX</option>
+        <option value="MIN">MIN</option>
+      </select>
+      <div class="tb-btn" id="tbCurrency" title="Format Mata Uang ($)">$</div>
+      <div class="tb-btn" id="tbPercent" title="Format Persen (%)">%</div>
+      <div class="tb-btn" id="tbDecDec" title="Kurangi Desimal">.0</div>
+      <div class="tb-btn" id="tbDecInc" title="Tambah Desimal">.00</div>
+      <div class="tb-sep"></div>
+      <div class="tb-btn" id="tbSheetBold" title="Tebal (Ctrl+B)" style="font-weight:bold;">B</div>
+      <div class="tb-btn" id="tbSheetItalic" title="Miring (Ctrl+I)" style="font-style:italic;">I</div>
+      <div class="tb-btn" id="tbSheetStrike" title="Coret" style="text-decoration:line-through;">S</div>
+      <div class="tb-sep"></div>
+      <div class="tb-btn" id="tbSheetAlignLeft" title="Rata Kiri"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M15 15H3v2h12v-2zm0-8H3v2h12V7zM3 13h18v-2H3v2zm0 8h18v-2H3v2zM3 3v2h18V3H3z"/></svg></div>
+      <div class="tb-btn" id="tbSheetAlignCenter" title="Rata Tengah"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 15v2h10v-2H7zm-4 6h18v-2H3v2zm0-8h18v-2H3v2zm4-6v2h10V7H7zM3 3v2h18V3H3z"/></svg></div>
+      <div class="tb-btn" id="tbSheetAlignRight" title="Rata Kanan"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 21h18v-2H3v2zm6-4h12v-2H9v2zm-6-4h18v-2H3v2zm6-4h12V7H9v2zM3 3v2h18V3H3z"/></svg></div>
+      <div class="tb-sep"></div>
+      <div class="tb-btn" id="tbSheetBg" title="Warna Isian Sel"><span style="background:#fef7e0; padding:0 3px;">A</span></div>
+      <div class="tb-sep"></div>
+      <div class="tb-btn" id="tbInsertChart" title="Sisipkan Bagan (dari kolom aktif)">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 9h3v11H5zm5.5-5h3v16h-3zM16 13h3v7h-3zM3 21h18v1.5H3z"/></svg>
+      </div>
+      <div class="tb-btn" id="tbRemoveChart" title="Hapus Bagan / Diagram" style="width:auto; padding:0 8px; font-size:12px; font-weight:500;">Hapus Diagram</div>
+      <div class="tb-sep"></div>
+      <div class="tb-btn" id="tbSortAsc" title="Urutkan Kolom Aktif A→Z / Kecil→Besar (Sort A-Z)">A↓</div>
+      <div class="tb-btn" id="tbSortDesc" title="Urutkan Kolom Aktif Z→A / Besar→Kecil (Sort Z-A)">Z↓</div>
+    </span>
+
+    <!-- GRUP SLIDES -->
+    <span class="tb-group-slides" style="display:none; align-items:center; gap:4px;">
+      <div class="tb-btn" id="tbInsertRect" title="Sisipkan Kotak"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 5h14v14H5z" opacity="0.35"/><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14z"/></svg></div>
+      <div class="tb-btn" id="tbInsertCircle" title="Sisipkan Lingkaran"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="7" opacity="0.35"/><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg></div>
+      <div class="tb-btn" id="tbInsertLine" title="Sisipkan Garis"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 11h16v2H4z"/></svg></div>
+      <div class="tb-btn" id="tbInsertText" title="Sisipkan Teks">T</div>
+      <div class="tb-sep"></div>
+      <select class="tb-select" id="tbSlideLayout" title="Tata Letak Slide (Layout)" style="width: 118px;">
+        <option value="blank">Kosong</option>
+        <option value="title">Judul Saja</option>
+        <option value="title_body">Judul &amp; Isi</option>
+        <option value="two_column">Dua Kolom</option>
+      </select>
+      <select class="tb-select" id="tbSlideTheme" title="Tema Presentasi (Theme)" style="width: 118px;">
+        <option value="light">Terang Klasik</option>
+        <option value="dark">Gelap Elegan</option>
+        <option value="sunset">Sunset Hangat</option>
+        <option value="mint">Mint Modern</option>
+      </select>
+      <div class="tb-sep"></div>
+      <div class="tb-btn" id="tbDuplicateSlide" title="Duplikat Slide"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg></div>
+      <div class="tb-btn" id="tbDeleteSlide" title="Hapus Slide"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></div>
+      <div class="tb-btn" id="tbSlideUp" title="Pindah Slide ke Atas"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4l-8 8h6v8h4v-8h6z"/></svg></div>
+      <div class="tb-btn" id="tbSlideDown" title="Pindah Slide ke Bawah"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 20l8-8h-6V4h-4v8H4z"/></svg></div>
+      <div class="tb-sep"></div>
+      <div class="tb-btn" id="tbSpeakerNotes" title="Catatan Pembicara" style="width:auto; padding:0 10px; gap:5px; font-size:13px; font-weight:500;">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/></svg>
+        <span>Catatan</span>
+      </div>
+      <div class="tb-sep"></div>
+      <div class="tb-btn" id="tbPresent" title="Presentasikan (F5)" style="color:#f29900; width:auto; padding:0 10px; gap:5px; font-size:13px; font-weight:500;">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM10 8v8l6-4-6-4z"/></svg>
+        <span>Presentasikan</span>
+      </div>
+    </span>
+
+    <!-- Spacer + Calc (Sheets) -->
+    <span style="flex:1;"></span>
+    <button class="calc-btn" id="sheetCalcBtn" title="Hitung ulang seluruh sel via Formula Engine server" style="display:none;">Hitung via Worker</button>
+  </div>
+
+  <!-- WORKSPACE BODY -->
+  <main class="workspace-area">
+
+    <!-- 1. GOOGLE DOCS (KIX) -->
+    <div class="view-docs" id="view-docs">
+      <textarea id="kixHiddenInput" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
+      <div class="ruler-bar">| · · · · 1 · · · · 2 · · · · 3 · · · · 4 · · · · 5 · · · · 6 · · · · 7 · · · ·|</div>
+      <div class="docs-scroll-container" id="docsScrollBox" tabindex="0"></div>
+      <div class="docs-status-bar">
+        <div id="docsStatusText">Halaman <span id="docsCurPage">1</span> · Menghitung kata...</div>
+        <div>Engine: <strong>Kix (Multi-Canvas Tile Virtualization)</strong> · Teks diketik nyata ke Canvas 2D</div>
+      </div>
+    </div>
+
+    <!-- 2. GOOGLE SHEETS (RITZ) -->
+    <div class="view-sheets" id="view-sheets">
+      <div class="formula-bar-container">
+        <div class="cell-name-box" id="sheetActiveCell">A1</div>
+        <span class="fx-symbol">fx</span>
+        <input type="text" class="formula-input" id="sheetFormulaInput" placeholder="Masukkan nilai atau formula, contoh: =SUM(C2:C4)">
+      </div>
+      <div class="sheets-grid-wrapper">
+        <canvas id="sheetsGridCanvas"></canvas>
+      </div>
+      <div class="sheets-tab-bar">
+        <div class="sheet-tab-item">Sheet1</div>
+      </div>
+    </div>
+
+    <!-- 3. GOOGLE SLIDES (PUNCH) -->
+    <div class="view-slides" id="view-slides">
+      <div class="slides-layout">
+        <div class="slides-filmstrip" id="slidesFilmstrip"></div>
+        <div class="slides-stage">
+          <div class="slides-viewport">
+            <svg class="punch-viewer-svg" id="punchSvgStage" viewBox="0 0 960 540" xmlns="http://www.w3.org/2000/svg"></svg>
+          </div>
+          <!-- Catatan pembicara (ala Google Slides) -->
+          <div class="speaker-notes-panel" id="speakerNotesPanel" style="display:none;">
+            <div class="speaker-notes-label">Catatan pembicara</div>
+            <textarea id="speakerNotesInput" class="speaker-notes-input" placeholder="Klik untuk menambahkan catatan pembicara"></textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. DRIVE HUB -->
+    <div class="view-drive" id="view-drive">
+      <div class="drive-header">
+        <div>
+          <h2>Selamat datang di Drive Hub</h2>
+          <div style="font-size: 13px; color: var(--g-muted);">Galeri dokumen yang dipersistensikan ke disk melalui REST API lokal. <span id="driveResultCount"></span></div>
+        </div>
+        <div style="display:flex; gap:10px;">
+          <button class="new-doc-btn" onclick="window.workspaceApp.createNewDoc('docs')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+            <span>Dokumen Baru</span>
+          </button>
+          <button class="new-doc-btn" onclick="window.workspaceApp.createNewDoc('sheets')" style="background:#0f9d58;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+            <span>Spreadsheet Baru</span>
+          </button>
+          <button class="new-doc-btn" onclick="window.workspaceApp.createNewDoc('slides')" style="background:#f29900;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+            <span>Presentasi Baru</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="drive-controls">
+        <div class="drive-search-wrapper">
+          <svg class="drive-search-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+          <input type="text" class="drive-search" id="driveSearchInput" placeholder="Telusuri file di Drive Hub (berdasarkan judul)...">
+        </div>
+        <div id="driveFilterChips" style="display:flex; gap:8px; align-items:center;">
+          <span class="filter-chip chip-active" data-filter="all">Semua</span>
+          <span class="filter-chip" data-filter="docs">Dokumen</span>
+          <span class="filter-chip" data-filter="sheets">Spreadsheet</span>
+          <span class="filter-chip" data-filter="slides">Presentasi</span>
+        </div>
+        <span class="filter-chip" id="driveStarToggle" title="Urutkan favorit di atas">★ Favorit dulu</span>
+      </div>
+
+      <div class="drive-grid" id="driveGridContainer"></div>
+    </div>
+
+  </main>
+
+  <!-- FLOATING TELEMETRY DRAWER -->
+  <div class="telemetry-drawer minimized" id="telemetryDrawer">
+    <div class="drawer-header" onclick="toggleTelemetry()">
+      <h3>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M13 3v6h8V3h-8zm0 18h8v-10h-8v10zM3 21h8v-6H3v6zm0-8h8V3H3v10z"/></svg>
+        REA Telemetry · Engine Soft-404 Classifier
+      </h3>
+      <span style="font-size: 16px; color: #94a3b8;">▾</span>
+    </div>
+    <div class="drawer-body">
+      <div class="drawer-metric">
+        <h4>Engine Terverifikasi</h4>
+        <div class="code-snippet">Docs  : Kix (multi-canvas tile)
+Sheets: Ritz / Waffle (canvas grid + WASM calcworker)
+Slides: Punch (pure vector SVG scene graph)</div>
+      </div>
+      <div class="drawer-metric">
+        <h4>Formula Engine (Server)</h4>
+        <div class="code-snippet">26 fungsi: SUM AVG MIN MAX COUNT COUNTA
+PRODUCT ROUND ABS SQRT POWER IF CONCAT
+LEN UPPER LOWER TRIM LEFT RIGHT MID
+AND OR NOT MOD CEILING FLOOR</div>
+      </div>
+      <div class="drawer-metric">
+        <h4>Soft-404 Classifier</h4>
+        <div id="soft404Result" class="code-snippet">Tekan tombol di bawah untuk menjalankan klasifikasi endpoint nyata.</div>
+        <button class="drawer-test-btn" onclick="runSoft404Test()">Jalankan Uji Soft-404</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/kix_editor.js"></script>
+  <script src="/static/ritz_editor.js"></script>
+  <script src="/static/punch_editor.js"></script>
+  <script src="/static/app_shell.js"></script>
+  <script>
+    window.currentApp = 'docs';
+
+    window.toggleTelemetry = function() {
+      const drawer = document.getElementById('telemetryDrawer');
+      if (drawer) drawer.classList.toggle('minimized');
+    };
+
+    window.runSoft404Test = function() {
+      const out = document.getElementById('soft404Result');
+      if (out) out.innerText = 'Menjalankan klasifikasi...';
+      // Payload klasifikasi harus benar-benar berupa string konten. Mengirim
+      // objek JSON membuat classifier mengembalikan INVALID, bukan hasil uji nyata.
+      const payloadContent = [
+        '<html><head><title>Soft-404 Probe</title></head><body>',
+        'sorry, unable to open the file',
+        '</body></html>'
+      ].join('');
+      fetch('/api/classify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: payloadContent })
+      })
+        .then(r => r.json())
+        .then(j => {
+          if (out) out.innerText = `status: ${j.status}\nreason: ${j.reason || '-'}\nengine: ${j.engine || '-'}`;
+        })
+        .catch(e => {
+          if (out) out.innerText = 'Error: ' + e.message;
+        });
+    };
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      window.workspaceApp = new window.WorkspaceAppShell();
+      await window.workspaceApp.init();
+      window.workspaceApp.switchApp('docs');
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,84 @@
+{
+  "cells": {
+    "A1": {
+      "val": "Item Pengeluaran",
+      "raw": "Item Pengeluaran"
+    },
+    "B1": {
+      "val": "Kategori",
+      "raw": "Kategori"
+    },
+    "C1": {
+      "val": 250,
+      "raw": "=SUM(C2:C4)"
+    },
+    "D1": {
+      "val": "Status",
+      "raw": "Status"
+    },
+    "A2": {
+      "val": "Server Cloud Pro",
+      "raw": "Server Cloud Pro"
+    },
+    "B2": {
+      "val": "Infrastruktur",
+      "raw": "Infrastruktur"
+    },
+    "C2": {
+      "val": 120,
+      "raw": "120"
+    },
+    "D2": {
+      "val": "Aktif",
+      "raw": "Aktif"
+    },
+    "A3": {
+      "val": "Bandwidth Egress",
+      "raw": "Bandwidth Egress"
+    },
+    "B3": {
+      "val": "Jaringan",
+      "raw": "Jaringan"
+    },
+    "C3": {
+      "val": 45,
+      "raw": "45"
+    },
+    "D3": {
+      "val": "Aktif",
+      "raw": "Aktif"
+    },
+    "A4": {
+      "val": "Cluster Database",
+      "raw": "Cluster Database"
+    },
+    "B4": {
+      "val": "Penyimpanan",
+      "raw": "Penyimpanan"
+    },
+    "C4": {
+      "val": 85,
+      "raw": "85"
+    },
+    "D4": {
+      "val": "Backup",
+      "raw": "Backup"
+    },
+    "A5": {
+      "val": "TOTAL",
+      "raw": "TOTAL"
+    },
+    "B5": {
+      "val": "Formula SUM",
+      "raw": "Formula SUM"
+    },
+    "C5": {
+      "val": 250,
+      "raw": "=SUM(C2:C4)"
+    },
+    "D5": {
+      "val": "VERIFIED",
+      "raw": "VERIFIED"
+    }
+  }
+}

@@ -1,0 +1,198 @@
+{
+  "slides": [
+    {
+      "id": 1,
+      "title": "Slide 1: Cover",
+      "elements": [
+        {
+          "id": "el-1",
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 960,
+          "height": 12,
+          "fill": "#f29900"
+        },
+        {
+          "id": "el-2",
+          "type": "rect",
+          "x": 60,
+          "y": 60,
+          "width": 840,
+          "height": 420,
+          "fill": "#f8f9fa",
+          "stroke": "#ebebeb",
+          "rx": 8
+        },
+        {
+          "id": "el-3",
+          "type": "text",
+          "x": 100,
+          "y": 160,
+          "text": "KRUŠEVAC NEKRETNINE",
+          "font": "Google Sans, Arial",
+          "size": 38,
+          "weight": "bold",
+          "fill": "#1a73e8"
+        },
+        {
+          "id": "el-4",
+          "type": "text",
+          "x": 100,
+          "y": 210,
+          "text": "Eksklusivna Ponuda Stanova i Poslovnog Prostora 2026",
+          "font": "Arial",
+          "size": 20,
+          "weight": "normal",
+          "fill": "#5f6368"
+        },
+        {
+          "id": "el-5",
+          "type": "rect",
+          "x": 100,
+          "y": 280,
+          "width": 220,
+          "height": 110,
+          "fill": "#e8f0fe",
+          "stroke": "#4285f4",
+          "rx": 6
+        },
+        {
+          "id": "el-6",
+          "type": "text",
+          "x": 120,
+          "y": 330,
+          "text": "Lokasi Prima",
+          "font": "Arial",
+          "size": 16,
+          "weight": "bold",
+          "fill": "#1a73e8"
+        },
+        {
+          "id": "el-7",
+          "type": "text",
+          "x": 120,
+          "y": 360,
+          "text": "Centar grada, Zona 1",
+          "font": "Arial",
+          "size": 13,
+          "weight": "normal",
+          "fill": "#5f6368"
+        },
+        {
+          "id": "el-8",
+          "type": "rect",
+          "x": 350,
+          "y": 280,
+          "width": 220,
+          "height": 110,
+          "fill": "#e6f4ea",
+          "stroke": "#0f9d58",
+          "rx": 6
+        },
+        {
+          "id": "el-9",
+          "type": "text",
+          "x": 370,
+          "y": 330,
+          "text": "Kualitas Bangunan",
+          "font": "Arial",
+          "size": 16,
+          "weight": "bold",
+          "fill": "#0f9d58"
+        },
+        {
+          "id": "el-10",
+          "type": "text",
+          "x": 370,
+          "y": 360,
+          "text": "A+ Energetski Pasoš",
+          "font": "Arial",
+          "size": 13,
+          "weight": "normal",
+          "fill": "#5f6368"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Slide 2: Aksesibilitas",
+      "elements": [
+        {
+          "id": "el-21",
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 960,
+          "height": 12,
+          "fill": "#f29900"
+        },
+        {
+          "id": "el-22",
+          "type": "text",
+          "x": 80,
+          "y": 80,
+          "text": "Lokasi & Aksesibilitas Properti",
+          "font": "Google Sans, Arial",
+          "size": 28,
+          "weight": "bold",
+          "fill": "#202124"
+        },
+        {
+          "id": "el-23",
+          "type": "circle",
+          "cx": 197,
+          "cy": 266,
+          "r": 100,
+          "fill": "#fef7e0",
+          "stroke": "#f29900",
+          "strokeWidth": 3
+        },
+        {
+          "id": "el-24",
+          "type": "text",
+          "x": 145,
+          "y": 265,
+          "text": "Radius 500m",
+          "font": "Arial",
+          "size": 16,
+          "weight": "bold",
+          "fill": "#b06000"
+        },
+        {
+          "id": "el-25",
+          "type": "text",
+          "x": 380,
+          "y": 190,
+          "text": "• 5 Menit ke Pusat Perbelanjaan",
+          "font": "Arial",
+          "size": 18,
+          "weight": "normal",
+          "fill": "#202124"
+        },
+        {
+          "id": "el-26",
+          "type": "text",
+          "x": 380,
+          "y": 240,
+          "text": "• Akses Langsung Jalan Protokol",
+          "font": "Arial",
+          "size": 18,
+          "weight": "normal",
+          "fill": "#202124"
+        },
+        {
+          "id": "el-27",
+          "type": "text",
+          "x": 380,
+          "y": 290,
+          "text": "• Kawasan Bebas Banjir & Asri",
+          "font": "Arial",
+          "size": 18,
+          "weight": "normal",
+          "fill": "#202124"
+        }
+      ]
+    }
+  ]
+}

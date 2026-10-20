@@ -89,6 +89,16 @@
       };
 
       this.onChange = null;
+      // ==== STATE HYPERLINK (Docs) ====
+      // Tautan disimpan sebagai RENTANG pada line.text: line.links = [{start,end,url}].
+      // Offset memakai basis yang SAMA dengan cursorCharIdx dan findMatches (tanpa
+      // penanda butir), jadi render, hit-test, dan caret tidak pernah meleset.
+      // TIDAK ada struktur segmen baru: reflowPages()/paginasi tidak tersentuh,
+      // dan karena getDocumentData() mengembalikan pages, tautan otomatis ikut
+      // autosave + snapshot undo tanpa saluran persistensi tambahan.
+      this._linkBoxes = [];       // kotak hit-test per halaman (diisi renderPage)
+      this.onLinkClick = null;    // callback buka tautan (dipaksa harness untuk uji)
+      this.linkColor = '#1a73e8'; // warna tautan Docs
       // ==== STATE FIND & REPLACE ====
       // Pencarian bekerja pada MODEL TEKS (this.pages[].lines[].text), bukan DOM,
       // karena seluruh dokumen digambar ke kanvas. Offset match memakai indeks
@@ -145,6 +155,23 @@
 
           const line = this.pages[pIdx]?.lines[this.activeLineIdx];
           this.cursorCharIdx = line ? line.text.length : 0;
+
+          // ==== KLIK TAUTAN ====
+          // Paritas Google Docs MODE EDIT: klik biasa = taruh kursor, hanya
+          // Ctrl+Klik (Cmd+Klik di Mac) yang membuka tautan. Kalau klik biasa
+          // langsung membuka, user tidak bisa menyunting teks di dalam tautan.
+          const clickXl = (e.clientX - rect.left) * zx;
+          const clickYl = (e.clientY - rect.top) * zy;
+          const hit = this.linkBoxAt(pIdx, clickXl, clickYl);
+          this._lastHitLink = hit || null;
+          if (hit && (e.ctrlKey || e.metaKey)) {
+            if (typeof this.onLinkClick === 'function') this.onLinkClick(hit.url, hit);
+            else if (typeof window !== 'undefined' && typeof window.open === 'function') {
+              window.open(hit.url, '_blank', 'noopener,noreferrer');
+            }
+            this.emitActiveLine();
+            return;
+          }
 
           // Klik pada KOTAK CENTANG = membalik status ceklis (ala Google Docs).
           // Kotak digambar sebagai penanda "☐ " di awal teks, jadi klik yang
@@ -206,6 +233,7 @@
         e.preventDefault();
         if (this.cursorCharIdx > 0) {
           line.text = line.text.slice(0, this.cursorCharIdx - 1) + line.text.slice(this.cursorCharIdx);
+          this._shiftLinks(line, this.cursorCharIdx - 1, -1);
           this.cursorCharIdx--;
           modified = true;
         } else if (line.listType && !line.text) {
@@ -217,6 +245,15 @@
           modified = true;
         } else if (this.activeLineIdx > 0) {
           const prevLine = page.lines[this.activeLineIdx - 1];
+          // Tautan baris yang digabung ikut pindah, digeser sepanjang teks baris
+          // sebelumnya. Tanpa ini tautan menempel ke karakter yang salah.
+          if (Array.isArray(line.links) && line.links.length) {
+            const joinAt = prevLine.text.length;
+            const moved = line.links.map(L => ({ start: L.start + joinAt, end: L.end + joinAt, url: L.url }));
+            prevLine.links = (Array.isArray(prevLine.links) ? prevLine.links : [])
+              .concat(moved).sort((a, b) => a.start - b.start);
+            delete line.links;
+          }
           this.cursorCharIdx = prevLine.text.length;
           prevLine.text += line.text;
           page.lines.splice(this.activeLineIdx, 1);
@@ -227,15 +264,37 @@
         e.preventDefault();
         if (this.cursorCharIdx < line.text.length) {
           line.text = line.text.slice(0, this.cursorCharIdx) + line.text.slice(this.cursorCharIdx + 1);
+          this._shiftLinks(line, this.cursorCharIdx, -1);
           modified = true;
         }
       } else if (e.key === 'Enter') {
         e.preventDefault();
         const textAfter = line.text.slice(this.cursorCharIdx);
         line.text = line.text.slice(0, this.cursorCharIdx);
+        // ==== TAUTAN SAAT PECAH BARIS ====
+        // Tautan yang seluruhnya berada SESUDAH kursor pindah ke baris baru
+        // (offset digeser sepanjang potongan atas). Tautan yang MELINTASI titik
+        // pecah dibelah dua: bagian kiri tetap di baris ini, bagian kanan ikut
+        // ke baris baru. Kalau hanya bagian kiri yang dipertahankan, sisa teks
+        // yang pindah baris kehilangan tautannya (dan offset-nya jadi stale).
+        let movedLinks = null;
+        if (Array.isArray(line.links) && line.links.length) {
+          const cut = this.cursorCharIdx;
+          const keep = [], move = [];
+          for (const L of line.links) {
+            if (L.start >= cut) move.push({ start: L.start - cut, end: L.end - cut, url: L.url });
+            else if (L.end > cut) {
+              keep.push({ start: L.start, end: cut, url: L.url });      // bagian kiri
+              move.push({ start: 0, end: L.end - cut, url: L.url });    // bagian kanan
+            } else keep.push(L);
+          }
+          if (keep.length) line.links = keep; else delete line.links;
+          if (move.length) movedLinks = move;
+        }
         // Warisi SELURUH properti gaya (termasuk underline/strike/heading/list),
         // bukan hanya bold/italic — kalau tidak, format user hilang tiap Enter.
         const newLine = { text: textAfter };
+        if (movedLinks) newLine.links = movedLinks;
         for (const k of LINE_STYLE_KEYS) {
           if (line[k] !== undefined) newLine[k] = line[k];
           else if (this.currentStyle[k] !== undefined) newLine[k] = this.currentStyle[k];
@@ -281,6 +340,8 @@
       } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
         line.text = line.text.slice(0, this.cursorCharIdx) + e.key + line.text.slice(this.cursorCharIdx);
+        // Sisip 1 karakter: tautan sesudah/di dalam rentang ikut bergeser.
+        this._shiftLinks(line, this.cursorCharIdx, 1);
         this.cursorCharIdx++;
         modified = true;
       }
@@ -537,6 +598,11 @@
       const line = this.pages[fm.pIdx].lines[fm.lIdx];
       const text = line.text || '';
       line.text = text.slice(0, fm.start) + replacement + text.slice(fm.start + fm.len);
+      // Ganti teks = hapus fm.len lalu sisip replacement.length. Offset tautan
+      // di baris ini wajib ikut bergeser, kalau tidak tautan menunjuk karakter
+      // yang salah setelah Find & Replace.
+      this._shiftLinks(line, fm.start, -fm.len);
+      this._shiftLinks(line, fm.start, replacement.length);
       const keepP = fm.pIdx, keepL = fm.lIdx, nextAt = fm.start + replacement.length;
 
       this.reflowPages(); // panjang teks berubah -> paginasi bisa bergeser
@@ -586,6 +652,175 @@
 
     _afterReplace() {
       if (typeof this.onChange === 'function') this.onChange(this.getDocumentData());
+    }
+
+    // ==== HYPERLINK: MESIN ====
+    // Tautan hidup sebagai rentang pada line.text: line.links = [{start,end,url}].
+    // Tidak ada struktur segmen baru, jadi paginasi (reflowPages) TIDAK tersentuh.
+    _linksOf(line) {
+      if (!line) return [];
+      if (!Array.isArray(line.links)) line.links = [];
+      return line.links;
+    }
+
+    // Jaga offset tautan saat teks berubah (sisip/hapus). Tanpa ini tautan akan
+    // menunjuk karakter yang salah setelah user mengetik di depannya.
+    // at = indeks mutasi, delta = +n (sisip) / -n (hapus).
+    _shiftLinks(line, at, delta) {
+      const links = this._linksOf(line);
+      if (!links.length || !delta) return;
+      const out = [];
+      for (const L of links) {
+        let s = L.start, e = L.end;
+        if (delta > 0) {
+          if (at <= s) { s += delta; e += delta; }
+          else if (at < e) { e += delta; }        // sisip di tengah tautan
+        } else {
+          const d = -delta;
+          if (at + d <= s) { s -= d; e -= d; }
+          else if (at < e) {                      // hapus beririsan
+            const cutStart = Math.max(s, at);
+            const cutEnd = Math.min(e, at + d);
+            e -= (cutEnd - cutStart);
+            if (at < s) s = at;
+          }
+        }
+        if (e > s) out.push({ start: s, end: e, url: L.url });
+      }
+      if (out.length) line.links = out; else delete line.links;
+    }
+
+    // Hanya skema aman yang boleh disimpan/dibuka. Tanpa ini, URL
+    // "javascript:..." yang ditempel user menjadi vektor eksekusi skrip
+    // lewat window.open — bukan sekadar tampilan aneh.
+    sanitizeUrl(url) {
+      const raw = String(url == null ? '' : url).trim();
+      if (!raw) return null;
+      if (/^(javascript|data|vbscript|file):/i.test(raw)) return null;
+      if (/^(https?|mailto|tel):/i.test(raw)) return raw;
+      if (/^[a-z][a-z0-9+.-]*:/i.test(raw)) return null; // skema asing ditolak
+      return 'https://' + raw; // domain telanjang -> https
+    }
+
+    setLinkRange(pIdx, lIdx, start, end, url) {
+      const page = this.pages[pIdx];
+      const line = page && page.lines[lIdx];
+      if (!line) return false;
+      const safe = this.sanitizeUrl(url);
+      if (!safe) return false;
+      const len = (line.text || '').length;
+      const s = Math.max(0, Math.min(start, len));
+      const e = Math.max(0, Math.min(end, len));
+      if (e <= s) return false;
+      // Rentang baru MENIMPA bagian yang beririsan, tetapi sisa kiri/kanan
+      // tautan lama DIPERTAHANKAN sebagai tautan terpisah (paritas Google Docs):
+      // menautkan sebagian teks yang sudah bertaut tidak boleh menghapus tautan
+      // di sisa kalimat. Versi sebelumnya membuang seluruh tautan lama.
+      const kept = [];
+      for (const L of this._linksOf(line)) {
+        if (L.end <= s || L.start >= e) { kept.push(L); continue; }
+        if (L.start < s) kept.push({ start: L.start, end: s, url: L.url });
+        if (L.end > e) kept.push({ start: e, end: L.end, url: L.url });
+      }
+      const links = kept;
+      links.push({ start: s, end: e, url: safe });
+      links.sort((a, b) => a.start - b.start);
+      line.links = links;
+      this.renderAllPages();
+      if (typeof this.onChange === 'function') this.onChange(this.getDocumentData());
+      return true;
+    }
+
+    getLinkAt(pIdx, lIdx, charIdx) {
+      const page = this.pages[pIdx];
+      const line = page && page.lines[lIdx];
+      if (!line) return null;
+      return this._linksOf(line).find(L => charIdx >= L.start && charIdx < L.end) || null;
+    }
+
+    // Tautan yang relevan dengan posisi kursor di baris aktif — dipakai modal
+    // untuk prefill URL/teks. Kursor Kix selalu di akhir baris (tidak ada API
+    // seleksi), jadi pencarian dilakukan berlapis: (1) tepat di kursor,
+    // (2) kata di sekitar kursor, (3) tautan terakhir di baris itu.
+    getLinkNearCursor() {
+      const pIdx = this.activePageIdx, lIdx = this.activeLineIdx;
+      const line = this.activeLineRef();
+      if (!line) return null;
+      const links = this._linksOf(line);
+      if (!links.length) return null;
+      const at = Math.min(this.cursorCharIdx, (line.text || '').length);
+      const direct = links.find(L => at >= L.start && at < L.end);
+      if (direct) return direct;
+      const w = this.wordRangeAtCursor();
+      if (w) {
+        const byWord = links.find(L => L.start < w.end && L.end > w.start);
+        if (byWord) return byWord;
+      }
+      return links[links.length - 1];
+    }
+
+    removeLinkRange(pIdx, lIdx, start, end) {
+      const page = this.pages[pIdx];
+      const line = page && page.lines[lIdx];
+      if (!line || !Array.isArray(line.links)) return false;
+      const before = line.links.length;
+      line.links = line.links.filter(L => L.end <= start || L.start >= end);
+      if (line.links.length === before) return false;
+      if (!line.links.length) delete line.links;
+      this.renderAllPages();
+      if (typeof this.onChange === 'function') this.onChange(this.getDocumentData());
+      return true;
+    }
+
+    // Kata di sekitar kursor. Kix BELUM punya API seleksi rentang (hanya
+    // cursorCharIdx), jadi ini cara jujur menentukan teks yang akan ditautkan.
+    wordRangeAtCursor() {
+      const line = this.activeLineRef();
+      if (!line) return null;
+      const t = line.text || '';
+      if (!t) return null;
+      let i = Math.min(this.cursorCharIdx, t.length);
+      const isWord = (ch) => ch !== undefined && !/\s/.test(ch);
+      if (i > 0 && !isWord(t[i]) && isWord(t[i - 1])) i -= 1;
+      if (!isWord(t[i])) { while (i < t.length && !isWord(t[i])) i++; }
+      if (!isWord(t[i])) return null;
+      let s = i, e = i;
+      while (s > 0 && isWord(t[s - 1])) s--;
+      while (e < t.length && isWord(t[e])) e++;
+      return { start: s, end: e, text: t.slice(s, e) };
+    }
+
+    applyLinkAtCursor(url, text) {
+      const line = this.activeLineRef();
+      if (!line || !url) return false;
+      const w = this.wordRangeAtCursor();
+      const t = (text === undefined || text === null || text === '') ? null : String(text);
+      if (w) {
+        let s = w.start, e = w.end;
+        if (t !== null && t !== line.text.slice(s, e)) {
+          const oldLen = e - s;
+          line.text = line.text.slice(0, s) + t + line.text.slice(e);
+          this._shiftLinks(line, e, t.length - oldLen);
+          e = s + t.length;
+          this.cursorCharIdx = e;
+        }
+        return this.setLinkRange(this.activePageIdx, this.activeLineIdx, s, e, url);
+      }
+      // Tak ada kata di kursor: sisipkan teks baru yang langsung bertautan.
+      const ins = t !== null ? t : String(url);
+      const at = this.cursorCharIdx;
+      line.text = line.text.slice(0, at) + ins + line.text.slice(at);
+      this._shiftLinks(line, at, ins.length);
+      this.cursorCharIdx = at + ins.length;
+      return this.setLinkRange(this.activePageIdx, this.activeLineIdx, at, at + ins.length, url);
+    }
+
+    linkBoxAt(pIdx, x, y) {
+      for (const b of this._linkBoxes) {
+        if (b.pIdx !== pIdx) continue;
+        if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return b;
+      }
+      return null;
     }
 
     exportPlainText() {
@@ -652,6 +887,10 @@
 
     renderAllPages() {
       const container = this.scrollBox;
+
+      // Kotak hit-test tautan dibangun ulang tiap render; kalau tidak direset,
+      // kotak lama menumpuk dan klik bisa mendarat di tautan yang sudah pindah.
+      this._linkBoxes = [];
 
       // Rebuild kanvas tile sepenuhnya (querySelectorAll = NodeList statis,
       // TIDAK boleh dipakai sebagai kondisi while karena panjangnya tetap)
@@ -774,6 +1013,13 @@
 
       const canvas = document.getElementById(`kixCanvas${pIdx + 1}`);
       if (!canvas) return;
+
+      // Buang kotak hit-test MILIK HALAMAN INI sebelum menggambar ulang.
+      // renderPage() dipanggil ulang tiap 530 ms oleh caret blink, dan render
+      // itu tidak melewati renderAllPages(). Tanpa filter ini, _linkBoxes
+      // menumpuk ribuan entri duplikat selama dokumen dibiarkan terbuka.
+      this._linkBoxes = this._linkBoxes.filter(b => b.pIdx !== pIdx);
+
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -836,6 +1082,47 @@
 
           ctx.fillStyle = line.color || '#202124';
           ctx.fillText(seg.text, segX, y);
+
+          // ==== HYPERLINK: GAMBAR & HIT-TEST ====
+          // Sama seperti highlight pencarian: offset tautan berada pada line.text
+          // TANPA penanda butir, sedangkan segmen dibangun dari prefix + text.
+          // Karena itu offset digeser sebesar m.prefix.length, lalu dihitung
+          // irisan per segmen (satu tautan bisa melintasi dua segmen hasil wrap).
+          const links = Array.isArray(line.links) ? line.links : null;
+          if (links && links.length) {
+            for (let li = 0; li < links.length; li++) {
+              const L = links[li];
+              const lStart = L.start + m.prefix.length;
+              const lEnd = L.end + m.prefix.length;
+              const sS = seg.start;
+              const sE = seg.start + seg.text.length;
+              const a = Math.max(lStart, sS);
+              const b = Math.min(lEnd, sE);
+              if (b <= a) continue;
+              const preTxt = seg.text.slice(0, a - sS);
+              const midTxt = seg.text.slice(a - sS, b - sS);
+              const xOff = ctx.measureText(preTxt).width;
+              const lw = ctx.measureText(midTxt).width;
+              // Teks ditimpa warna tautan (Docs memakai biru), lalu digaris bawahi.
+              ctx.save();
+              ctx.fillStyle = this.linkColor || '#1a73e8';
+              ctx.fillText(midTxt, segX + xOff, y);
+              ctx.strokeStyle = this.linkColor || '#1a73e8';
+              ctx.lineWidth = 1;
+              ctx.beginPath();
+              ctx.moveTo(segX + xOff, y + 3);
+              ctx.lineTo(segX + xOff + lw, y + 3);
+              ctx.stroke();
+              ctx.restore();
+              // Rekam kotak untuk hit-test klik. y adalah baseline, jadi kotak
+              // dinaikkan setinggi font agar klik di badan huruf tetap kena.
+              this._linkBoxes.push({
+                pIdx, lIdx, url: L.url,
+                x: segX + xOff, y: y - fontSize,
+                w: lw, h: fontSize + 6
+              });
+            }
+          }
 
           if (line.underline) {
             ctx.strokeStyle = line.color || '#202124';

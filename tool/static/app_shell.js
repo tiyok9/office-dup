@@ -85,6 +85,15 @@
         // Toolbar harus memantulkan format BARIS DI KURSOR setiap kali kursor
         // bergerak (klik baris lain, panah, Enter) — bukan hanya saat mengedit.
         this.kix.onActiveLineChange = () => this.syncToolbar();
+        // Ctrl+Klik pada tautan: buka di tab baru. Callback ini dipasang di
+        // shell (bukan di editor) supaya editor tetap murni model+tampilan,
+        // dan supaya harness dapat mengganti perilakunya saat pengujian.
+        this.kix.onLinkClick = (url) => {
+          const safe = this.kix.sanitizeUrl(url);
+          if (!safe) { this.showToast('Tautan tidak valid.'); return; }
+          window.open(safe, '_blank', 'noopener,noreferrer');
+          this.showToast('Membuka tautan: ' + safe);
+        };
       }
 
       if (window.RitzSpreadsheetEditor) {
@@ -1019,6 +1028,13 @@
           // Find and Replace: paritas Google Docs (Ctrl+H).
           e.preventDefault();
           this.openFindReplaceModal(true);
+        } else if (k === 'k' && this.currentApp === 'docs' && !inModalField) {
+          // Sisipkan/Edit tautan: paritas Google Docs (Ctrl+K). Guard WAJIB
+          // `!inModalField` (bukan `!inField`) — hiddenInput Kix adalah TEXTAREA,
+          // jadi `inField` selalu true saat user mengetik di dokumen dan shortcut
+          // akan mati tepat di konteks yang paling dibutuhkan.
+          e.preventDefault();
+          this.openLinkModal();
         } else if (k === 's') {
           e.preventDefault();
           this.saveDocument({ title: document.getElementById('docTitle')?.value });
@@ -1147,6 +1163,7 @@
       if (menu === 'insert') {
         return [
           { label: 'Tambah Halaman Baru (Docs)', action: () => { if (this.kix) this.kix.insertNewPage(); } },
+          { label: 'Tautan (Docs)', shortcut: 'Ctrl+K', action: () => this.openLinkModal() },
           { sep: true },
           { label: 'Tambah Slide Baru (Slides)', action: () => { if (this.punch) this.punch.addNewSlide(); } },
           { label: 'Duplikat Slide Aktif (Slides)', action: () => { if (this.punch) this.punch.duplicateActiveSlide(); } },
@@ -1476,6 +1493,108 @@
       });
 
       if (qEl) { qEl.focus(); qEl.select(); }
+    }
+
+    // ==== MODAL TAUTAN (Docs) ====
+    // Kix TIDAK punya API seleksi rentang (hanya cursorCharIdx), jadi modal ini
+    // menawarkan dua kolom: teks yang ditautkan + URL. Bila kursor berada di
+    // tautan yang sudah ada, kolom terisi otomatis dan tombol Hapus muncul.
+    openLinkModal() {
+      if (!this.kix || this.currentApp !== 'docs') {
+        this.showToast('Tautan hanya tersedia di Docs.');
+        return;
+      }
+      const modal = this.ensureModal();
+      const btn = 'padding:7px 14px; border:1px solid #dadce0; background:#fff; color:#1a73e8; border-radius:6px; font-size:12.5px; font-weight:500; cursor:pointer;';
+      const btnP = 'padding:7px 14px; border:none; background:#1a73e8; color:#fff; border-radius:6px; font-size:12.5px; font-weight:500; cursor:pointer;';
+      const btnD = 'padding:7px 14px; border:1px solid #dadce0; background:#fff; color:#d93025; border-radius:6px; font-size:12.5px; font-weight:500; cursor:pointer;';
+
+      const existing = this.kix.getLinkNearCursor();
+      const line = this.kix.activeLineRef();
+      const word = this.kix.wordRangeAtCursor();
+      const defText = existing
+        ? (line.text || '').slice(existing.start, existing.end)
+        : (word ? word.text : '');
+      const defUrl = existing ? existing.url : 'https://';
+
+      modal.innerHTML = `
+        <div style="background:#fff; width:470px; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,.25); padding:20px; font-family:'Google Sans',Arial,sans-serif;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+            <h3 style="font-size:17px; font-weight:500; color:#202124; margin:0;">${existing ? 'Edit Tautan' : 'Sisipkan Tautan'}</h3>
+            <span class="modal-close" style="cursor:pointer; font-size:20px; color:#5f6368;">✕</span>
+          </div>
+          <label style="display:block; font-size:12px; color:#5f6368; margin-bottom:4px;">Teks</label>
+          <input id="gwsLinkText" type="text" placeholder="Teks yang ditampilkan" autocomplete="off" value="${defText.replace(/"/g, '&quot;')}"
+            style="width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid #dadce0; border-radius:6px; font-size:13px; outline:none; margin-bottom:12px;">
+          <label style="display:block; font-size:12px; color:#5f6368; margin-bottom:4px;">Tautan (URL)</label>
+          <input id="gwsLinkUrl" type="text" placeholder="https://example.com" autocomplete="off" value="${String(defUrl).replace(/"/g, '&quot;')}"
+            style="width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid #dadce0; border-radius:6px; font-size:13px; outline:none;">
+          <div id="gwsLinkErr" style="font-size:12px; color:#d93025; margin-top:8px; min-height:16px;"></div>
+          <div style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; margin-top:6px;">
+            ${existing ? `<button id="gwsLinkRemove" style="${btnD}">Hapus Tautan</button>` : ''}
+            <button class="modal-close" style="${btn}">Batal</button>
+            <button id="gwsLinkApply" style="${btnP}">Terapkan</button>
+          </div>
+        </div>
+      `;
+      modal.style.display = 'flex';
+
+      const tEl = modal.querySelector('#gwsLinkText');
+      const uEl = modal.querySelector('#gwsLinkUrl');
+      const errEl = modal.querySelector('#gwsLinkErr');
+      modal.querySelectorAll('.modal-close').forEach(el => el.addEventListener('click', () => this.closeModal()));
+
+      // Ketikan di modal TIDAK boleh bocor ke hiddenInput Kix (dokumen digambar
+      // ke canvas, jadi setiap karakter yang lolos akan menulis ke dokumen).
+      [tEl, uEl].forEach(el => {
+        if (!el) return;
+        el.addEventListener('keydown', (ev) => {
+          ev.stopPropagation();
+          if (ev.key === 'Escape') { ev.preventDefault(); this.closeModal(); }
+          if (ev.key === 'Enter') { ev.preventDefault(); apply(); }
+        });
+      });
+
+      const apply = () => {
+        const safe = this.kix.sanitizeUrl(uEl ? uEl.value : '');
+        if (!safe) {
+          if (errEl) errEl.textContent = 'URL tidak valid. Gunakan http/https, mailto, atau tel.';
+          if (uEl) uEl.focus();
+          return;
+        }
+        const txt = tEl ? tEl.value : '';
+        const p = this.kix.activePageIdx, l = this.kix.activeLineIdx;
+        let ok = false;
+        if (existing) {
+          const cur = (line.text || '').slice(existing.start, existing.end);
+          if (txt && txt !== cur) {
+            // Teks tautan diganti: tulis ulang potongan itu, geser offset link
+            // lain di baris yang sama, lalu pasang rentang baru.
+            line.text = line.text.slice(0, existing.start) + txt + line.text.slice(existing.end);
+            this.kix._shiftLinks(line, existing.end, txt.length - cur.length);
+            ok = this.kix.setLinkRange(p, l, existing.start, existing.start + txt.length, safe);
+          } else {
+            ok = this.kix.setLinkRange(p, l, existing.start, existing.end, safe);
+          }
+        } else {
+          ok = this.kix.applyLinkAtCursor(safe, txt);
+        }
+        if (!ok) { if (errEl) errEl.textContent = 'Tidak ada teks untuk ditautkan di posisi kursor.'; return; }
+        this.closeModal();
+        this.showToast(existing ? 'Tautan diperbarui.' : 'Tautan disisipkan.');
+      };
+
+      const rm = modal.querySelector('#gwsLinkRemove');
+      if (rm) rm.addEventListener('click', () => {
+        const ok = this.kix.removeLinkRange(this.kix.activePageIdx, this.kix.activeLineIdx, existing.start, existing.end);
+        this.closeModal();
+        this.showToast(ok ? 'Tautan dihapus (teks tetap).' : 'Tidak ada tautan untuk dihapus.');
+      });
+
+      const ap = modal.querySelector('#gwsLinkApply');
+      if (ap) ap.addEventListener('click', apply);
+
+      if (tEl) { tEl.focus(); tEl.select(); }
     }
 
     openAboutModal() {

@@ -92,7 +92,8 @@
         this.ritz.onCellChange = (cells) => {
           // sheets[] ikut dikirim supaya suntingan pada sheet mana pun tersimpan.
           const data = { cells, sheets: this.ritz.getSheets(), activeSheetIdx: this.ritz.activeSheetIdx };
-          if (!this._restoring) this.recordHistory('sheets', data);
+          // Sheets memakai jalur khusus: pindah tab tidak boleh jadi entri undo.
+          if (!this._restoring) this.recordSheetsHistory(data);
           this.triggerAutosave({ data });
           this.syncToolbar();
         };
@@ -126,6 +127,38 @@
     resetHistory(app, data) {
       this.undoStack[app] = [JSON.stringify(data)];
       this.redoStack[app] = [];
+    }
+
+    // Sheets: pindah tab TIDAK boleh menjadi entri undo (paritas Google Sheets).
+    // switchSheet() memanggil notifyChange() -> onCellChange(), jadi tanpa guard
+    // ini setiap klik tab menambah satu entri dan Ctrl+Z berubah menjadi
+    // "batalkan navigasi tab" — resize baris/kolom jadi tidak bisa dijangkau.
+    // Aturan: bila snapshot baru HANYA berbeda pada activeSheetIdx, GANTI entri
+    // puncak (jangan tambah) supaya kedalaman stack stabil dan Ctrl+Z tetap
+    // membatalkan suntingan nyata.
+    recordSheetsHistory(data) {
+      const key = JSON.stringify(data);
+      const stack = this.undoStack.sheets || (this.undoStack.sheets = []);
+      if (stack.length && stack[stack.length - 1] === key) return;
+
+      if (stack.length) {
+        let prev = null;
+        try { prev = JSON.parse(stack[stack.length - 1]); } catch { prev = null; }
+        if (prev) {
+          // Pembanding HANYA sheets[]. `cells` sengaja tidak diikutkan: ia cermin
+          // dari sheet AKTIF (diisi _loadActiveSheet), jadi saat pindah tab
+          // nilainya ikut berubah walau isi dokumen sama sekali tidak berubah.
+          // Membandingkannya akan membuat guard ini tidak pernah aktif.
+          if (JSON.stringify(prev.sheets) === JSON.stringify(data.sheets)) {
+            stack[stack.length - 1] = key;
+            return;
+          }
+        }
+      }
+
+      stack.push(key);
+      if (stack.length > 60) stack.shift();
+      this.redoStack.sheets = [];
     }
 
     performUndo(app) {

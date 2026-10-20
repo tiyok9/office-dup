@@ -463,6 +463,34 @@ async function runTestSuite() {
   assert(/if \(stack\.length > 60\) stack\.shift\(\)/.test(shellAuto),
     'Shell: riwayat undo dibatasi 60 (tidak tumbuh tanpa batas)');
 
+  // REGRESI: status bar Docs dulu dihancurkan oleh pembaruannya sendiri.
+  //
+  // #docsCurPage adalah ANAK dari #docsStatusText. Kode lama menulis
+  // statusEl.innerText = `Halaman ${cur} dari ${total} ...` yang MENGHAPUS
+  // seluruh isi div — termasuk span #docsCurPage itu sendiri. Sejak pembaruan
+  // pertama getElementById('docsCurPage') mengembalikan null selamanya,
+  // sehingga angka halaman tidak bisa dibaca lagi. Teks status tetap tampak
+  // benar karena ditulis ulang utuh, jadi cacat ini tak terlihat sampai ada
+  // asersi yang membaca sub-elemennya (ditemukan oleh E2E S11).
+  //
+  // Ditulis dengan includes()/indexOf, BUKAN regex literal: escaping backslash
+  // di berkas ini pernah terlipatgandakan alat patch dan mematahkan asersi
+  // tanpa terlihat.
+  const htmlStatus = fs.readFileSync(path.resolve(__dirname, 'dashboard.html'), 'utf8');
+  const iStatusOpen = htmlStatus.indexOf('id="docsStatusText"');
+  const iStatusClose = htmlStatus.indexOf('</div>', iStatusOpen);
+  assert(iStatusOpen !== -1 && iStatusClose > iStatusOpen &&
+         htmlStatus.slice(iStatusOpen, iStatusClose).includes('id="docsCurPage"'),
+    'UI: #docsCurPage berada DI DALAM #docsStatusText (bukan saudara)');
+  assert(htmlStatus.includes('id="docsTotalPages"') && htmlStatus.includes('id="docsWordCount"'),
+    'UI: status bar Docs punya span terpisah untuk total halaman & jumlah kata');
+  assert(!shellAuto.includes('statusEl.innerText'),
+    'Shell: isi #docsStatusText TIDAK ditimpa utuh (itu menghapus span anaknya)');
+  assert(shellAuto.includes("setStatusPart('docsCurPage'") &&
+         shellAuto.includes("setStatusPart('docsTotalPages'") &&
+         shellAuto.includes("setStatusPart('docsWordCount'"),
+    'Shell: tiap bagian status bar Docs diperbarui sebagai elemen terpisah');
+
   // TEST SUITE 14: PARITAS LANJUTAN (tema/layout Slides, bagan+sort Sheets, ceklis Docs)
   // Kelas editor dimuat dari FILE ASLI (bukan salinan) dengan stub DOM minimal,
   // supaya yang diuji benar-benar kode yang dipakai di browser.
@@ -482,12 +510,21 @@ async function runTestSuite() {
     textContent: '', value: '', className: '', scrollTop: 0, width: 794, height: 1050,
     offsetParent: null, onclick: null, parentNode: null,
     classList: { add() {}, remove() {}, contains() { return false; }, toggle() {} },
-    addEventListener() {}, removeEventListener() {}, appendChild(c) { this.children.push(c); if (c) c.parentNode = this; return c; },
+    // Handler direkam (bukan no-op) supaya alur scroll -> status bar dapat diuji
+    // langsung tanpa browser. scrollIntoView merekam opsinya agar pemanggilnya
+    // dapat diverifikasi (mis. { block: 'start' } pada scrollPageIntoView).
+    addEventListener(ev, fn) { this._handlers = this._handlers || {}; (this._handlers[ev] = this._handlers[ev] || []).push(fn); },
+    removeEventListener() {},
+    scrollIntoView(opts) { this._scrolled = opts || {}; },
+    appendChild(c) { this.children.push(c); if (c) c.parentNode = this; return c; },
     removeChild(c) { this.children = this.children.filter(x => x !== c); return c; },
     setAttribute() {}, getAttribute() { return null; }, removeAttribute() {},
     querySelector() { return null; }, querySelectorAll() { return []; }, closest() { return null; },
     focus() {}, select() {}, blur() {}, insertBefore(c) { return this.appendChild(c); },
-    getBoundingClientRect() { return { left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 }; },
+    // `_rect` dapat di-override per elemen supaya tes dapat mensimulasikan
+    // posisi tile setelah scroll. Tanpa ini semua elemen mengaku berada di
+    // (0,0) dan tes indikator halaman hanya akan lulus secara palsu.
+    getBoundingClientRect() { return this._rect || { left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 }; },
     getContext() { return makeCtx(); },
     parentElement: null
   });
@@ -740,6 +777,91 @@ async function runTestSuite() {
   kix14.handleKey({ key: 'Enter', ctrlKey: false, metaKey: false, preventDefault() {} });
   assert(kix14.pages.length === 2 && kix14.pages[1].lines.length === 2,
     `Docs: Enter biasa setelah pemisah tetap menambah BARIS (bukan halaman) :: pages=${kix14.pages.length} baris=${kix14.pages[1].lines.length}`);
+
+  // 14i. DOCS: INDIKATOR HALAMAN SADAR-VIEWPORT + viewport mengikuti kursor.
+  //
+  // KUIRK yang diperbaiki: status bar dulu memakai Math.floor(scrollTop/850)+1.
+  // Angka 850 = PAGE_CANVAS_HEIGHT, yaitu tinggi koordinat INTERNAL kanvas,
+  // sedangkan tinggi tile nyata di DOM = min-height 1056 + margin-bottom 24
+  // (lihat .kix-page di dashboard.html). Akibatnya halaman ke-2 baru dianggap
+  // aktif setelah scrollTop 850 — padahal puncaknya sudah lewat jauh sebelumnya,
+  // jadi status bar tertinggal satu halaman tepat setelah pemisah halaman.
+  //
+  // Catatan kejujuran: tes ini menguji LOGIKA KEPUTUSAN dengan geometri yang
+  // disuntikkan (rect per elemen), bukan layout browser sungguhan. Geometri
+  // nyata diverifikasi di E2E (S11/S12) yang mengukur getBoundingClientRect asli.
+  const scrollBox14 = docStub.getElementById('docsScrollBox');
+  kix14.setDocumentData({ pages: [
+    { lines: [{ text: 'halaman satu' }] },
+    { lines: [{ text: 'halaman dua' }] }
+  ] });
+  assert(kix14.pages.length === 2, `Docs: dua halaman siap untuk uji indikator :: pages=${kix14.pages.length}`);
+
+  // Posisi awal: halaman 1 mengisi viewport.
+  scrollBox14._rect = { left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 };
+  docStub.getElementById('kixPage1')._rect = { left: 0, top: 0, width: 816, height: 1056, right: 816, bottom: 1056 };
+  docStub.getElementById('kixPage2')._rect = { left: 0, top: 1080, width: 816, height: 1056, right: 816, bottom: 2136 };
+  assert(kix14.pageIndexAtViewportTop() === 0,
+    `Docs: indikator halaman = 0 saat halaman pertama mengisi viewport :: ${kix14.pageIndexAtViewportTop()}`);
+
+  // Setelah digulir ke puncak halaman 2 (scrollTop 1080), tile halaman 2
+  // menempati tepi atas viewport -> indikator WAJIB pindah ke indeks 1.
+  docStub.getElementById('kixPage1')._rect = { left: 0, top: -1080, width: 816, height: 1056, right: 816, bottom: -24 };
+  docStub.getElementById('kixPage2')._rect = { left: 0, top: 0, width: 816, height: 1056, right: 816, bottom: 1056 };
+  assert(kix14.pageIndexAtViewportTop() === 1,
+    `Docs: indikator halaman pindah ke 1 saat halaman kedua di atas viewport :: ${kix14.pageIndexAtViewportTop()}`);
+
+  // Inilah pembeda terhadap rumus lama: pada scrollTop 848 rumus lama
+  // menghasilkan floor(848/850)+1 = 1 (SALAH), geometri nyata menghasilkan 2.
+  assert(Math.floor(848 / 850) + 1 === 1 && kix14.pageIndexAtViewportTop() + 1 === 2,
+    `Docs: rumus lama tertinggal satu halaman pada scrollTop 848 (lama=1, benar=${kix14.pageIndexAtViewportTop() + 1})`);
+
+  // Handler scroll yang terpasang di scrollBox harus memakai geometri baru,
+  // bukan PAGE_CANVAS_HEIGHT. Dipanggil langsung karena mock tidak menggelembungkan event.
+  let reported14 = null;
+  kix14.onPageChange = (cur, total, words) => { reported14 = { cur, total, words }; };
+  const scrollHandlers14 = (scrollBox14._handlers && scrollBox14._handlers.scroll) || [];
+  assert(scrollHandlers14.length > 0,
+    `Docs: handler scroll terpasang pada wadah gulir :: handlers=${scrollHandlers14.length}`);
+  scrollHandlers14[scrollHandlers14.length - 1]();
+  assert(reported14 && reported14.cur === 2 && reported14.total === 2,
+    `Docs: status bar melaporkan halaman kursor, bukan hasil bagi scrollTop :: ${JSON.stringify(reported14)}`);
+
+  // scrollPageIntoView: wajib menggulir ke puncak halaman target DAN
+  // menyinkronkan indikator tanpa menunggu event scroll.
+  docStub.getElementById('kixPage2')._scrolled = undefined;
+  reported14 = null;
+  kix14.scrollPageIntoView(1);
+  const scrolled14 = docStub.getElementById('kixPage2')._scrolled;
+  assert(scrolled14 && scrolled14.block === 'start',
+    `Docs: halaman target digulir ke puncak (block start) :: ${JSON.stringify(scrolled14)}`);
+  assert(reported14 && reported14.cur === 2,
+    `Docs: indikator langsung sinkron setelah gulir (tanpa menunggu event) :: ${JSON.stringify(reported14)}`);
+
+  // Pemisah halaman WAJIB membawa viewport ke halaman baru. Tanpa ini kursor
+  // sudah di halaman 2 tetapi layar masih menampilkan halaman 1.
+  kix14.setDocumentData({ pages: [{ lines: [{ text: 'atas bawah' }] }] });
+  docStub.getElementById('kixPage1')._rect = { left: 0, top: 0, width: 816, height: 1056, right: 816, bottom: 1056 };
+  docStub.getElementById('kixPage2')._rect = { left: 0, top: 1080, width: 816, height: 1056, right: 816, bottom: 2136 };
+  docStub.getElementById('kixPage2')._scrolled = undefined;
+  kix14.activePageIdx = 0; kix14.activeLineIdx = 0; kix14.cursorCharIdx = 5;
+  const pbScroll14 = kix14.insertPageBreak();
+  const pbScrolled14 = docStub.getElementById('kixPage2')._scrolled;
+  assert(pbScroll14 === true && pbScrolled14 && pbScrolled14.block === 'start',
+    `Docs: pemisah halaman ikut menggulir viewport ke halaman baru :: ${JSON.stringify(pbScrolled14)}`);
+
+  // insertNewPage juga harus menggulir (paritas dengan pemisah halaman).
+  // CATATAN: setelah insertPageBreak di atas, dokumen sudah 2 halaman, jadi
+  // insertNewPage menambah halaman KE-3 dan wajib menggulir kixPage3 — bukan
+  // kixPage2. Memeriksa kixPage2 di sini akan gagal palsu.
+  const pagesBeforeNew14 = kix14.pages.length;
+  docStub.getElementById('kixPage3')._scrolled = undefined;
+  kix14.insertNewPage();
+  const newPageScrolled14 = docStub.getElementById('kixPage3')._scrolled;
+  assert(kix14.pages.length === pagesBeforeNew14 + 1 && kix14.activePageIdx === kix14.pages.length - 1,
+    `Docs: tambah halaman baru menambah 1 halaman & kursor ke halaman terakhir :: ${pagesBeforeNew14} -> ${kix14.pages.length} aktif=${kix14.activePageIdx}`);
+  assert(newPageScrolled14 && newPageScrolled14.block === 'start',
+    `Docs: tambah halaman baru ikut menggulir viewport :: ${JSON.stringify(newPageScrolled14)}`);
 
   // 14e. SLIDES: urut-ulang slide (moveSlide) — hanya menukar posisi.
   const punch14b = new Punch14('slideStage', 'filmstrip');

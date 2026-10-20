@@ -205,14 +205,61 @@
         });
       }
 
-      // Deteksi scroll untuk update status bar
+      // Deteksi scroll untuk update status bar. Indikator mengikuti halaman
+      // yang BENAR-BENAR mengisi viewport (lihat pageIndexAtViewportTop).
       this.scrollBox.addEventListener('scroll', () => {
-        const st = this.scrollBox.scrollTop;
-        const curPage = Math.min(this.pages.length, Math.floor(st / 850) + 1);
+        const curPage = this.pageIndexAtViewportTop() + 1;
         if (typeof this.onPageChange === 'function') {
           this.onPageChange(curPage, this.pages.length, this.calculateWordCount());
         }
       });
+    }
+
+    // Indeks halaman (0-based) yang mengisi tepi atas viewport.
+    //
+    // Sumber kebenaran = GEOMETRI TILE NYATA, bukan PAGE_CANVAS_HEIGHT.
+    // `PAGE_CANVAS_HEIGHT` (850) adalah tinggi koordinat INTERNAL kanvas,
+    // sedangkan tinggi tile di DOM = min-height 1056px + margin-bottom 24px
+    // (lihat .kix-page di dashboard.html). Dulu indikator memakai
+    // Math.floor(scrollTop / 850) + 1, sehingga halaman ke-2 baru dianggap
+    // aktif setelah scrollTop 850 — padahal puncaknya sudah lewat jauh
+    // sebelumnya. Akibatnya status bar tertinggal satu halaman.
+    pageIndexAtViewportTop() {
+      const total = this.pages.length;
+      if (total <= 1) return 0;
+      const box = this.scrollBox;
+      if (!box || typeof box.getBoundingClientRect !== 'function') {
+        return Math.max(0, Math.min(total - 1, this.activePageIdx));
+      }
+      const boxRect = box.getBoundingClientRect();
+      // Titik uji sedikit di bawah tepi atas viewport: cukup dalam agar tile
+      // halaman berikutnya yang baru menyembul belum dianggap halaman aktif.
+      const probeY = boxRect.top + Math.min(120, Math.max(1, boxRect.height / 2));
+      for (let i = 0; i < total; i++) {
+        const el = document.getElementById(`kixPage${i + 1}`);
+        if (!el || typeof el.getBoundingClientRect !== 'function') continue;
+        const r = el.getBoundingClientRect();
+        if (r.top <= probeY && r.bottom > probeY) return i;
+      }
+      // Tak ada tile yang memuat titik uji (mis. tepat di celah antar-halaman):
+      // pakai halaman kursor supaya indikator tidak melompat liar.
+      return Math.max(0, Math.min(total - 1, this.activePageIdx));
+    }
+
+    // Bawa halaman tertentu ke tepi atas viewport. Dipakai setelah kursor
+    // DIPINDAHKAN ke halaman lain (pemisah halaman / halaman baru): tanpa ini
+    // model dan kursor sudah pindah tetapi layar tetap menampilkan halaman
+    // lama, sehingga status bar tampak berbohong.
+    scrollPageIntoView(pIdx) {
+      const el = document.getElementById(`kixPage${pIdx + 1}`);
+      if (el && typeof el.scrollIntoView === 'function') {
+        el.scrollIntoView({ block: 'start' });
+      }
+      // Sinkronkan indikator tanpa menunggu event scroll — sebagian browser
+      // tidak memicu scroll bila posisi viewport sudah tepat.
+      if (typeof this.onPageChange === 'function') {
+        this.onPageChange(pIdx + 1, this.pages.length, this.calculateWordCount());
+      }
     }
 
     handleKey(e) {
@@ -581,6 +628,10 @@
       this.reflowPages();
       this.renderAllPages();
       this.emitActiveLine();
+      // Model dan kursor sudah pindah ke halaman baru, jadi VIEWPORT wajib ikut.
+      // Tanpa ini layar tetap menampilkan halaman lama sementara status bar
+      // menyebut halaman baru — indikator tampak berbohong.
+      this.scrollPageIntoView(this.activePageIdx);
       if (typeof this.onChange === 'function') this.onChange(this.getDocumentData());
       return true;
     }
@@ -598,6 +649,7 @@
       this.activeLineIdx = 0;
       this.cursorCharIdx = 0;
       this.renderAllPages();
+      this.scrollPageIntoView(this.activePageIdx);
       if (typeof this.onChange === 'function') {
         this.onChange(this.getDocumentData());
       }

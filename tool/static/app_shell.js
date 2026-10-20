@@ -72,10 +72,21 @@
     initEditors() {
       if (window.KixDocsEditor) {
         this.kix = new window.KixDocsEditor('docsScrollBox', 'kixHiddenInput', (curPage, totalPages, words) => {
-          const el = document.getElementById('docsCurPage');
-          if (el) el.innerText = curPage;
-          const statusEl = document.getElementById('docsStatusText');
-          if (statusEl) statusEl.innerText = `Halaman ${curPage} dari ${totalPages} · ${words} kata`;
+          // Setiap bagian status bar diperbarui sebagai ELEMEN TERPISAH.
+          //
+          // Dulu seluruh isi #docsStatusText ditimpa lewat innerText. Karena
+          // <span id="docsCurPage"> adalah ANAK dari div itu, penimpaan pada
+          // pembaruan PERTAMA ikut menghapus span tersebut; getElementById
+          // ('docsCurPage') lalu selamanya null sehingga angka halaman tidak
+          // pernah bisa dibaca maupun disinkronkan lagi. Teks status tetap
+          // tampak benar (ditulis ulang utuh), jadi cacat ini tidak terlihat.
+          const setStatusPart = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.innerText = String(val);
+          };
+          setStatusPart('docsCurPage', curPage);
+          setStatusPart('docsTotalPages', totalPages);
+          setStatusPart('docsWordCount', words);
         });
         this.kix.onChange = (data) => {
           if (!this._restoring) this.recordHistory('docs', data);

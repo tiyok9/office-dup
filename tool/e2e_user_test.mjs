@@ -1363,6 +1363,35 @@ async function stopIsolatedServer() {
     pbAfter.activePageIdx === pbBefore.pageIdx + 1 && pbAfter.activeLineIdx === 0 && pbAfter.cursorCharIdx === 0,
     `p=${pbAfter.activePageIdx} l=${pbAfter.activeLineIdx} c=${pbAfter.cursorCharIdx}`);
 
+  // INDIKATOR HALAMAN SADAR-VIEWPORT (kuirk Math.floor(scrollTop/850)+1).
+  //
+  // Dulu status bar menghitung halaman dari scrollTop dibagi PAGE_CANVAS_HEIGHT
+  // (850 = tinggi koordinat INTERNAL kanvas), sedangkan pitch tile nyata di DOM
+  // = min-height 1056 + margin-bottom 24. Akibatnya tepat setelah pemisah
+  // halaman indikator TERTINGGAL satu halaman: kursor sudah di halaman baru,
+  // angka di status bar masih halaman lama.
+  //
+  // Diperiksa SEBELUM scroll manual di bawah, supaya yang terbukti adalah
+  // editor sendiri yang memindahkan viewport (scrollPageIntoView), bukan tes.
+  const indicator11 = JSON.parse(await cdp.eval(`JSON.stringify({
+    curText: (document.getElementById('docsCurPage') || {}).textContent || '',
+    statusText: (document.getElementById('docsStatusText') || {}).textContent || '',
+    scrollTop: Math.round(document.getElementById('docsScrollBox').scrollTop),
+    activePageIdx: window.workspaceApp.kix.activePageIdx,
+    totalPages: window.workspaceApp.kix.pages.length
+  })`));
+  check('S11 Docs: status bar menunjukkan HALAMAN KURSOR (bukan tertinggal di halaman lama)',
+    Number(indicator11.curText) === indicator11.activePageIdx + 1,
+    `bar=${indicator11.curText} kursor=${indicator11.activePageIdx + 1} | ${indicator11.statusText}`);
+  check('S11 Docs: status bar menyebut total halaman yang benar',
+    indicator11.statusText.includes(`dari ${indicator11.totalPages}`),
+    indicator11.statusText);
+  // Kursor di halaman ke-2 dst. berarti tile halaman itu berada di atas:
+  // viewport WAJIB sudah bergeser tanpa perlu scroll manual dari tes.
+  check('S11 Docs: viewport otomatis bergeser ke halaman baru (tanpa scroll manual)',
+    indicator11.activePageIdx === 0 || indicator11.scrollTop > 0,
+    `scrollTop=${indicator11.scrollTop} aktif=${indicator11.activePageIdx}`);
+
   // Model bisa benar sementara layar kosong; periksa piksel kanvas halaman baru.
   const paint11 = JSON.parse(await cdp.eval(`(() => {
     const c = document.getElementById('kixCanvas' + window.workspaceApp.kix.pages.length);

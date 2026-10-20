@@ -65,11 +65,28 @@
       // Bagan mengambang yang disimpan bersama dokumen (lihat insertChart).
       this.charts = [];
       this.activeChartId = null;
+
+      // ==== SELEKSI RENTANG (paritas Google Sheets) ====
+      // Lapisan tambahan DI ATAS activeCol/activeRow — properti lama tetap utuh
+      // agar formula, bagan, dan setActiveCell() tidak berubah perilakunya.
+      this.selStartCol = this.activeCol;
+      this.selStartRow = this.activeRow;
+      this.selEndCol = this.activeCol;
+      this.selEndRow = this.activeRow;
+      this.isSelecting = false;
+      this._dragBound = false;
       this.initEvents();
     }
 
     setCells(cellsMap) {
       this.cells = JSON.parse(JSON.stringify(cellsMap || {}));
+      // Dokumen baru = seleksi lama tidak berlaku. Tanpa ini, name box bisa
+      // menampilkan rentang C2:E5 dari dokumen SEBELUMNYA (bocor antar-dokumen).
+      this.selStartCol = this.activeCol;
+      this.selStartRow = this.activeRow;
+      this.selEndCol = this.activeCol;
+      this.selEndRow = this.activeRow;
+      this.isSelecting = false;
       this.render();
       this.updateFormulaBar();
     }
@@ -91,6 +108,30 @@
 
     getActiveCoord() {
       return `${this.colLabel(this.activeCol)}${this.activeRow}`;
+    }
+
+    // ==== RENTANG (RANGE) — paritas name box Google Sheets ====
+    // activeCol/activeRow adalah JANGKAR (anchor) seleksi, persis seperti Sheets:
+    // sel aktif tetap satu sel, sedangkan selStart..selEnd menggambarkan area.
+    getRangeBounds() {
+      return {
+        minCol: Math.min(this.selStartCol, this.selEndCol),
+        maxCol: Math.max(this.selStartCol, this.selEndCol),
+        minRow: Math.min(this.selStartRow, this.selEndRow),
+        maxRow: Math.max(this.selStartRow, this.selEndRow)
+      };
+    }
+
+    isRangeSelection() {
+      const b = this.getRangeBounds();
+      return b.minCol !== b.maxCol || b.minRow !== b.maxRow;
+    }
+
+    // Label A1 atau A1:C5 — format kanonik Google Sheets.
+    getRangeA1() {
+      if (!this.isRangeSelection()) return this.getActiveCoord();
+      const b = this.getRangeBounds();
+      return `${this.colLabel(b.minCol)}${b.minRow}:${this.colLabel(b.maxCol)}${b.maxRow}`;
     }
 
     // ==== BAGAN (CHART) — SVG murni, TANPA pustaka luar ====
@@ -314,6 +355,11 @@
       if (col >= 0 && col < this.totalCols && row >= 1 && row <= this.totalRows) {
         this.activeCol = col;
         this.activeRow = row;
+        // Pindah sel secara programatik = seleksi tunggal, bukan rentang.
+        this.selStartCol = col;
+        this.selStartRow = row;
+        this.selEndCol = col;
+        this.selEndRow = row;
         this.render();
         this.updateFormulaBar();
       }
@@ -342,11 +388,56 @@
             }
             this.activeCol = clickedCol;
             this.activeRow = clickedRow;
+            // Mulai seleksi rentang baru: jangkar (anchor) = sel yang diklik.
+            // activeCol/activeRow tetap jadi jangkar agar formula, bagan, dan
+            // setActiveCell() berperilaku persis seperti sebelumnya.
+            this.selStartCol = clickedCol;
+            this.selStartRow = clickedRow;
+            this.selEndCol = clickedCol;
+            this.selEndRow = clickedRow;
+            this.isSelecting = true;
             this.render();
             this.updateFormulaBar();
           }
         }
       });
+
+      // ==== DRAG SELEKSI RENTANG (paritas Google Sheets) ====
+      // Geser mouse dari sel jangkar -> sel akhir. Koordinat dikompensasi zoom
+      // dengan rasio canvas.width / rect.width (sama seperti mousedown), supaya
+      // seleksi tetap akurat saat --app-zoom aktif.
+      const cellAtEvent = (e) => {
+        const rect = this.canvas.getBoundingClientRect();
+        const sx = rect.width ? this.canvas.width / rect.width : 1;
+        const sy = rect.height ? this.canvas.height / rect.height : 1;
+        const x = (e.clientX - rect.left) * sx;
+        const y = (e.clientY - rect.top) * sy;
+        if (x <= this.headerWidth || y <= this.headerHeight) return null;
+        const col = Math.floor((x - this.headerWidth + this.scrollX) / this.colWidth);
+        const row = Math.floor((y - this.headerHeight + this.scrollY) / this.rowHeight) + 1;
+        if (col < 0 || col >= this.totalCols || row < 1 || row > this.totalRows) return null;
+        return { col, row };
+      };
+
+      this.canvas.addEventListener('mousemove', (e) => {
+        if (!this.isSelecting || this.editing) return;
+        const hit = cellAtEvent(e);
+        if (!hit) return;
+        if (hit.col === this.selEndCol && hit.row === this.selEndRow) return;
+        this.selEndCol = hit.col;
+        this.selEndRow = hit.row;
+        this.render();
+        this.updateFormulaBar();
+      });
+
+      const endSelection = () => {
+        if (!this.isSelecting) return;
+        this.isSelecting = false;
+        this.updateFormulaBar();
+      };
+      this.canvas.addEventListener('mouseup', endSelection);
+      // Mouse dilepas di luar kanvas tetap harus menutup mode seleksi.
+      window.addEventListener('mouseup', endSelection);
 
       // Klik ganda pada sel aktif = sunting isi sel yang sudah ada (seperti Sheets).
       this.canvas.addEventListener('dblclick', (e) => {
@@ -435,6 +526,12 @@
 
         if (handled) {
           e.preventDefault();
+          // Navigasi keyboard meruntuhkan seleksi rentang kembali ke satu sel
+          // (perilaku Google Sheets): jangkar ikut pindah ke sel baru.
+          this.selStartCol = this.activeCol;
+          this.selStartRow = this.activeRow;
+          this.selEndCol = this.activeCol;
+          this.selEndRow = this.activeRow;
           this.render();
           this.updateFormulaBar();
         }
@@ -456,7 +553,9 @@
 
     updateFormulaBar() {
       const coord = this.getActiveCoord();
-      if (this.activeCellBox) this.activeCellBox.innerText = coord;
+      // Name box menampilkan RENTANG (A1:C5) saat seleksi lebih dari satu sel,
+      // persis seperti #t-name-box Google Sheets. Satu sel tetap "C1".
+      if (this.activeCellBox) this.activeCellBox.innerText = this.getRangeA1();
       // Saat menyunting di sel, formula bar cermin buffer sunting (dua arah).
       if (this.editing) {
         if (this.formulaInput) this.formulaInput.value = this.editBuffer;
@@ -777,6 +876,41 @@
         }
       }
 
+      // ==== OVERLAY SELEKSI RENTANG (paritas Google Sheets) ====
+      // Digambar SEBELUM border sel aktif. Warna & ukuran mengikuti Sheets asli:
+      // isi biru transparan, tepi #1a73e8 2px, fill handle 6x6 di pojok kanan-bawah.
+      const rb = this.getRangeBounds();
+      const rangeMulti = (rb.minCol !== rb.maxCol || rb.minRow !== rb.maxRow);
+      let handleX = 0, handleY = 0, handleVisible = false;
+
+      if (rangeMulti) {
+        const rx = this.headerWidth + (rb.minCol * this.colWidth) - this.scrollX;
+        const ry = this.headerHeight + ((rb.minRow - 1) * this.rowHeight) - this.scrollY;
+        const rw = (rb.maxCol - rb.minCol + 1) * this.colWidth;
+        const rh = (rb.maxRow - rb.minRow + 1) * this.rowHeight;
+
+        // Potong area agar tidak menimpa header kolom/baris.
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(this.headerWidth, this.headerHeight, width - this.headerWidth, height - this.headerHeight);
+        ctx.clip();
+
+        // 1) Isi biru transparan di seluruh area rentang.
+        ctx.fillStyle = 'rgba(26, 115, 232, 0.12)';
+        ctx.fillRect(rx, ry, rw, rh);
+
+        // 2) Tepi luar rentang.
+        ctx.strokeStyle = '#1a73e8';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(rx, ry, rw, rh);
+        ctx.lineWidth = 1;
+        ctx.restore();
+
+        handleX = rx + rw - 4;
+        handleY = ry + rh - 4;
+        handleVisible = true;
+      }
+
       // Active Cell Selection Border (Google Green #0f9d58)
       const selX = this.headerWidth + (this.activeCol * this.colWidth) - this.scrollX;
       const selY = this.headerHeight + ((this.activeRow - 1) * this.rowHeight) - this.scrollY;
@@ -789,6 +923,17 @@
         ctx.fillStyle = '#0f9d58';
         ctx.fillRect(selX + this.colWidth - 4, selY + this.rowHeight - 4, 6, 6);
         ctx.lineWidth = 1;
+      }
+
+      // 3) Fill handle di pojok kanan-bawah rentang: kotak biru bertepi putih.
+      if (handleVisible && handleX >= this.headerWidth && handleY >= this.headerHeight) {
+        ctx.save();
+        ctx.fillStyle = '#1a73e8';
+        ctx.fillRect(handleX, handleY, 6, 6);
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(handleX + 0.5, handleY + 0.5, 5, 5);
+        ctx.restore();
       }
     }
   }

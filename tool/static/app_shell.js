@@ -105,6 +105,10 @@
           window.open(safe, '_blank', 'noopener,noreferrer');
           this.showToast('Membuka tautan: ' + safe);
         };
+        // Klik highlight komentar: buka thread. Dipasang di shell (bukan
+        // editor) supaya editor tetap murni model+tampilan, dan harness
+        // E2E dapat mengganti perilakunya saat pengujian.
+        this.kix.onCommentClick = (comment) => this.openCommentModal(comment);
       }
 
       if (window.RitzSpreadsheetEditor) {
@@ -783,6 +787,7 @@
       bind('tbPrint', () => window.print());
       bind('tbPresent', () => { if (this.punch) this.punch.startPresentationMode(); });
       bind('tbWordCount', () => this.openWordCountModal());
+      bind('tbComment', () => { if (this.currentApp === 'docs') this.openCommentModal(); });
       bind('tbShortcuts', () => this.openShortcutsModal());
 
       // --- Zoom (global, <select> → event 'change', bukan 'click') ---
@@ -1046,6 +1051,12 @@
           // akan mati tepat di konteks yang paling dibutuhkan.
           e.preventDefault();
           this.openLinkModal();
+        } else if (k === 'm' && e.altKey && this.currentApp === 'docs' && !inModalField) {
+          // Komentar: paritas Google Docs (Ctrl+Alt+M). Guard !inModalField
+          // (bukan !inField) — hiddenInput Kix adalah TEXTAREA, jadi inField
+          // selalu true saat mengetik di dokumen.
+          e.preventDefault();
+          this.openCommentModal();
         } else if (k === 's') {
           e.preventDefault();
           this.saveDocument({ title: document.getElementById('docTitle')?.value });
@@ -1176,6 +1187,7 @@
           { label: 'Tambah Halaman Baru (Docs)', action: () => { if (this.kix) this.kix.insertNewPage(); } },
           { label: 'Pemisah Halaman (Docs)', shortcut: 'Ctrl+Enter', action: () => { if (this.kix) this.kix.insertPageBreak(); } },
           { label: 'Tautan (Docs)', shortcut: 'Ctrl+K', action: () => this.openLinkModal() },
+          { label: 'Komentar (Docs)', shortcut: 'Ctrl+Alt+M', action: () => this.openCommentModal() },
           { sep: true },
           { label: 'Tambah Slide Baru (Slides)', action: () => { if (this.punch) this.punch.addNewSlide(); } },
           { label: 'Duplikat Slide Aktif (Slides)', action: () => { if (this.punch) this.punch.duplicateActiveSlide(); } },
@@ -1380,6 +1392,7 @@
         ['Delete', 'Hapus elemen terpilih (Slides)'],
         ['F5', 'Mulai presentasi (Slides)'],
         ['Esc', 'Tutup dialog / keluar presentasi'],
+        ['Ctrl + Alt + M', 'Tambah / sunting komentar (Docs)'],
         ['Double-click', 'Sunting teks (Docs / Slides)']
       ];
       modal.innerHTML = `
@@ -1607,6 +1620,156 @@
       if (ap) ap.addEventListener('click', apply);
 
       if (tEl) { tEl.focus(); tEl.select(); }
+    }
+
+    // ==== KOMENTAR (Docs) ====
+    // Meniru arsitektur openLinkModal(): modal dinamis via ensureModal(),
+    // stopPropagation pada keydown input/textarea (cegah bocor ke hiddenInput
+    // Kix), dan onChange dipicu oleh metode kix_editor (bukan di sini).
+    openCommentModal(existing) {
+      if (!this.kix || this.currentApp !== 'docs') {
+        this.showToast('Komentar hanya tersedia di Docs.');
+        return;
+      }
+      // Jika tidak ada komentar yang diklik, cek apakah kursor berada di
+      // dalam komentar yang sudah ada — mirip Google Docs (Ctrl+Alt+M membuka
+      // thread yang ada, bukan membuat duplikat).
+      if (!existing) {
+        existing = this.kix.getCommentNearCursor();
+      }
+      const modal = this.ensureModal();
+      const btn = 'padding:7px 14px; border:1px solid #dadce0; background:#fff; color:#1a73e8; border-radius:6px; font-size:12.5px; font-weight:500; cursor:pointer;';
+      const btnP = 'padding:7px 14px; border:none; background:#1a73e8; color:#fff; border-radius:6px; font-size:12.5px; font-weight:500; cursor:pointer;';
+      const btnD = 'padding:7px 14px; border:1px solid #dadce0; background:#fff; color:#d93025; border-radius:6px; font-size:12.5px; font-weight:500; cursor:pointer;';
+      const fmtDate = (iso) => {
+        try {
+          const d = new Date(iso);
+          return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) + ' ' +
+                 d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+        } catch { return iso || ''; }
+      };
+
+      if (!existing) {
+        // ==== MODE: KOMENTAR BARU ====
+        const word = this.kix.wordRangeAtCursor();
+        if (!word) {
+          this.showToast('Tempatkan kursor pada teks untuk menambahkan komentar.');
+          this.closeModal();
+          return;
+        }
+        modal.innerHTML = `
+          <div style="background:#fff; width:470px; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,.25); padding:20px; font-family:'Google Sans',Arial,sans-serif;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+              <h3 style="font-size:17px; font-weight:500; color:#202124; margin:0;">Tambah Komentar</h3>
+              <span class="modal-close" style="cursor:pointer; font-size:20px; color:#5f6368;">✕</span>
+            </div>
+            <div style="font-size:12px; color:#5f6368; margin-bottom:8px;">Kata yang dikomentari:</div>
+            <div style="background:#fef7e0; border-left:3px solid #f9ab00; padding:8px 12px; border-radius:4px; font-size:13px; color:#202124; margin-bottom:14px;">${escapeXml(word.text || '')}</div>
+            <label style="display:block; font-size:12px; color:#5f6368; margin-bottom:4px;">Komentar</label>
+            <textarea id="gwsCommentText" rows="3" placeholder="Tulis komentar…" autocomplete="off"
+              style="width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid #dadce0; border-radius:6px; font-size:13px; outline:none; resize:vertical; font-family:inherit;"></textarea>
+            <div id="gwsCommentErr" style="font-size:12px; color:#d93025; margin-top:8px; min-height:16px;"></div>
+            <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:6px;">
+              <button class="modal-close" style="${btn}">Batal</button>
+              <button id="gwsCommentApply" style="${btnP}">Komentari</button>
+            </div>
+          </div>
+        `;
+        modal.style.display = 'flex';
+        const tEl = modal.querySelector('#gwsCommentText');
+        const errEl = modal.querySelector('#gwsCommentErr');
+        modal.querySelectorAll('.modal-close').forEach(el => el.addEventListener('click', () => this.closeModal()));
+        // Ketikan di modal TIDAK boleh bocor ke hiddenInput Kix (dokumen
+        // digambar ke canvas, jadi karakter yang lolos menulis ke dokumen).
+        if (tEl) {
+          tEl.addEventListener('keydown', (ev) => {
+            ev.stopPropagation();
+            if (ev.key === 'Escape') { ev.preventDefault(); this.closeModal(); }
+          });
+        }
+        const apply = () => {
+          const body = tEl ? tEl.value.trim() : '';
+          if (!body) { if (errEl) errEl.textContent = 'Komentar tidak boleh kosong.'; return; }
+          const ok = this.kix.addCommentAtCursor(body, 'Saya');
+          if (!ok) { if (errEl) errEl.textContent = 'Gagal menambahkan komentar di posisi kursor.'; return; }
+          this.closeModal();
+          this.showToast('Komentar ditambahkan.');
+        };
+        const ap = modal.querySelector('#gwsCommentApply');
+        if (ap) ap.addEventListener('click', apply);
+        if (tEl) tEl.focus();
+      } else {
+        // ==== MODE: LIHAT / BALAS / SELESAIKAN / HAPUS ====
+        const c = existing;
+        const renderThread = () => {
+          const rs = Array.isArray(c.replies) ? c.replies : [];
+          const replyHtml = rs.map(r => `
+            <div style="margin-top:10px; padding-left:14px; border-left:2px solid #e0e0e0;">
+              <div style="font-size:12px; color:#5f6368; margin-bottom:2px;"><strong>${escapeXml(r.author || 'Saya')}</strong> · ${escapeXml(fmtDate(r.createdAt))}</div>
+              <div style="font-size:13px; color:#202124; white-space:pre-wrap;">${escapeXml(r.text || '')}</div>
+            </div>`).join('');
+          const resolvedBadge = c.resolved
+            ? '<span style="display:inline-block; padding:2px 8px; background:#e6f4ea; color:#137333; border-radius:10px; font-size:11px; font-weight:500; margin-left:8px;">Selesai</span>'
+            : '';
+          modal.innerHTML = `
+            <div style="background:#fff; width:500px; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,.25); padding:20px; font-family:'Google Sans',Arial,sans-serif;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+                <h3 style="font-size:17px; font-weight:500; color:#202124; margin:0;">Komentar${resolvedBadge}</h3>
+                <span class="modal-close" style="cursor:pointer; font-size:20px; color:#5f6368;">✕</span>
+              </div>
+              <div style="font-size:12px; color:#5f6368; margin-bottom:4px;"><strong>${escapeXml(c.author || 'Saya')}</strong> · ${escapeXml(fmtDate(c.createdAt))}</div>
+              <div style="font-size:13px; color:#202124; white-space:pre-wrap; background:#f8f9fa; padding:10px 12px; border-radius:6px; margin-bottom:14px;">${escapeXml(c.text || '')}</div>
+              ${replyHtml ? `<div style="margin-bottom:14px;">${replyHtml}</div>` : ''}
+              <label style="display:block; font-size:12px; color:#5f6368; margin-bottom:4px;">Balas</label>
+              <textarea id="gwsReplyText" rows="2" placeholder="Tulis balasan…" autocomplete="off"
+                style="width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid #dadce0; border-radius:6px; font-size:13px; outline:none; resize:vertical; font-family:inherit; margin-bottom:8px;"></textarea>
+              <div id="gwsReplyErr" style="font-size:12px; color:#d93025; min-height:16px; margin-bottom:6px;"></div>
+              <div style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;">
+                <button id="gwsCommentDelete" style="${btnD}">Hapus</button>
+                <button id="gwsCommentResolve" style="${btn}">${c.resolved ? 'Buka Kembali' : 'Selesaikan'}</button>
+                <button class="modal-close" style="${btn}">Tutup</button>
+                <button id="gwsReplyApply" style="${btnP}">Balas</button>
+              </div>
+            </div>
+          `;
+          modal.style.display = 'flex';
+          modal.querySelectorAll('.modal-close').forEach(el => el.addEventListener('click', () => this.closeModal()));
+          const rEl = modal.querySelector('#gwsReplyText');
+          const rErr = modal.querySelector('#gwsReplyErr');
+          if (rEl) {
+            rEl.addEventListener('keydown', (ev) => {
+              ev.stopPropagation();
+              if (ev.key === 'Escape') { ev.preventDefault(); this.closeModal(); }
+            });
+          }
+          const replyBtn = modal.querySelector('#gwsReplyApply');
+          if (replyBtn) replyBtn.addEventListener('click', () => {
+            const body = rEl ? rEl.value.trim() : '';
+            if (!body) { if (rErr) rErr.textContent = 'Balasan tidak boleh kosong.'; return; }
+            const ok = this.kix.addReply(c.id, body, 'Saya');
+            if (!ok) { if (rErr) rErr.textContent = 'Komentar tidak ditemukan.'; return; }
+            this.showToast('Balasan ditambahkan.');
+            renderThread();
+            const nr = modal.querySelector('#gwsReplyText');
+            if (nr) nr.focus();
+          });
+          const resBtn = modal.querySelector('#gwsCommentResolve');
+          if (resBtn) resBtn.addEventListener('click', () => {
+            const ok = this.kix.resolveComment(c.id);
+            if (!ok) { this.closeModal(); this.showToast('Komentar tidak ditemukan.'); return; }
+            this.showToast(c.resolved ? 'Komentar dibuka kembali.' : 'Komentar diselesaikan.');
+            renderThread();
+          });
+          const delBtn = modal.querySelector('#gwsCommentDelete');
+          if (delBtn) delBtn.addEventListener('click', () => {
+            const ok = this.kix.removeComment(c.id);
+            this.closeModal();
+            this.showToast(ok ? 'Komentar dihapus.' : 'Komentar tidak ditemukan.');
+          });
+          if (rEl) rEl.focus();
+        };
+        renderThread();
+      }
     }
 
     openAboutModal() {

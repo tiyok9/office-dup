@@ -97,7 +97,9 @@
       // dan karena getDocumentData() mengembalikan pages, tautan otomatis ikut
       // autosave + snapshot undo tanpa saluran persistensi tambahan.
       this._linkBoxes = [];       // kotak hit-test per halaman (diisi renderPage)
+      this._commentBoxes = [];    // kotak hit-test highlight komentar (diisi renderPage)
       this.onLinkClick = null;    // callback buka tautan (dipaksa harness untuk uji)
+      this.onCommentClick = null; // callback buka popover komentar (dipaksa harness)
       this.linkColor = '#1a73e8'; // warna tautan Docs
       // ==== STATE FIND & REPLACE ====
       // Pencarian bekerja pada MODEL TEKS (this.pages[].lines[].text), bukan DOM,
@@ -155,6 +157,27 @@
 
           const line = this.pages[pIdx]?.lines[this.activeLineIdx];
           const clickXl = (e.clientX - rect.left) * zx;
+          const clickYl = (e.clientY - rect.top) * zy;
+
+          // ==== KLIK HIGHLIGHT KOMENTAR ====
+          // WAJIB diperiksa SEBELUM pemetaan karakter. Kalau tidak, klik pada
+          // highlight kuning hanya memindahkan kursor dan popover komentar tak
+          // pernah bisa dibuka dari kanvas.
+          // Ctrl/Cmd+Klik SELALU milik tautan, bukan komentar. Tanpa pengecualian
+          // ini, komentar yang menumpuk di atas tautan akan menelan Ctrl+Click
+          // dan tautan jadi mustahil dibuka dari kanvas (regresi senyap: tes
+          // tautan lama tetap hijau karena memanggil API, bukan klik nyata).
+          const ctrlIntent = e.ctrlKey || e.metaKey;
+          const cHit = ctrlIntent ? null : this.commentBoxAt(pIdx, clickXl, clickYl);
+          this._lastHitComment = cHit || null;
+          if (cHit) {
+            this.activeLineIdx = cHit.lIdx;
+            this.cursorCharIdx = cHit.comment.start;
+            if (typeof this.onCommentClick === 'function') this.onCommentClick(cHit.comment, cHit);
+            this.emitActiveLine();
+            return;
+          }
+
           // Kursor mendarat pada karakter yang DIKLIK, bukan selalu di akhir baris.
           // Sebelumnya `line.text.length` membuat Ctrl+K hanya mampu menggenggam
           // kata terakhir, sehingga tautan di tengah baris mustahil disunting.
@@ -164,7 +187,6 @@
           // Paritas Google Docs MODE EDIT: klik biasa = taruh kursor, hanya
           // Ctrl+Klik (Cmd+Klik di Mac) yang membuka tautan. Kalau klik biasa
           // langsung membuka, user tidak bisa menyunting teks di dalam tautan.
-          const clickYl = (e.clientY - rect.top) * zy;
           const hit = this.linkBoxAt(pIdx, clickXl, clickYl);
           this._lastHitLink = hit || null;
           if (hit && (e.ctrlKey || e.metaKey)) {
@@ -284,6 +306,12 @@
         if (this.cursorCharIdx > 0) {
           line.text = line.text.slice(0, this.cursorCharIdx - 1) + line.text.slice(this.cursorCharIdx);
           this._shiftLinks(line, this.cursorCharIdx - 1, -1);
+          // Komentar WAJIB ikut bergeser di sini. Delete sudah memanggil
+          // _shiftComments, tetapi Backspace di tengah baris adalah jalur
+          // BERBEDA; tanpa baris ini offset komentar melenceng satu karakter
+          // setiap kali user menghapus ke belakang (cacat senyap: highlight
+          // bergeser pelan-pelan dan tes offset lain tetap hijau).
+          this._shiftComments(line, this.cursorCharIdx - 1, -1);
           this.cursorCharIdx--;
           modified = true;
         } else if (line.listType && !line.text) {
@@ -304,6 +332,14 @@
               .concat(moved).sort((a, b) => a.start - b.start);
             delete line.links;
           }
+          // Komentar baris yang digabung ikut pindah, digeser sepanjang teks
+          // baris sebelumnya. Objek di-spread agar id/author/text/replies utuh.
+          if (Array.isArray(line.comments) && line.comments.length) {
+            const joinAt = prevLine.text.length;
+            const movedC = line.comments.map(C => ({ ...C, start: C.start + joinAt, end: C.end + joinAt }));
+            prevLine.comments = (Array.isArray(prevLine.comments) ? prevLine.comments : []).concat(movedC);
+            delete line.comments;
+          }
           this.cursorCharIdx = prevLine.text.length;
           prevLine.text += line.text;
           page.lines.splice(this.activeLineIdx, 1);
@@ -315,6 +351,7 @@
         if (this.cursorCharIdx < line.text.length) {
           line.text = line.text.slice(0, this.cursorCharIdx) + line.text.slice(this.cursorCharIdx + 1);
           this._shiftLinks(line, this.cursorCharIdx, -1);
+          this._shiftComments(line, this.cursorCharIdx, -1);
           modified = true;
         }
       } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
@@ -348,10 +385,24 @@
           if (keep.length) line.links = keep; else delete line.links;
           if (move.length) movedLinks = move;
         }
+        // ==== KOMENTAR SAAT PECAH BARIS (Opsi A) ====
+        // Thread TIDAK dibelah: komentar yang melintasi titik potong tetap di
+        // baris kiri dengan rentang dipangkas (end = cut). Percakapan yang
+        // terbelah dua membingungkan pembaca, dan id yang sama di dua baris
+        // akan membuat removeComment() menghapus dua tempat sekaligus.
+        let movedComments = null;
+        {
+          const split = this._splitCommentsAt(line, this.cursorCharIdx);
+          if (split) {
+            if (split.keep.length) line.comments = split.keep; else delete line.comments;
+            if (split.move.length) movedComments = split.move;
+          }
+        }
         // Warisi SELURUH properti gaya (termasuk underline/strike/heading/list),
         // bukan hanya bold/italic — kalau tidak, format user hilang tiap Enter.
         const newLine = { text: textAfter };
         if (movedLinks) newLine.links = movedLinks;
+        if (movedComments) newLine.comments = movedComments;
         for (const k of LINE_STYLE_KEYS) {
           if (line[k] !== undefined) newLine[k] = line[k];
           else if (this.currentStyle[k] !== undefined) newLine[k] = this.currentStyle[k];
@@ -397,8 +448,9 @@
       } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
         line.text = line.text.slice(0, this.cursorCharIdx) + e.key + line.text.slice(this.cursorCharIdx);
-        // Sisip 1 karakter: tautan sesudah/di dalam rentang ikut bergeser.
+        // Sisip 1 karakter: tautan & komentar sesudah/di dalam rentang ikut bergeser.
         this._shiftLinks(line, this.cursorCharIdx, 1);
+        this._shiftComments(line, this.cursorCharIdx, 1);
         this.cursorCharIdx++;
         modified = true;
       }
@@ -598,6 +650,18 @@
         if (move.length) movedLinks = move;
       }
 
+      // ==== KOMENTAR SAAT PECAH HALAMAN (Opsi A) ====
+      // Aturan sama dengan Enter: thread tidak dibelah. Komentar yang melintasi
+      // titik potong tetap di halaman lama dengan end dipangkas ke cut.
+      let movedComments = null;
+      {
+        const split = this._splitCommentsAt(line, cut);
+        if (split) {
+          if (split.keep.length) line.comments = split.keep; else delete line.comments;
+          if (split.move.length) movedComments = split.move;
+        }
+      }
+
       const tailText = text.slice(cut);
       line.text = text.slice(0, cut);
 
@@ -605,6 +669,7 @@
       // tepat di titik pemisah halaman.
       const tailLine = { text: tailText };
       if (movedLinks) tailLine.links = movedLinks;
+      if (movedComments) tailLine.comments = movedComments;
       for (const k of LINE_STYLE_KEYS) {
         if (line[k] !== undefined) tailLine[k] = line[k];
         else if (this.currentStyle[k] !== undefined) tailLine[k] = this.currentStyle[k];
@@ -908,6 +973,192 @@
       return true;
     }
 
+    // ==== KOMENTAR: MESIN ====
+    // Komentar hidup sebagai rentang pada line.text: line.comments = [{id,start,end,...}].
+    // Sama seperti tautan, TIDAK ada struktur segmen baru: reflowPages() tidak
+    // tersentuh, dan karena getDocumentData() mengembalikan pages, komentar
+    // otomatis ikut autosave + snapshot undo tanpa saluran persistensi tambahan.
+    //
+    // TIGA BEDA PENTING dari tautan (jangan salin literal):
+    //  1. Accessor TIDAK lazy-init. _linksOf() menulis line.links = [] pada setiap
+    //     baris yang disunting; kalau ditiru, tiap keystroke menambah noise
+    //     "comments": [] ke payload simpan. Di sini accessor murni baca.
+    //  2. Objek komentar punya metadata (id/author/text/replies). Saat offset
+    //     bergeser objek WAJIB di-spread ({...C}), bukan direbuild seperti
+    //     _shiftLinks yang hanya menyimpan {start,end,url}.
+    //  3. Komentar boleh tumpang-tindih (dua orang menandai frasa yang sama),
+    //     jadi addComment hanya push — tidak menimpa rentang beririsan.
+    _commentsOf(line) {
+      return (line && Array.isArray(line.comments)) ? line.comments : [];
+    }
+
+    _newCommentId() {
+      // crypto.randomUUID tersedia di browser modern dan Node 22/24. Fallback
+      // menjaga id tetap unik di lingkungan uji minimal.
+      try {
+        if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+          return 'c_' + crypto.randomUUID();
+        }
+      } catch (_) { /* jatuh ke fallback */ }
+      return 'c_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    }
+
+    // Jaga offset komentar saat teks berubah. Logika geser identik _shiftLinks,
+    // tetapi objek di-spread agar metadata percakapan tidak hilang.
+    _shiftComments(line, at, delta) {
+      const cs = line && line.comments;
+      if (!Array.isArray(cs) || !cs.length || !delta) return;
+      const out = [];
+      for (const C of cs) {
+        let s = C.start, e = C.end;
+        if (delta > 0) {
+          if (at <= s) { s += delta; e += delta; }
+          else if (at < e) { e += delta; }        // sisip di tengah rentang
+        } else {
+          const d = -delta;
+          if (at + d <= s) { s -= d; e -= d; }
+          else if (at < e) {                      // hapus beririsan
+            const cutStart = Math.max(s, at);
+            const cutEnd = Math.min(e, at + d);
+            e -= (cutEnd - cutStart);
+            if (at < s) s = at;
+          }
+        }
+        if (e > s) out.push({ ...C, start: s, end: e });
+      }
+      if (out.length) line.comments = out; else delete line.comments;
+    }
+
+    // Pecah komentar mengikuti titik potong baris (Enter / Ctrl+Enter).
+    // Opsi A: thread TIDAK dibelah. Komentar yang melintasi titik potong tetap
+    // di baris KIRI dengan rentang dipangkas (end = cut), karena percakapan yang
+    // terbelah dua membingungkan pembaca. Rentang yang kolaps dibuang.
+    _splitCommentsAt(line, cut) {
+      const cs = line && line.comments;
+      if (!Array.isArray(cs) || !cs.length) return null;
+      const keep = [], move = [];
+      for (const C of cs) {
+        if (C.end <= cut) keep.push(C);
+        else if (C.start >= cut) move.push({ ...C, start: C.start - cut, end: C.end - cut });
+        else if (cut > C.start) keep.push({ ...C, end: cut });
+      }
+      return { keep, move };
+    }
+
+    addComment(pIdx, lIdx, start, end, text, author) {
+      const page = this.pages[pIdx];
+      const line = page && page.lines[lIdx];
+      if (!line) return null;
+      const body = String(text == null ? '' : text).trim();
+      if (!body) return null;
+      const len = (line.text || '').length;
+      const s = Math.max(0, Math.min(start, len));
+      const e = Math.max(0, Math.min(end, len));
+      if (e <= s) return null;
+      const C = {
+        id: this._newCommentId(),
+        start: s,
+        end: e,
+        author: String(author || 'Saya'),
+        text: body,
+        createdAt: new Date().toISOString(),
+        resolved: false,
+        replies: []
+      };
+      line.comments = this._commentsOf(line).concat([C]);
+      this.renderAllPages();
+      if (typeof this.onChange === 'function') this.onChange(this.getDocumentData());
+      return C;
+    }
+
+    // Komentar pada kata di kursor. Kix belum punya API seleksi rentang (hanya
+    // cursorCharIdx), jadi jangkar diambil dari wordRangeAtCursor() — persis
+    // seperti applyLinkAtCursor().
+    addCommentAtCursor(text, author) {
+      const line = this.activeLineRef();
+      if (!line) return null;
+      const w = this.wordRangeAtCursor();
+      if (!w) return null;
+      return this.addComment(this.activePageIdx, this.activeLineIdx, w.start, w.end, text, author);
+    }
+
+    getCommentNearCursor() {
+      const line = this.activeLineRef();
+      if (!line) return null;
+      const cs = this._commentsOf(line);
+      if (!cs.length) return null;
+      const at = Math.max(0, Math.min(this.cursorCharIdx, (line.text || '').length));
+      return cs.find(C => at >= C.start && at <= C.end) || null;
+    }
+
+    findComment(id) {
+      for (let p = 0; p < this.pages.length; p++) {
+        const lines = this.pages[p].lines || [];
+        for (let l = 0; l < lines.length; l++) {
+          const hit = this._commentsOf(lines[l]).find(C => C.id === id);
+          if (hit) return { comment: hit, pIdx: p, lIdx: l };
+        }
+      }
+      return null;
+    }
+
+    removeComment(id) {
+      let removed = false;
+      for (const page of this.pages) {
+        for (const line of (page.lines || [])) {
+          if (!Array.isArray(line.comments) || !line.comments.length) continue;
+          const next = line.comments.filter(C => C.id !== id);
+          if (next.length === line.comments.length) continue;
+          removed = true;
+          if (next.length) line.comments = next; else delete line.comments;
+        }
+      }
+      if (!removed) return false;
+      this.renderAllPages();
+      if (typeof this.onChange === 'function') this.onChange(this.getDocumentData());
+      return true;
+    }
+
+    resolveComment(id, resolved) {
+      const hit = this.findComment(id);
+      if (!hit) return false;
+      hit.comment.resolved = (resolved === undefined) ? !hit.comment.resolved : !!resolved;
+      this.renderAllPages();
+      if (typeof this.onChange === 'function') this.onChange(this.getDocumentData());
+      return true;
+    }
+
+    addReply(id, text, author) {
+      const hit = this.findComment(id);
+      if (!hit) return false;
+      const body = String(text == null ? '' : text).trim();
+      if (!body) return false;
+      if (!Array.isArray(hit.comment.replies)) hit.comment.replies = [];
+      hit.comment.replies.push({
+        author: String(author || 'Saya'),
+        text: body,
+        createdAt: new Date().toISOString()
+      });
+      this.renderAllPages();
+      if (typeof this.onChange === 'function') this.onChange(this.getDocumentData());
+      return true;
+    }
+
+    // Posisi (pIdx/lIdx) SENGAJA dihitung segar tiap panggilan: reflowPages()
+    // memindahkan objek line antar-halaman, jadi posisi ter-cache pasti basi.
+    getAllComments() {
+      const out = [];
+      for (let p = 0; p < this.pages.length; p++) {
+        const lines = this.pages[p].lines || [];
+        for (let l = 0; l < lines.length; l++) {
+          for (const C of this._commentsOf(lines[l])) {
+            out.push({ comment: C, pIdx: p, lIdx: l });
+          }
+        }
+      }
+      return out;
+    }
+
     // Kata di sekitar kursor. Kix BELUM punya API seleksi rentang (hanya
     // cursorCharIdx), jadi ini cara jujur menentukan teks yang akan ditautkan.
     wordRangeAtCursor() {
@@ -949,6 +1200,20 @@
       this._shiftLinks(line, at, ins.length);
       this.cursorCharIdx = at + ins.length;
       return this.setLinkRange(this.activePageIdx, this.activeLineIdx, at, at + ins.length, url);
+    }
+
+    // Komentar boleh tumpang-tindih (dua orang menandai frasa yang sama), jadi
+    // bila beberapa kotak kena, ambil yang TERKECIL: itulah anotasi paling
+    // spesifik di titik klik, bukan kotak besar yang menutupi seluruh baris.
+    commentBoxAt(pIdx, x, y) {
+      let best = null;
+      for (const b of this._commentBoxes) {
+        if (b.pIdx !== pIdx) continue;
+        if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
+          if (!best || (b.w * b.h) < (best.w * best.h)) best = b;
+        }
+      }
+      return best;
     }
 
     linkBoxAt(pIdx, x, y) {
@@ -1202,6 +1467,10 @@
       // itu tidak melewati renderAllPages(). Tanpa filter ini, _linkBoxes
       // menumpuk ribuan entri duplikat selama dokumen dibiarkan terbuka.
       this._linkBoxes = this._linkBoxes.filter(b => b.pIdx !== pIdx);
+      // Alasan sama untuk kotak komentar: caret blink memanggil renderPage()
+      // tiap 530 ms tanpa lewat renderAllPages(), jadi tanpa filter ini
+      // _commentBoxes menumpuk duplikat dan hit-test jadi makin lambat.
+      this._commentBoxes = this._commentBoxes.filter(b => b.pIdx !== pIdx);
 
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1261,6 +1530,39 @@
             ctx.fillStyle = isActive ? '#fbbc04' : '#ffe066';
             ctx.fillRect(segX + xOff, y - fontSize + 2, hw, fontSize + 4);
             ctx.restore();
+          }
+
+          // ==== HIGHLIGHT KOMENTAR ====
+          // Digambar SEBELUM fillText supaya teks tetap terbaca di atasnya.
+          // Sama seperti pencarian/tautan: offset komentar berada pada line.text
+          // TANPA penanda butir, jadi digeser m.prefix.length lalu dihitung
+          // irisan per segmen (satu komentar bisa melintasi dua segmen wrap).
+          const cms = this._commentsOf(line);
+          if (cms.length) {
+            const sS2 = seg.start;
+            const sE2 = seg.start + seg.text.length;
+            for (let ci = 0; ci < cms.length; ci++) {
+              const C = cms[ci];
+              const cStart = C.start + m.prefix.length;
+              const cEnd = C.end + m.prefix.length;
+              const a2 = Math.max(cStart, sS2);
+              const b2 = Math.min(cEnd, sE2);
+              if (b2 <= a2) continue;
+              const pre2 = seg.text.slice(0, a2 - sS2);
+              const mid2 = seg.text.slice(a2 - sS2, b2 - sS2);
+              const xOff2 = ctx.measureText(pre2).width;
+              const cw = ctx.measureText(mid2).width;
+              ctx.save();
+              // Kuning = belum selesai, abu = sudah diresolusi.
+              ctx.fillStyle = C.resolved ? 'rgba(154,160,166,0.28)' : 'rgba(255,214,102,0.38)';
+              ctx.fillRect(segX + xOff2, y - fontSize + 2, cw, fontSize + 4);
+              ctx.restore();
+              this._commentBoxes.push({
+                pIdx, lIdx, comment: C,
+                x: segX + xOff2, y: y - fontSize,
+                w: cw, h: fontSize + 6
+              });
+            }
           }
 
           ctx.fillStyle = line.color || '#202124';

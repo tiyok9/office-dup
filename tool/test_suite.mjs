@@ -925,6 +925,181 @@ async function runTestSuite() {
   assert(ritz14.chartSvgDocument() === null,
     'Sheets: tanpa bagan aktif, ekspor SVG mengembalikan null (bukan berkas kosong)');
 
+  // 14j. DOCS: KOMENTAR — mesin jangkar rentang (paritas Google Docs).
+  // Jangkar menumpang pola line.links = [{start,end}], tetapi TIDAK menyalin
+  // literal: accessor tidak lazy-init (agar payload simpan tidak dipenuhi
+  // "comments": []) dan objek di-spread saat offset bergeser (agar metadata
+  // percakapan tidak hilang tiap keystroke).
+  kix14.setDocumentData({ pages: [{ lines: [{ text: 'Halo dunia indah' }] }] });
+  kix14.activePageIdx = 0; kix14.activeLineIdx = 0; kix14.cursorCharIdx = 0;
+  const cmLine = kix14.pages[0].lines[0];
+
+  // Accessor WAJIB murni baca. Kalau ia menulis line.comments = [] seperti
+  // _linksOf, setiap baris yang disunting akan membawa noise ke payload simpan.
+  const cmEmpty = kix14._commentsOf(cmLine);
+  assert(Array.isArray(cmEmpty) && cmEmpty.length === 0
+    && !Object.prototype.hasOwnProperty.call(cmLine, 'comments'),
+    `Docs: accessor komentar tidak membuat properti pada baris :: ${JSON.stringify(Object.keys(cmLine))}`);
+
+  const cmA = kix14.addComment(0, 0, 0, 4, '  Perlu contoh?  ', 'Saya');
+  assert(cmA && typeof cmA.id === 'string' && cmA.id.startsWith('c_'),
+    `Docs: komentar baru punya id unik :: ${cmA && cmA.id}`);
+  assert(cmA.start === 0 && cmA.end === 4 && cmA.text === 'Perlu contoh?',
+    `Docs: rentang & teks komentar ternormalisasi :: ${cmA.start}-${cmA.end} "${cmA.text}"`);
+  assert(cmA.author === 'Saya' && cmA.resolved === false
+    && Array.isArray(cmA.replies) && cmA.replies.length === 0
+    && !isNaN(Date.parse(cmA.createdAt)),
+    `Docs: metadata komentar lengkap (author/resolved/replies/createdAt) :: ${cmA.author}|${cmA.resolved}|${cmA.createdAt}`);
+
+  // Teks kosong dan rentang kolaps ditolak — bukan komentar hantu tanpa jangkar.
+  const cmBadText = kix14.addComment(0, 0, 0, 4, '   ', 'Saya');
+  const cmBadRange = kix14.addComment(0, 0, 6, 6, 'kosong', 'Saya');
+  assert(cmBadText === null && cmBadRange === null,
+    `Docs: komentar tanpa teks / rentang kolaps ditolak :: ${cmBadText}|${cmBadRange}`);
+
+  // Komentar boleh TUMPANG-TINDIH (dua orang menandai frasa sama) — addComment
+  // hanya push, tidak menimpa rentang beririsan seperti setLinkRange.
+  kix14.addComment(0, 0, 2, 7, 'Frasa ini janggal.', 'Budi');
+  const cmBoth = kix14._commentsOf(kix14.pages[0].lines[0]).map(C => `${C.start}-${C.end}`).join(',');
+  assert(cmBoth === '0-4,2-7',
+    `Docs: dua komentar beririsan keduanya tersimpan :: ${cmBoth}`);
+
+  // Geser offset saat menyisip karakter SEBELUM rentang: keduanya ikut bergeser.
+  const cmShiftLine = { text: 'abcdefgh', comments: [{ id: 'x1', start: 3, end: 6, author: 'Saya', text: 't', createdAt: '2026-01-01T00:00:00Z', resolved: false, replies: [] }] };
+  kix14._shiftComments(cmShiftLine, 1, 1);
+  const cmAfterIns = cmShiftLine.comments[0];
+  assert(cmAfterIns.start === 4 && cmAfterIns.end === 7,
+    `Docs: sisip sebelum rentang menggeser kedua offset :: ${cmAfterIns.start}-${cmAfterIns.end}`);
+  // Metadata WAJIB selamat — inilah bedanya dengan _shiftLinks yang merebuild
+  // objek menjadi {start,end,url} dan akan membuang author/text/replies.
+  assert(cmAfterIns.author === 'Saya' && cmAfterIns.text === 't'
+    && Array.isArray(cmAfterIns.replies) && cmAfterIns.createdAt === '2026-01-01T00:00:00Z',
+    `Docs: geser offset TIDAK menghilangkan metadata komentar :: ${JSON.stringify(Object.keys(cmAfterIns))}`);
+
+  // Sisip di TENGAH rentang: hanya end yang melebar.
+  const cmMidLine = { text: 'abcdefgh', comments: [{ id: 'x2', start: 2, end: 6, author: 'Saya', text: 't', createdAt: '2026-01-01T00:00:00Z', resolved: false, replies: [] }] };
+  kix14._shiftComments(cmMidLine, 4, 1);
+  assert(cmMidLine.comments[0].start === 2 && cmMidLine.comments[0].end === 7,
+    `Docs: sisip di tengah rentang hanya melebarkan end :: ${cmMidLine.comments[0].start}-${cmMidLine.comments[0].end}`);
+
+  // Hapus karakter SEBELUM rentang: kedua offset mundur.
+  const cmDelLine = { text: 'abcdefgh', comments: [{ id: 'x3', start: 3, end: 6, author: 'Saya', text: 't', createdAt: '2026-01-01T00:00:00Z', resolved: false, replies: [] }] };
+  kix14._shiftComments(cmDelLine, 1, -1);
+  assert(cmDelLine.comments[0].start === 2 && cmDelLine.comments[0].end === 5,
+    `Docs: hapus sebelum rentang menggeser kedua offset mundur :: ${cmDelLine.comments[0].start}-${cmDelLine.comments[0].end}`);
+
+  // Rentang yang habis terhapus dibuang, bukan menyisakan jangkar hantu e<=s.
+  const cmGoneLine = { text: 'ab', comments: [{ id: 'x4', start: 0, end: 2, author: 'Saya', text: 't', createdAt: '2026-01-01T00:00:00Z', resolved: false, replies: [] }] };
+  kix14._shiftComments(cmGoneLine, 0, -2);
+  assert(!Array.isArray(cmGoneLine.comments) || cmGoneLine.comments.length === 0,
+    `Docs: komentar yang rentangnya habis terhapus ikut dibuang :: ${JSON.stringify(cmGoneLine.comments)}`);
+
+  // Opsi A — Enter TIDAK membelah thread menjadi dua percakapan.
+  // Kasus 1: cut <= start -> seluruh komentar pindah ke baris kanan, offset dinormalkan.
+  const cmSplit1 = kix14._splitCommentsAt({ comments: [{ id: 'a', start: 4, end: 8, author: 'S', text: 't', createdAt: '', resolved: false, replies: [] }] }, 3);
+  assert(cmSplit1 && cmSplit1.keep.length === 0 && cmSplit1.move.length === 1
+    && cmSplit1.move[0].start === 1 && cmSplit1.move[0].end === 5,
+    `Docs: Enter sebelum komentar -> komentar pindah utuh ke baris baru :: ${JSON.stringify(cmSplit1 && cmSplit1.move.map(C => C.start + '-' + C.end))}`);
+  // Kasus 2: cut memotong rentang -> tetap di kiri, dipangkas ke start..cut.
+  const cmSplit2 = kix14._splitCommentsAt({ comments: [{ id: 'b', start: 1, end: 7, author: 'S', text: 't', createdAt: '', resolved: false, replies: [] }] }, 4);
+  assert(cmSplit2 && cmSplit2.keep.length === 1 && cmSplit2.move.length === 0
+    && cmSplit2.keep[0].start === 1 && cmSplit2.keep[0].end === 4,
+    `Docs: Enter memotong rentang -> komentar tetap di kiri & dipangkas :: ${JSON.stringify(cmSplit2 && cmSplit2.keep.map(C => C.start + '-' + C.end))}`);
+  // Kasus 3: cut >= end -> tidak tersentuh sama sekali.
+  const cmSplit3 = kix14._splitCommentsAt({ comments: [{ id: 'c', start: 0, end: 2, author: 'S', text: 't', createdAt: '', resolved: false, replies: [] }] }, 5);
+  assert(cmSplit3 && cmSplit3.keep.length === 1 && cmSplit3.move.length === 0
+    && cmSplit3.keep[0].start === 0 && cmSplit3.keep[0].end === 2,
+    `Docs: Enter sesudah komentar -> komentar tak tersentuh :: ${JSON.stringify(cmSplit3 && cmSplit3.keep.map(C => C.start + '-' + C.end))}`);
+
+  // Integrasi: Enter NYATA lewat handleKey harus memakai aturan Opsi A di atas.
+  kix14.setDocumentData({ pages: [{ lines: [{ text: 'abcdef' }] }] });
+  kix14.activePageIdx = 0; kix14.activeLineIdx = 0; kix14.cursorCharIdx = 3;
+  kix14.addComment(0, 0, 1, 5, 'lintas titik potong', 'Saya');
+  kix14.cursorCharIdx = 3;
+  kix14.handleKey({ key: 'Enter', ctrlKey: false, metaKey: false, preventDefault() {} });
+  const cmLeftLine = kix14.pages[0].lines[0];
+  const cmRightLine = kix14.pages[0].lines[1];
+  const cmLeftRanges = kix14._commentsOf(cmLeftLine).map(C => `${C.start}-${C.end}`).join(',');
+  assert(cmLeftLine.text === 'abc' && cmRightLine.text === 'def',
+    `Docs: Enter memecah baris di kursor :: "${cmLeftLine.text}" | "${cmRightLine.text}"`);
+  assert(cmLeftRanges === '1-3' && kix14._commentsOf(cmRightLine).length === 0,
+    `Docs: komentar melintasi titik potong tetap SATU thread di baris kiri :: kiri=${cmLeftRanges} kanan=${kix14._commentsOf(cmRightLine).length}`);
+
+  // Siklus persistensi: payload JSON harus membawa komentar + balasan utuh.
+  const cmTarget = kix14.getAllComments()[0];
+  kix14.addReply(cmTarget.comment.id, '  Setuju, saya rapikan.  ', 'Budi');
+  const cmRound = JSON.parse(JSON.stringify(kix14.getDocumentData()));
+  kix14.setDocumentData(cmRound);
+  const cmBack = kix14.getAllComments()[0];
+  assert(cmBack && cmBack.comment.replies.length === 1
+    && cmBack.comment.replies[0].text === 'Setuju, saya rapikan.'
+    && cmBack.comment.replies[0].author === 'Budi',
+    `Docs: komentar + balasan selamat melewati round-trip JSON :: ${JSON.stringify(cmBack && cmBack.comment.replies)}`);
+
+  // Tahan-reflow: reflowPages() memindahkan OBJEK line antar-halaman, jadi
+  // komentar harus ikut berpindah tanpa kalkulasi ulang posisi.
+  kix14.setDocumentData({ pages: [{ lines: Array.from({ length: 28 }, (_, i) => ({ text: 'baris ' + i })) }] });
+  kix14.addComment(0, 27, 0, 5, 'baris terakhir halaman satu', 'Saya');
+  kix14.pages[0].lines.push(...Array.from({ length: 12 }, (_, i) => ({ text: 'tambahan ' + i })));
+  kix14.reflowPages();
+  const cmReflow = kix14.getAllComments();
+  assert(cmReflow.length === 1
+    && kix14.pages[cmReflow[0].pIdx].lines[cmReflow[0].lIdx].text === 'baris 27',
+    `Docs: komentar ikut berpindah halaman saat reflow :: p=${cmReflow[0] && cmReflow[0].pIdx} teks="${cmReflow[0] && kix14.pages[cmReflow[0].pIdx].lines[cmReflow[0].lIdx].text}"`);
+
+  // resolve / reply / remove — siklus hidup thread.
+  const cmId = cmReflow[0].comment.id;
+  const cmResolved = kix14.resolveComment(cmId);
+  assert(cmResolved === true && kix14.findComment(cmId).comment.resolved === true,
+    'Docs: komentar dapat ditandai selesai');
+  kix14.resolveComment(cmId);
+  assert(kix14.findComment(cmId).comment.resolved === false,
+    'Docs: tanda selesai dapat dibuka kembali (toggle)');
+  const cmRemoved = kix14.removeComment(cmId);
+  assert(cmRemoved === true && kix14.getAllComments().length === 0
+    && !Object.prototype.hasOwnProperty.call(kix14.pages[0].lines[0], 'comments'),
+    'Docs: hapus komentar terakhir membersihkan properti baris');
+
+  // Komentar TIDAK boleh bocor ke hitungan kata maupun teks ekspor.
+  kix14.setDocumentData({ pages: [{ lines: [{ text: 'satu dua tiga' }] }] });
+  kix14.addComment(0, 0, 0, 4, 'kata kata kata kata kata', 'Saya');
+  const cmWords = kix14.calculateWordCount();
+  const cmPlain = kix14.exportPlainText();
+  assert(cmWords === 3 && !String(cmPlain).includes('kata kata kata'),
+    `Docs: teks komentar tidak ikut dihitung sebagai isi dokumen :: kata=${cmWords}`);
+
+  // Backspace di TENGAH baris adalah jalur BERBEDA dari Delete (baris kode
+  // yang berbeda, bukan sekadar delta berlawanan). Tanpa panggilan
+  // _shiftComments di sana, offset komentar melenceng satu karakter setiap kali
+  // user menghapus ke belakang — cacat senyap: highlight bergeser pelan-pelan
+  // sementara tes Delete di atas tetap hijau.
+  kix14.setDocumentData({ pages: [{ lines: [{ text: 'abcdef' }] }] });
+  kix14.activePageIdx = 0; kix14.activeLineIdx = 0; kix14.cursorCharIdx = 4;
+  kix14.addComment(0, 0, 4, 6, 'ekor', 'Saya');
+  kix14.activeLineIdx = 0; kix14.cursorCharIdx = 2;   // Backspace menghapus 'b'
+  kix14.handleKey({ key: 'Backspace', ctrlKey: false, metaKey: false, preventDefault() {} });
+  const cmBackLine = kix14.pages[0].lines[0];
+  const cmBackC = kix14._commentsOf(cmBackLine)[0];
+  assert(cmBackLine.text === 'acdef',
+    `Docs: Backspace menghapus karakter sebelum kursor :: "${cmBackLine.text}"`);
+  assert(cmBackC && cmBackC.start === 3 && cmBackC.end === 5,
+    `Docs: Backspace sebelum rentang menggeser offset komentar :: ${cmBackC && cmBackC.start + '-' + cmBackC.end}`);
+
+  // Backspace-join: komentar baris KEDUA pindah ke baris pertama, digeser
+  // sepanjang teks baris pertama. Objek WAJIB di-spread agar metadata selamat.
+  kix14.setDocumentData({ pages: [{ lines: [{ text: 'AAA' }, { text: 'BBB' }] }] });
+  kix14.activePageIdx = 0; kix14.activeLineIdx = 1; kix14.cursorCharIdx = 0;
+  kix14.addComment(0, 1, 0, 3, 'seluruh baris dua', 'Budi');
+  kix14.activePageIdx = 0; kix14.activeLineIdx = 1; kix14.cursorCharIdx = 0;
+  kix14.handleKey({ key: 'Backspace', ctrlKey: false, metaKey: false, preventDefault() {} });
+  const cmJoinLine = kix14.pages[0].lines[0];
+  const cmJoinC = kix14._commentsOf(cmJoinLine)[0];
+  assert(kix14.pages[0].lines.length === 1 && cmJoinLine.text === 'AAABBB',
+    `Docs: Backspace di awal baris menggabung dua baris :: baris=${kix14.pages[0].lines.length} teks="${cmJoinLine.text}"`);
+  assert(cmJoinC && cmJoinC.start === 3 && cmJoinC.end === 6
+    && cmJoinC.author === 'Budi' && cmJoinC.text === 'seluruh baris dua',
+    `Docs: komentar baris gabungan pindah utuh ke baris pertama :: ${cmJoinC && cmJoinC.start + '-' + cmJoinC.end} author=${cmJoinC && cmJoinC.author}`);
+
   // Laporan keutuhan ISI seed (informatif, bukan kegagalan): pengujian E2E
   // mengetik & menyimpan dokumen contoh secara nyata, jadi isinya bisa berubah.
   // Struktur tetap diuji di Suite 8/12; nilai persisnya dilaporkan di sini.

@@ -446,8 +446,29 @@ async function runTestSuite() {
   // Escape WAJIB me-resolve Promise. closeModal() hanya menyetel display:none;
   // tanpa resolve, `await confirmModal(...)` menggantung selamanya dan tombol
   // Hapus tidak pernah selesai — bug yang hanya muncul saat user tekan Esc.
-  assert(/if \(this\._modalResolver\)[\s\S]{0,300}r\(null\);/.test(shellSrc),
-    'Shell: Escape me-resolve Promise modal (await tidak menggantung)');
+  // Kontrak resolver: SATU pintu keluar (_resolveModal). Dulu Escape memberi
+  // null sementara tombol Batal memberi false untuk confirm yang sama — dua
+  // nilai berbeda untuk aksi yang sama, dan Promise yatim bila handler
+  // terpanggil dua kali (mis. Enter lalu Escape).
+  assert(/_resolveModal\(val\)\s*\{[\s\S]{0,200}this\._modalResolver = null;[\s\S]{0,200}typeof r === 'function'/.test(shellSrc),
+    'Shell: _resolveModal membersihkan resolver SEBELUM memanggilnya (anti Promise yatim)');
+  assert(/if \(this\._modalResolver\) \{\s*\n?\s*\/\/[\s\S]{0,400}this\._resolveModal\(this\._modalCancelValue\);/.test(shellSrc),
+    'Shell: Escape me-resolve Promise modal memakai nilai batal milik modal aktif');
+  assert(/this\._modalCancelValue = false;/.test(shellSrc),
+    'Shell: confirmModal -> Escape/Batal bernilai false (bukan null)');
+  assert(/this\._modalCancelValue = null;\s*\n\s*this\._modalResolver = \(val\)/.test(shellSrc),
+    'Shell: promptModal -> Escape/Batal bernilai null');
+  assert(/this\._modalCancelValue = undefined;/.test(shellSrc),
+    'Shell: alertModal -> Escape bernilai undefined');
+  // Tidak boleh ada handler yang memanggil resolver langsung: jalur itu
+  // melewati pembersihan _modalCancelValue dan bisa me-resolve dua kali.
+  const directResolverCalls = (stripComments(shellSrc).match(/this\._modalResolver\s*\(/g) || []).length;
+  assert(directResolverCalls === 0,
+    `Shell: nol pemanggilan resolver langsung (semua lewat _resolveModal) :: ${directResolverCalls}`);
+  // Membuka modal baru saat modal lama terbuka wajib MENYELESAIKAN yang lama.
+  const reopenGuards = (shellSrc.match(/if \(this\._modalResolver\) this\._resolveModal\(this\._modalCancelValue\);/g) || []).length;
+  assert(reopenGuards === 3,
+    `Shell: ketiga wrapper menyelesaikan modal lama sebelum membuka baru :: ${reopenGuards}/3`);
 
   // Pemanggil wajib benar-benar await — bukan memanggil lalu membuang Promise.
   assert(/async deleteDoc\(id\)[\s\S]{0,240}await this\.confirmModal/.test(shellSrc),

@@ -46,6 +46,11 @@
       this.undoStack = { docs: [], sheets: [], slides: [] };
       this.redoStack = { docs: [], sheets: [], slides: [] };
       this._restoring = false;
+      // Nilai batal milik modal Promise yang SEDANG terbuka (false untuk
+      // confirm, null untuk prompt, undefined untuk alert). Dipakai handler
+      // Escape global supaya Escape dan tombol Batal menyerahkan nilai yang
+      // sama — dulu Escape memberi null walau Batal memberi false.
+      this._modalCancelValue = null;
       // Perubahan yang sedang menunggu debounce autosave (lihat triggerAutosave).
       // Diisi { targetId, payload } agar flush dapat menulis TANPA bergantung
       // pada currentDocId yang mungkin sudah berpindah.
@@ -1017,13 +1022,12 @@
         if (e.key === 'Escape') {
           this.closeAllMenus();
           if (this._modalResolver) {
-            // Wrapper modal (confirm/prompt/alert): resolve dengan nilai batal.
-            // Tanpa ini `await` akan menggantung selamanya, karena closeModal()
-            // hanya mengeset display:none tanpa menyelesaikan Promise.
-            const r = this._modalResolver;
-            this._modalResolver = null;
-            this.closeModal();
-            r(null);
+            // Wrapper modal (confirm/prompt/alert). Nilai batal diambil dari
+            // _modalCancelValue milik modal yang sedang terbuka, supaya Escape
+            // dan tombol Batal tidak menyerahkan nilai berbeda. Tanpa resolve
+            // ini `await` menggantung selamanya, karena closeModal() hanya
+            // mengeset display:none tanpa menyelesaikan Promise.
+            this._resolveModal(this._modalCancelValue);
             return;
           }
           const m = document.getElementById('gwsModal');
@@ -1337,6 +1341,25 @@
     }
 
     // ================= MODALS =================
+    // Satu-satunya pintu keluar modal berbasis Promise. Semua handler
+    // (OK / Batal / silang / backdrop / Escape) lewat sini supaya:
+    //   - resolver SELALU dibersihkan -> tidak ada Promise yatim,
+    //   - handler yang terpanggil dua kali (mis. Enter lalu Escape) tidak
+    //     melempar TypeError karena memanggil resolver yang sudah null,
+    //   - Escape memakai nilai batal yang sama dengan tombol Batal.
+    // Catatan arsitektur: ensureModal() mengembalikan SATU elemen #gwsModal
+    // bersama, jadi dua modal tidak bisa tampil bersamaan — modal kedua
+    // menimpa innerHTML modal pertama. Karena itu tidak ada stack resolver
+    // di sini; yang dijaga adalah kebersihan resolver tunggal ini.
+    _resolveModal(val) {
+      const r = this._modalResolver;
+      this._modalResolver = null;
+      this._modalCancelValue = null;
+      this.closeModal();
+      if (typeof r === 'function') r(val);
+      return true;
+    }
+
     ensureModal() {
       let modal = document.getElementById('gwsModal');
       if (!modal) {
@@ -1365,7 +1388,7 @@
 
     confirmModal({ title = 'Konfirmasi', message = '', confirmText = 'OK', cancelText = 'Batal', danger = false } = {}) {
       return new Promise(resolve => {
-        if (this._modalResolver) { const r = this._modalResolver; this._modalResolver = null; r(null); }
+        if (this._modalResolver) this._resolveModal(this._modalCancelValue);
         const modal = this.ensureModal();
         const btnColor = danger ? '#ea4335' : '#1a73e8';
         modal.innerHTML = `
@@ -1381,17 +1404,18 @@
             </div>
           </div>`;
         modal.style.display = 'flex';
+        this._modalCancelValue = false;
         this._modalResolver = (val) => { this._modalResolver = null; this.closeModal(); resolve(val); };
-        modal.querySelector('.modal-ok').addEventListener('click', () => this._modalResolver(true));
-        modal.querySelector('.modal-cancel').addEventListener('click', () => this._modalResolver(false));
-        modal.querySelector('.modal-close').addEventListener('click', () => this._modalResolver(false));
-        modal.onclick = (e) => { if (e.target === modal) this._modalResolver(false); };
+        modal.querySelector('.modal-ok').addEventListener('click', () => this._resolveModal(true));
+        modal.querySelector('.modal-cancel').addEventListener('click', () => this._resolveModal(false));
+        modal.querySelector('.modal-close').addEventListener('click', () => this._resolveModal(false));
+        modal.onclick = (e) => { if (e.target === modal) this._resolveModal(false); };
       });
     }
 
     promptModal({ title = 'Input', message = '', defaultValue = '', placeholder = '', confirmText = 'OK', cancelText = 'Batal' } = {}) {
       return new Promise(resolve => {
-        if (this._modalResolver) { const r = this._modalResolver; this._modalResolver = null; r(null); }
+        if (this._modalResolver) this._resolveModal(this._modalCancelValue);
         const modal = this.ensureModal();
         modal.innerHTML = `
           <div style="background: #fff; width: 420px; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.25); padding: 24px; font-family: 'Google Sans', Arial, sans-serif;">
@@ -1411,22 +1435,23 @@
         const input = modal.querySelector('.modal-input');
         input.focus();
         input.select();
+        this._modalCancelValue = null;
         this._modalResolver = (val) => { this._modalResolver = null; this.closeModal(); resolve(val); };
-        modal.querySelector('.modal-ok').addEventListener('click', () => this._modalResolver(input.value));
-        modal.querySelector('.modal-cancel').addEventListener('click', () => this._modalResolver(null));
-        modal.querySelector('.modal-close').addEventListener('click', () => this._modalResolver(null));
-        modal.onclick = (e) => { if (e.target === modal) this._modalResolver(null); };
+        modal.querySelector('.modal-ok').addEventListener('click', () => this._resolveModal(input.value));
+        modal.querySelector('.modal-cancel').addEventListener('click', () => this._resolveModal(null));
+        modal.querySelector('.modal-close').addEventListener('click', () => this._resolveModal(null));
+        modal.onclick = (e) => { if (e.target === modal) this._resolveModal(null); };
         input.addEventListener('keydown', (ev) => {
           ev.stopPropagation();
-          if (ev.key === 'Enter') { ev.preventDefault(); this._modalResolver(input.value); }
-          if (ev.key === 'Escape') { ev.preventDefault(); this._modalResolver(null); }
+          if (ev.key === 'Enter') { ev.preventDefault(); this._resolveModal(input.value); }
+          if (ev.key === 'Escape') { ev.preventDefault(); this._resolveModal(null); }
         });
       });
     }
 
     alertModal({ title = 'Pemberitahuan', message = '', okText = 'OK' } = {}) {
       return new Promise(resolve => {
-        if (this._modalResolver) { const r = this._modalResolver; this._modalResolver = null; r(null); }
+        if (this._modalResolver) this._resolveModal(this._modalCancelValue);
         const modal = this.ensureModal();
         modal.innerHTML = `
           <div style="background: #fff; width: 420px; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.25); padding: 24px; font-family: 'Google Sans', Arial, sans-serif;">
@@ -1440,10 +1465,11 @@
             </div>
           </div>`;
         modal.style.display = 'flex';
-        this._modalResolver = () => { this._modalResolver = null; this.closeModal(); resolve(); };
-        modal.querySelector('.modal-ok').addEventListener('click', () => this._modalResolver());
-        modal.querySelector('.modal-close').addEventListener('click', () => this._modalResolver());
-        modal.onclick = (e) => { if (e.target === modal) this._modalResolver(); };
+        this._modalCancelValue = undefined;
+        this._modalResolver = (val) => { this._modalResolver = null; this.closeModal(); resolve(val); };
+        modal.querySelector('.modal-ok').addEventListener('click', () => this._resolveModal());
+        modal.querySelector('.modal-close').addEventListener('click', () => this._resolveModal());
+        modal.onclick = (e) => { if (e.target === modal) this._resolveModal(); };
       });
     }
 

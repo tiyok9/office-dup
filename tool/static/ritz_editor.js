@@ -61,6 +61,17 @@
       this.totalCols = 26;
       this.totalRows = 100;
 
+      // ==== LEBAR KOLOM DINAMIS (paritas resize kolom Google Sheets) ====
+      // Map { [colIdx]: width } milik sheet AKTIF. Kolom tanpa entri memakai
+      // this.colWidth (110) — jadi dokumen lama dan koordinat klik tes lama
+      // TIDAK bergeser satu piksel pun bila belum ada yang di-resize.
+      this.colWidths = {};
+      this.isResizingCol = false;
+      this.resizeColIdx = -1;
+      this.resizeStartX = 0;
+      this.resizeStartWidth = 0;
+      this._hoverResizeCol = -1;
+
       this.onCellChange = null;
       // Bagan mengambang yang disimpan bersama dokumen (lihat insertChart).
       this.charts = [];
@@ -97,6 +108,8 @@
       if (!s) return;
       s.cells = this.cells || {};
       s.charts = this.charts || [];
+      // Lebar kolom ikut sheet ini (tiap tab bisa punya lebar berbeda).
+      s.colWidths = { ...(this.colWidths || {}) };
     }
 
     // Muat entri sheets[] aktif menjadi keadaan editor (cells/charts/seleksi).
@@ -105,6 +118,14 @@
       this.cells = JSON.parse(JSON.stringify(s.cells || {}));
       this.charts = JSON.parse(JSON.stringify(s.charts || []));
       this.activeChartId = this.charts.length ? this.charts[this.charts.length - 1].id : null;
+      // Geometri milik sheet ini; dokumen lama tanpa colWidths -> default 110.
+      this.colWidths = { ...(s.colWidths || {}) };
+      const fz = s.frozen || {};
+      this.frozenRows = Math.max(0, Math.min(this.totalRows, Number(fz.rows) || 0));
+      this.frozenCols = Math.max(0, Math.min(this.totalCols, Number(fz.cols) || 0));
+      this.isResizingCol = false;
+      this.resizeColIdx = -1;
+      this._hoverResizeCol = -1;
       // Seleksi milik sheet sebelumnya tidak boleh ikut terbawa.
       this.selStartCol = this.activeCol;
       this.selStartRow = this.activeRow;
@@ -142,6 +163,64 @@
       return this.cells;
     }
 
+    // ==== GEOMETRI KOLOM DINAMIS ====
+    // Semua perhitungan x kolom WAJIB lewat tiga helper ini, supaya render,
+    // hit-testing klik, overlay seleksi rentang, dan fill handle konsisten
+    // saat ada kolom yang lebarnya diubah.
+    getColWidth(c) {
+      const raw = this.colWidths ? this.colWidths[c] : undefined;
+      const n = Number(raw);
+      return (Number.isFinite(n) && n > 0) ? n : this.colWidth;
+    }
+
+    // Posisi x KIRI kolom c dalam koordinat kanvas (belum dikurangi scrollX).
+    getColX(c) {
+      let x = this.headerWidth;
+      for (let i = 0; i < c; i++) x += this.getColWidth(i);
+      return x;
+    }
+
+    // Kebalikan getColX: kolom mana yang berada pada x tertentu.
+    colFromX(x) {
+      if (x < this.headerWidth) return -1;
+      let acc = this.headerWidth;
+      for (let i = 0; i < this.totalCols; i++) {
+        const w = this.getColWidth(i);
+        if (x < acc + w) return i;
+        acc += w;
+      }
+      return -1;
+    }
+
+    colBoundaryX(c) {
+      return this.getColX(c) + this.getColWidth(c);
+    }
+
+    // Deteksi pointer berada di garis pemisah header kolom (toleransi 4px).
+    // Dipakai untuk kursor col-resize sekaligus memulai drag resize.
+    colResizeHit(x, y) {
+      if (y > this.headerHeight || x < this.headerWidth) return -1;
+      for (let i = 0; i < this.totalCols; i++) {
+        const bx = this.colBoundaryX(i) - this.scrollX;
+        if (Math.abs(x - bx) <= 4) return i;
+        if (bx > this.canvas.width + 40) break;
+      }
+      return -1;
+    }
+
+    setColWidth(c, w) {
+      const n = Math.max(30, Math.round(Number(w) || 0));
+      this.colWidths[c] = n;
+      return n;
+    }
+
+    // Lebar total kolom 0..n-1 (dipakai untuk freeze pane).
+    colsWidthUpto(n) {
+      let x = 0;
+      for (let i = 0; i < n; i++) x += this.getColWidth(i);
+      return x;
+    }
+
     // ==== API MULTI-SHEET ====
     // Dokumen format lama (hanya punya data.cells) tetap terbaca: dibungkus jadi
     // satu sheet bernama Sheet1, sehingga tidak ada migrasi yang memutus data.
@@ -154,7 +233,9 @@
         this.sheets = list.map((s, i) => ({
           name: (s && s.name) ? String(s.name) : `Sheet${i + 1}`,
           cells: (s && s.cells) ? JSON.parse(JSON.stringify(s.cells)) : {},
-          charts: (s && Array.isArray(s.charts)) ? JSON.parse(JSON.stringify(s.charts)) : []
+          charts: (s && Array.isArray(s.charts)) ? JSON.parse(JSON.stringify(s.charts)) : [],
+          // Lebar kolom per sheet ikut dipulihkan dari dokumen.
+          colWidths: (s && s.colWidths && typeof s.colWidths === 'object') ? { ...s.colWidths } : {}
         }));
         const idx = Number(activeIdx);
         this.activeSheetIdx = (Number.isInteger(idx) && idx >= 0 && idx < this.sheets.length) ? idx : 0;
@@ -550,8 +631,25 @@
         const x = (e.clientX - rect.left) * sx;
         const y = (e.clientY - rect.top) * sy;
 
+        // ==== RESIZE KOLOM (paritas Google Sheets) ====
+        // Klik tepat di garis pemisah header kolom = mulai drag resize, BUKAN
+        // memilih sel. Dicek PALING AWAL supaya handler seleksi di bawah tidak
+        // sempat mengubah activeCol/activeRow atau memulai seleksi rentang.
+        const rzCol = this.colResizeHit(x, y);
+        if (rzCol >= 0) {
+          this.isResizingCol = true;
+          this.resizeColIdx = rzCol;
+          this.resizeStartX = x;
+          this.resizeStartWidth = this.getColWidth(rzCol);
+          this.isSelecting = false;
+          e.preventDefault();
+          this.render();
+          return;
+        }
+
         if (x > this.headerWidth && y > this.headerHeight) {
-          const clickedCol = Math.floor((x - this.headerWidth + this.scrollX) / this.colWidth);
+          // colFromX() menghormati lebar kolom yang sudah di-resize.
+          const clickedCol = this.colFromX(x + this.scrollX);
           const clickedRow = Math.floor((y - this.headerHeight + this.scrollY) / this.rowHeight) + 1;
 
           if (clickedCol >= 0 && clickedCol < this.totalCols && clickedRow >= 1 && clickedRow <= this.totalRows) {
@@ -586,13 +684,43 @@
         const x = (e.clientX - rect.left) * sx;
         const y = (e.clientY - rect.top) * sy;
         if (x <= this.headerWidth || y <= this.headerHeight) return null;
-        const col = Math.floor((x - this.headerWidth + this.scrollX) / this.colWidth);
+        const col = this.colFromX(x + this.scrollX);
         const row = Math.floor((y - this.headerHeight + this.scrollY) / this.rowHeight) + 1;
         if (col < 0 || col >= this.totalCols || row < 1 || row > this.totalRows) return null;
         return { col, row };
       };
 
       this.canvas.addEventListener('mousemove', (e) => {
+        const rect = this.canvas.getBoundingClientRect();
+        const sx = rect.width ? this.canvas.width / rect.width : 1;
+        const sy = rect.height ? this.canvas.height / rect.height : 1;
+        const mx = (e.clientX - rect.left) * sx;
+        const my = (e.clientY - rect.top) * sy;
+
+        // ==== DRAG RESIZE KOLOM (paritas Google Sheets) ====
+        // Lebar mengikuti delta x sejak mousedown. Minimum 30px (sama dengan
+        // setColWidth) supaya kolom tidak bisa mengecil sampai tak terlihat.
+        if (this.isResizingCol) {
+          const w = Math.max(30, Math.round(this.resizeStartWidth + (mx - this.resizeStartX)));
+          if (this.colWidths[this.resizeColIdx] !== w) {
+            this.colWidths[this.resizeColIdx] = w;
+            this.render();
+          }
+          return;
+        }
+
+        // ==== HOVER GARIS KOLOM -> kursor col-resize ====
+        // Memakai colResizeHit() yang SAMA dengan mousedown, sehingga area
+        // hover dan area klik selalu identik (tidak ada zona "hampir kena").
+        if (!this.isSelecting && !this.editing) {
+          const hovCol = this.colResizeHit(mx, my);
+          if (hovCol !== this._hoverResizeCol) {
+            this._hoverResizeCol = hovCol;
+            this.canvas.style.cursor = hovCol >= 0 ? 'col-resize' : 'cell';
+          }
+          return;
+        }
+
         if (!this.isSelecting || this.editing) return;
         const hit = cellAtEvent(e);
         if (!hit) return;
@@ -604,6 +732,18 @@
       });
 
       const endSelection = () => {
+        // Selesai resize: simpan lebar ke sheet aktif lalu picu autosave.
+        // Dicek lebih dulu agar tidak bercampur dengan logika seleksi.
+        if (this.isResizingCol) {
+          this.isResizingCol = false;
+          this.resizeColIdx = -1;
+          this._hoverResizeCol = -1;
+          this.canvas.style.cursor = 'cell';
+          this._syncActiveSheet();
+          if (typeof this.onCellChange === 'function') this.onCellChange(this.cells);
+          this.render();
+          return;
+        }
         if (!this.isSelecting) return;
         this.isSelecting = false;
         this.updateFormulaBar();
@@ -620,7 +760,7 @@
         const x = (e.clientX - rect.left) * sx;
         const y = (e.clientY - rect.top) * sy;
         if (x > this.headerWidth && y > this.headerHeight) {
-          const clickedCol = Math.floor((x - this.headerWidth + this.scrollX) / this.colWidth);
+          const clickedCol = this.colFromX(x + this.scrollX);
           const clickedRow = Math.floor((y - this.headerHeight + this.scrollY) / this.rowHeight) + 1;
           if (clickedCol === this.activeCol && clickedRow === this.activeRow) {
             this.startCellEditExisting();
@@ -960,16 +1100,17 @@
       ctx.fillStyle = '#5f6368';
 
       for (let c = 0; c < this.totalCols; c++) {
-        const x = this.headerWidth + (c * this.colWidth) - this.scrollX;
-        if (x + this.colWidth < this.headerWidth || x > width) continue;
+        const cw = this.getColWidth(c);
+        const x = this.getColX(c) - this.scrollX;
+        if (x + cw < this.headerWidth || x > width) continue;
 
         ctx.fillStyle = (c === this.activeCol) ? '#e8f0fe' : '#f8f9fa';
-        ctx.fillRect(x, 0, this.colWidth, this.headerHeight);
+        ctx.fillRect(x, 0, cw, this.headerHeight);
         ctx.strokeStyle = '#dadce0';
-        ctx.strokeRect(x, 0, this.colWidth, this.headerHeight);
+        ctx.strokeRect(x, 0, cw, this.headerHeight);
 
         ctx.fillStyle = (c === this.activeCol) ? '#1a73e8' : '#5f6368';
-        ctx.fillText(this.colLabel(c), x + this.colWidth / 2, this.headerHeight / 2);
+        ctx.fillText(this.colLabel(c), x + cw / 2, this.headerHeight / 2);
       }
 
       const visibleRows = Math.ceil(height / this.rowHeight) + 1;
@@ -986,8 +1127,9 @@
         ctx.fillText(r.toString(), this.headerWidth / 2, y + this.rowHeight / 2);
 
         for (let c = 0; c < this.totalCols; c++) {
-          const x = this.headerWidth + (c * this.colWidth) - this.scrollX;
-          if (x + this.colWidth < this.headerWidth || x > width) continue;
+          const cw = this.getColWidth(c);
+          const x = this.getColX(c) - this.scrollX;
+          if (x + cw < this.headerWidth || x > width) continue;
 
           const coord = `${this.colLabel(c)}${r}`;
           const cell = this.cells[coord];
@@ -996,7 +1138,7 @@
           if (r === this.activeRow || c === this.activeCol) {
             ctx.save();
             ctx.fillStyle = '#f1f8fe';
-            ctx.fillRect(x + 1, y + 1, this.colWidth - 1, this.rowHeight - 1);
+            ctx.fillRect(x + 1, y + 1, cw - 1, this.rowHeight - 1);
             ctx.restore();
           }
 
@@ -1004,12 +1146,12 @@
           if (cell && cell.bg) {
             ctx.save();
             ctx.fillStyle = cell.bg;
-            ctx.fillRect(x + 1, y + 1, this.colWidth - 1, this.rowHeight - 1);
+            ctx.fillRect(x + 1, y + 1, cw - 1, this.rowHeight - 1);
             ctx.restore();
           }
 
           ctx.strokeStyle = '#e8eaed';
-          ctx.strokeRect(x, y, this.colWidth, this.rowHeight);
+          ctx.strokeRect(x, y, cw, this.rowHeight);
 
           // Saat menyunting di sel, buffer pengguna yang dirender (bukan nilai lama).
           const isEditingThis = this.editing && coord === this.getActiveCoord();
@@ -1035,10 +1177,10 @@
             let printX;
             if (align === 'center') {
               ctx.textAlign = 'center';
-              printX = x + this.colWidth / 2;
+              printX = x + cw / 2;
             } else if (align === 'right') {
               ctx.textAlign = 'right';
-              printX = x + this.colWidth - 8;
+              printX = x + cw - 8;
             } else {
               ctx.textAlign = 'left';
               printX = x + 8;
@@ -1057,9 +1199,9 @@
       let handleX = 0, handleY = 0, handleVisible = false;
 
       if (rangeMulti) {
-        const rx = this.headerWidth + (rb.minCol * this.colWidth) - this.scrollX;
+        const rx = this.getColX(rb.minCol) - this.scrollX;
         const ry = this.headerHeight + ((rb.minRow - 1) * this.rowHeight) - this.scrollY;
-        const rw = (rb.maxCol - rb.minCol + 1) * this.colWidth;
+        const rw = this.getColX(rb.maxCol + 1) - this.getColX(rb.minCol);
         const rh = (rb.maxRow - rb.minRow + 1) * this.rowHeight;
 
         // Potong area agar tidak menimpa header kolom/baris.
@@ -1085,16 +1227,17 @@
       }
 
       // Active Cell Selection Border (Google Green #0f9d58)
-      const selX = this.headerWidth + (this.activeCol * this.colWidth) - this.scrollX;
+      const selW = this.getColWidth(this.activeCol);
+      const selX = this.getColX(this.activeCol) - this.scrollX;
       const selY = this.headerHeight + ((this.activeRow - 1) * this.rowHeight) - this.scrollY;
 
-      if (selX + this.colWidth >= this.headerWidth && selX <= width && selY + this.rowHeight >= this.headerHeight && selY <= height) {
+      if (selX + selW >= this.headerWidth && selX <= width && selY + this.rowHeight >= this.headerHeight && selY <= height) {
         ctx.strokeStyle = '#0f9d58';
         ctx.lineWidth = 2;
-        ctx.strokeRect(selX, selY, this.colWidth, this.rowHeight);
+        ctx.strokeRect(selX, selY, selW, this.rowHeight);
 
         ctx.fillStyle = '#0f9d58';
-        ctx.fillRect(selX + this.colWidth - 4, selY + this.rowHeight - 4, 6, 6);
+        ctx.fillRect(selX + selW - 4, selY + this.rowHeight - 4, 6, 6);
         ctx.lineWidth = 1;
       }
 
@@ -1107,6 +1250,36 @@
         ctx.lineWidth = 1;
         ctx.strokeRect(handleX + 0.5, handleY + 0.5, 5, 5);
         ctx.restore();
+      }
+
+      // ==== GARIS PANDUAN RESIZE KOLOM (paritas Google Sheets) ====
+      // Digambar paling akhir supaya berada di atas grid, teks, dan overlay
+      // seleksi. Hanya muncul selama drag berlangsung.
+      if (this.isResizingCol && this.resizeColIdx >= 0) {
+        const gx = this.colBoundaryX(this.resizeColIdx) - this.scrollX;
+        if (gx >= this.headerWidth && gx <= width) {
+          ctx.save();
+          // Garis vertikal penuh dari atas kanvas sampai bawah.
+          ctx.strokeStyle = '#1a73e8';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(gx, 0);
+          ctx.lineTo(gx, height);
+          ctx.stroke();
+          // Label lebar kolom (px) di dekat header, seperti tooltip Sheets.
+          const labelTxt = `${this.getColWidth(this.resizeColIdx)} px`;
+          ctx.font = '600 11px Arial, sans-serif';
+          const tw = ctx.measureText(labelTxt).width;
+          const bx = Math.min(gx + 6, width - tw - 14);
+          const by = Math.max(2, this.headerHeight + 4);
+          ctx.fillStyle = '#1a73e8';
+          ctx.fillRect(bx, by, tw + 12, 18);
+          ctx.fillStyle = '#ffffff';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(labelTxt, bx + 6, by + 9);
+          ctx.restore();
+        }
       }
     }
   }

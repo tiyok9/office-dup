@@ -89,6 +89,13 @@
       };
 
       this.onChange = null;
+      // ==== STATE FIND & REPLACE ====
+      // Pencarian bekerja pada MODEL TEKS (this.pages[].lines[].text), bukan DOM,
+      // karena seluruh dokumen digambar ke kanvas. Offset match memakai indeks
+      // karakter pada line.text TANPA penanda butir daftar, sama seperti
+      // cursorCharIdx — sehingga highlight dan caret memakai basis yang sama.
+      this.findMatches = [];
+      this.findActiveIdx = -1;
       // Callback saat baris aktif / posisi kursor berubah — dipakai shell untuk
       // menyinkronkan status tombol toolbar (B/I/U/S/align) dengan baris di kursor.
       this.onActiveLineChange = null;
@@ -456,6 +463,131 @@
     }
 
     // Ekspor teks polos (untuk unduhan .txt)
+    // ==== FIND & REPLACE ====
+    // Semua pencarian bekerja pada MODEL TEKS (line.text), bukan DOM, karena
+    // dokumen digambar ke kanvas. Offset = indeks karakter pada line.text TANPA
+    // penanda butir daftar — basis yang sama dengan cursorCharIdx, sehingga
+    // highlight dan caret tidak pernah meleset satu sama lain.
+    setFindQuery(query, opts) {
+      this.findQuery = query || '';
+      this.findMatchCase = !!(opts && opts.matchCase);
+      this.findMatches = [];
+      this.findActiveIdx = -1;
+      if (!this.findQuery) { this.renderAllPages(); return 0; }
+
+      const needle = this.findMatchCase ? this.findQuery : this.findQuery.toLowerCase();
+      for (let p = 0; p < this.pages.length; p++) {
+        const lines = this.pages[p].lines || [];
+        for (let l = 0; l < lines.length; l++) {
+          const raw = lines[l].text || '';
+          if (!raw) continue;
+          const hay = this.findMatchCase ? raw : raw.toLowerCase();
+          let from = 0;
+          while (from <= hay.length - needle.length) {
+            const at = hay.indexOf(needle, from);
+            if (at === -1) break;
+            this.findMatches.push({ pIdx: p, lIdx: l, start: at, len: needle.length });
+            from = at + Math.max(1, needle.length); // hindari loop tak berujung bila needle ''
+          }
+        }
+      }
+      if (this.findMatches.length) this.findActiveIdx = 0;
+      this.renderAllPages();
+      return this.findMatches.length;
+    }
+
+    clearFind() {
+      this.findQuery = '';
+      this.findMatches = [];
+      this.findActiveIdx = -1;
+      this.renderAllPages();
+    }
+
+    findNext() {
+      if (!this.findMatches.length) return -1;
+      this.findActiveIdx = (this.findActiveIdx + 1) % this.findMatches.length;
+      this._focusActiveMatch();
+      return this.findActiveIdx;
+    }
+
+    findPrev() {
+      if (!this.findMatches.length) return -1;
+      this.findActiveIdx = (this.findActiveIdx - 1 + this.findMatches.length) % this.findMatches.length;
+      this._focusActiveMatch();
+      return this.findActiveIdx;
+    }
+
+    // Pindahkan kursor ke match aktif + gulir halaman pemuatnya ke tampilan.
+    _focusActiveMatch() {
+      const fm = this.findMatches[this.findActiveIdx];
+      if (!fm) return;
+      this.activePageIdx = fm.pIdx;
+      this.activeLineIdx = fm.lIdx;
+      this.cursorCharIdx = fm.start;
+      this.isCaretVisible = true;
+      this.renderAllPages();
+      this.emitActiveLine();
+      const el = document.getElementById(`kixPage${fm.pIdx + 1}`);
+      if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'nearest' });
+    }
+
+    replaceCurrent(replacement) {
+      const fm = this.findMatches[this.findActiveIdx];
+      if (!fm) return 0;
+      const line = this.pages[fm.pIdx].lines[fm.lIdx];
+      const text = line.text || '';
+      line.text = text.slice(0, fm.start) + replacement + text.slice(fm.start + fm.len);
+      const keepP = fm.pIdx, keepL = fm.lIdx, nextAt = fm.start + replacement.length;
+
+      this.reflowPages(); // panjang teks berubah -> paginasi bisa bergeser
+      const n = this.setFindQuery(this.findQuery, { matchCase: this.findMatchCase });
+      if (n) {
+        let idx = this.findMatches.findIndex(m => m.pIdx === keepP && m.lIdx === keepL && m.start >= nextAt);
+        if (idx === -1) idx = 0;
+        this.findActiveIdx = idx;
+        this.renderAllPages();
+      }
+      this._afterReplace();
+      return 1;
+    }
+
+    replaceAll(replacement) {
+      if (!this.findMatches.length) return 0;
+
+      // Kelompokkan per baris, lalu ganti dari BELAKANG tiap baris supaya offset
+      // match lain tidak bergeser oleh penggantian sebelumnya.
+      const groups = new Map();
+      for (const m of this.findMatches) {
+        const key = m.pIdx + ':' + m.lIdx;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(m);
+      }
+
+      let count = 0;
+      for (const [key, list] of groups) {
+        const parts = key.split(':');
+        const p = Number(parts[0]), l = Number(parts[1]);
+        const line = this.pages[p] && this.pages[p].lines[l];
+        if (!line) continue;
+        let text = line.text || '';
+        for (let i = list.length - 1; i >= 0; i--) {
+          const m = list[i];
+          text = text.slice(0, m.start) + replacement + text.slice(m.start + m.len);
+          count++;
+        }
+        line.text = text;
+      }
+
+      this.reflowPages();
+      this.setFindQuery(this.findQuery, { matchCase: this.findMatchCase });
+      this._afterReplace();
+      return count;
+    }
+
+    _afterReplace() {
+      if (typeof this.onChange === 'function') this.onChange(this.getDocumentData());
+    }
+
     exportPlainText() {
       return this.pages
         .map(p => p.lines.map(l => l.text || '').join('\n'))
@@ -673,6 +805,34 @@
           let segX = baseX;
           if (line.align === 'center') segX = Math.max(MARGIN, (canvas.width - tw) / 2);
           else if (line.align === 'right') segX = Math.max(MARGIN, canvas.width - MARGIN - tw);
+
+          // ==== HIGHLIGHT FIND & REPLACE ====
+          // Offset match dihitung pada line.text TANPA penanda butir, sedangkan
+          // segmen dibangun dari prefix + text. Karena itu offset match digeser
+          // sebesar m.prefix.length agar jatuh di kolom karakter yang benar.
+          // Satu match bisa melintasi dua segmen hasil wrap, jadi dihitung
+          // irisan (intersection) per segmen, bukan diasumsikan utuh.
+          const active = this.findMatches[this.findActiveIdx];
+          for (let fmi = 0; fmi < this.findMatches.length; fmi++) {
+            const fm = this.findMatches[fmi];
+            if (fm.pIdx !== pIdx || fm.lIdx !== lIdx) continue;
+            const mStart = fm.start + m.prefix.length;
+            const mEnd = mStart + fm.len;
+            const sStart = seg.start;
+            const sEnd = seg.start + seg.text.length;
+            const a = Math.max(mStart, sStart);
+            const b = Math.min(mEnd, sEnd);
+            if (b <= a) continue;
+            const preTxt = seg.text.slice(0, a - sStart);
+            const midTxt = seg.text.slice(a - sStart, b - sStart);
+            const xOff = ctx.measureText(preTxt).width;
+            const hw = ctx.measureText(midTxt).width;
+            const isActive = active && active.pIdx === fm.pIdx && active.lIdx === fm.lIdx && active.start === fm.start;
+            ctx.save();
+            ctx.fillStyle = isActive ? '#fbbc04' : '#ffe066';
+            ctx.fillRect(segX + xOff, y - fontSize + 2, hw, fontSize + 4);
+            ctx.restore();
+          }
 
           ctx.fillStyle = line.color || '#202124';
           ctx.fillText(seg.text, segX, y);

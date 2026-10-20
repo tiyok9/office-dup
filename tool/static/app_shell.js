@@ -969,6 +969,12 @@
       window.addEventListener('keydown', (e) => {
         const tag = (e.target && e.target.tagName) || '';
         const inField = tag === 'INPUT' || tag === 'TEXTAREA';
+        // Kix menangkap ketikan lewat hiddenInput (TEXTAREA), jadi `inField`
+        // SELALU true saat user mengetik di dokumen. Guard Ctrl+F/Ctrl+H tidak
+        // boleh memakai `inField` — kalau iya, shortcut mati tepat di konteks
+        // yang paling dibutuhkan. Yang harus dikecualikan hanyalah kolom di
+        // dalam modal pencarian itu sendiri (agar tidak membuka modal berulang).
+        const inModalField = !!(e.target && e.target.closest && e.target.closest('#gwsModal'));
 
         if (e.key === 'Escape') {
           this.closeAllMenus();
@@ -1004,6 +1010,15 @@
         } else if (k === 'p') {
           e.preventDefault();
           window.print();
+        } else if (k === 'f' && this.currentApp === 'docs' && !inModalField) {
+          // Find: paritas Google Docs (Ctrl+F). Hanya diblokir bila fokus sudah
+          // di dalam modal pencarian (mencegah modal dibuka ulang dari dirinya).
+          e.preventDefault();
+          this.openFindReplaceModal(false);
+        } else if (k === 'h' && this.currentApp === 'docs' && !inModalField) {
+          // Find and Replace: paritas Google Docs (Ctrl+H).
+          e.preventDefault();
+          this.openFindReplaceModal(true);
         } else if (k === 's') {
           e.preventDefault();
           this.saveDocument({ title: document.getElementById('docTitle')?.value });
@@ -1104,6 +1119,11 @@
           { label: 'Redo', shortcut: 'Ctrl+Y', action: () => this.performRedo(this.currentApp) },
           { sep: true },
           { label: 'Pilih Semua (Select All)', shortcut: 'Ctrl+A', action: () => this.selectAll() },
+          { sep: true },
+          // ==== FIND & REPLACE (paritas Google Docs: Edit > Cari dan ganti) ====
+          { label: 'Cari (Find)', shortcut: 'Ctrl+F', action: () => this.openFindReplaceModal(false) },
+          { label: 'Cari dan Ganti (Find and Replace)', shortcut: 'Ctrl+H', action: () => this.openFindReplaceModal(true) },
+          { sep: true },
           { label: 'Hapus Elemen Terpilih (Slides)', shortcut: 'Delete', action: () => { if (this.punch) this.punch.deleteSelectedElement(); } }
         ];
       }
@@ -1352,6 +1372,110 @@
       `;
       modal.style.display = 'flex';
       modal.querySelectorAll('.modal-close').forEach(el => el.addEventListener('click', () => this.closeModal()));
+    }
+
+    // ==== FIND & REPLACE (Docs) ====
+    // Mengikuti pola ensureModal() yang sudah dipakai modal lain. Kolom input
+    // menghentikan propagasi keydown supaya ketikan TIDAK ikut masuk ke
+    // hiddenInput Kix (dokumen digambar ke canvas, bukan DOM teks).
+    openFindReplaceModal(withReplace) {
+      if (!this.kix || this.currentApp !== 'docs') {
+        this.showToast('Cari & Ganti hanya tersedia di Docs.');
+        return;
+      }
+      const modal = this.ensureModal();
+      const btn = 'padding:7px 14px; border:1px solid #dadce0; background:#fff; color:#1a73e8; border-radius:6px; font-size:12.5px; font-weight:500; cursor:pointer;';
+      const btnP = 'padding:7px 14px; border:none; background:#1a73e8; color:#fff; border-radius:6px; font-size:12.5px; font-weight:500; cursor:pointer;';
+
+      modal.innerHTML = `
+        <div style="background:#fff; width:470px; border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,.25); padding:20px; font-family:'Google Sans',Arial,sans-serif;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+            <h3 style="font-size:17px; font-weight:500; color:#202124; margin:0;">${withReplace ? 'Cari dan Ganti' : 'Cari'}</h3>
+            <span class="modal-close" style="cursor:pointer; font-size:20px; color:#5f6368;">✕</span>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px;">
+            <input id="gwsFindInput" type="text" placeholder="Cari teks..." autocomplete="off"
+              style="flex:1; min-width:0; padding:8px 10px; border:1px solid #dadce0; border-radius:6px; font-size:13px; outline:none;">
+            <span id="gwsFindCount" style="font-size:12px; color:#5f6368; min-width:70px; text-align:right;">0 hasil</span>
+          </div>
+          ${withReplace ? `
+          <div style="margin-bottom:10px;">
+            <input id="gwsReplaceInput" type="text" placeholder="Ganti dengan..." autocomplete="off"
+              style="width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid #dadce0; border-radius:6px; font-size:13px; outline:none;">
+          </div>` : ''}
+          <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#5f6368; margin-bottom:16px; cursor:pointer;">
+            <input id="gwsFindCase" type="checkbox"> Bedakan huruf besar/kecil
+          </label>
+          <div style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;">
+            <button id="gwsFindPrev" style="${btn}">Sebelumnya</button>
+            <button id="gwsFindNext" style="${btn}">Berikutnya</button>
+            ${withReplace ? `
+            <button id="gwsReplaceOne" style="${btnP}">Ganti</button>
+            <button id="gwsReplaceAll" style="${btnP}">Ganti Semua</button>` : ''}
+            <button class="modal-close" style="${btn}">Tutup</button>
+          </div>
+        </div>
+      `;
+      modal.style.display = 'flex';
+
+      const qEl = modal.querySelector('#gwsFindInput');
+      const cEl = modal.querySelector('#gwsFindCase');
+      const nEl = modal.querySelector('#gwsFindCount');
+      const rEl = modal.querySelector('#gwsReplaceInput');
+
+      const refresh = () => {
+        const n = this.kix.findMatches.length;
+        if (!n) { nEl.textContent = qEl.value ? '0 hasil' : ''; return; }
+        nEl.textContent = `${this.kix.findActiveIdx + 1} dari ${n}`;
+      };
+
+      const runSearch = () => {
+        this.kix.setFindQuery(qEl.value, { matchCase: cEl.checked });
+        refresh();
+      };
+
+      qEl.addEventListener('keydown', (ev) => {
+        ev.stopPropagation(); // jangan bocor ke dokumen
+        if (ev.key === 'Enter') { ev.preventDefault(); this.kix.findNext(); refresh(); }
+        if (ev.key === 'Escape') { ev.preventDefault(); this.closeModal(); this.kix.clearFind(); }
+      });
+      qEl.addEventListener('input', runSearch);
+      cEl.addEventListener('change', runSearch);
+
+      if (rEl) {
+        rEl.addEventListener('keydown', (ev) => ev.stopPropagation());
+        rEl.addEventListener('keydown', (ev) => {
+          if (ev.key === 'Escape') { ev.preventDefault(); this.closeModal(); this.kix.clearFind(); }
+        });
+      }
+
+      modal.querySelectorAll('.modal-close').forEach(el => el.addEventListener('click', () => {
+        this.closeModal();
+        this.kix.clearFind(); // buang highlight agar dokumen kembali bersih
+      }));
+
+      const prevB = modal.querySelector('#gwsFindPrev');
+      const nextB = modal.querySelector('#gwsFindNext');
+      if (prevB) prevB.addEventListener('click', () => { this.kix.findPrev(); refresh(); });
+      if (nextB) nextB.addEventListener('click', () => { this.kix.findNext(); refresh(); });
+
+      const oneB = modal.querySelector('#gwsReplaceOne');
+      if (oneB) oneB.addEventListener('click', () => {
+        if (!this.kix.findMatches.length) { runSearch(); return; }
+        this.kix.replaceCurrent(rEl ? rEl.value : '');
+        refresh();
+        this.showToast('1 kemunculan diganti.');
+      });
+
+      const allB = modal.querySelector('#gwsReplaceAll');
+      if (allB) allB.addEventListener('click', () => {
+        if (!this.kix.findMatches.length) runSearch();
+        const n = this.kix.replaceAll(rEl ? rEl.value : '');
+        refresh();
+        this.showToast(n ? `${n} kemunculan diganti.` : 'Tidak ada yang diganti.');
+      });
+
+      if (qEl) { qEl.focus(); qEl.select(); }
     }
 
     openAboutModal() {

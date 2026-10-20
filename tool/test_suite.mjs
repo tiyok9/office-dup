@@ -702,6 +702,45 @@ async function runTestSuite() {
   assert(applied14 === true && newLink14 && newLink14.start === 23 && newLink14.end === 31,
     `Docs: applyLinkAtCursor menautkan kata di TENGAH baris :: ${newLink14 ? newLink14.start + '-' + newLink14.end : 'null'}`);
 
+  // 14h. DOCS: PEMISAH HALAMAN MANUAL (Ctrl+Enter) — paritas Google Docs.
+  // Kunci desain: reflowPages() mengiterasi `for (const page of this.pages)` dan
+  // hanya MEMECAH halaman yang meluber, tidak pernah MENGGABUNG dua halaman.
+  // Karena itu halaman hasil pemisah manual bertahan tanpa perlu flag tambahan.
+  kix14.setDocumentData({ pages: [{ lines: [{ text: 'Buka Google atau Yahoo sekarang', bold: true }] }] });
+  kix14.activePageIdx = 0; kix14.activeLineIdx = 0;
+  kix14.setLinkRange(0, 0, 5, 11, 'https://google.com');   // "Google"
+  kix14.cursorCharIdx = 8;                                  // di TENGAH "Google"
+  const pbOk = kix14.insertPageBreak();
+  assert(pbOk === true && kix14.pages.length === 2,
+    `Docs: pemisah halaman menambah halaman :: ok=${pbOk} pages=${kix14.pages.length}`);
+  assert(kix14.pages[0].lines[0].text === 'Buka Goo',
+    `Docs: teks SEBELUM kursor tetap di halaman lama :: "${kix14.pages[0].lines[0].text}"`);
+  assert(kix14.pages[1].lines[0].text === 'gle atau Yahoo sekarang',
+    `Docs: teks SESUDAH kursor pindah ke halaman baru :: "${kix14.pages[1].lines[0].text}"`);
+  assert(kix14.activePageIdx === 1 && kix14.activeLineIdx === 0 && kix14.cursorCharIdx === 0,
+    `Docs: kursor pindah ke awal halaman baru :: p=${kix14.activePageIdx} l=${kix14.activeLineIdx} c=${kix14.cursorCharIdx}`);
+  const pbLeft = (kix14.pages[0].lines[0].links || []).map(L => `${L.start}-${L.end}`).join(',');
+  const pbRight = (kix14.pages[1].lines[0].links || []).map(L => `${L.start}-${L.end}`).join(',');
+  assert(pbLeft === '5-8' && pbRight === '0-3',
+    `Docs: tautan melintasi pemisah DIBELAH, bukan dibuang :: kiri=${pbLeft} kanan=${pbRight}`);
+  assert(kix14.pages[1].lines[0].bold === true,
+    'Docs: baris ekor mewarisi gaya baris asal (bold tidak hilang di titik pisah)');
+
+  // Routing Ctrl+Enter: WAJIB dicek SEBELUM cabang Enter biasa. Kalau urutannya
+  // terbalik, satu tekan menghasilkan DUA mutasi (baris baru + halaman baru).
+  kix14.setDocumentData({ pages: [{ lines: [{ text: 'abcdef' }] }] });
+  kix14.activePageIdx = 0; kix14.activeLineIdx = 0; kix14.cursorCharIdx = 3;
+  kix14.handleKey({ key: 'Enter', ctrlKey: true, metaKey: false, preventDefault() {} });
+  assert(kix14.pages.length === 2 && kix14.pages[0].lines.length === 1,
+    `Docs: Ctrl+Enter TIDAK memecah baris ganda :: pages=${kix14.pages.length} barisHalaman1=${kix14.pages[0].lines.length}`);
+  assert(kix14.pages[0].lines[0].text === 'abc' && kix14.pages[1].lines[0].text === 'def',
+    `Docs: Ctrl+Enter memotong tepat di kursor :: "${kix14.pages[0].lines[0].text}" | "${kix14.pages[1].lines[0].text}"`);
+  // Enter BIASA di halaman hasil pisah harus tetap berperilaku normal (1 halaman).
+  kix14.cursorCharIdx = 3;
+  kix14.handleKey({ key: 'Enter', ctrlKey: false, metaKey: false, preventDefault() {} });
+  assert(kix14.pages.length === 2 && kix14.pages[1].lines.length === 2,
+    `Docs: Enter biasa setelah pemisah tetap menambah BARIS (bukan halaman) :: pages=${kix14.pages.length} baris=${kix14.pages[1].lines.length}`);
+
   // 14e. SLIDES: urut-ulang slide (moveSlide) — hanya menukar posisi.
   const punch14b = new Punch14('slideStage', 'filmstrip');
   punch14b.slides = [

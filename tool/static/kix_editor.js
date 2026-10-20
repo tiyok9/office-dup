@@ -270,6 +270,13 @@
           this._shiftLinks(line, this.cursorCharIdx, -1);
           modified = true;
         }
+      } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        // Pemisah halaman manual (paritas Google Docs: Ctrl+Enter).
+        // WAJIB dicek SEBELUM cabang Enter biasa di bawah — kalau tidak,
+        // baris terpecah dua kali (sekali jadi baris baru, sekali jadi halaman).
+        e.preventDefault();
+        this.insertPageBreak();
+        return;   // insertPageBreak() sudah melakukan reflow+render+emit+onChange
       } else if (e.key === 'Enter') {
         e.preventDefault();
         const textAfter = line.text.slice(this.cursorCharIdx);
@@ -506,6 +513,76 @@
       this.renderAllPages();
       this.emitActiveLine();
       if (typeof this.onChange === 'function') this.onChange(this.getDocumentData());
+    }
+
+    // ==== PEMISAH HALAMAN MANUAL (paritas Google Docs: Ctrl+Enter) ====
+    // Memotong dokumen di posisi kursor: teks SESUDAH kursor pindah ke halaman
+    // baru, teks SEBELUM tetap di halaman lama.
+    //
+    // Tidak perlu flag "manualBreak" untuk mempertahankannya: reflowPages()
+    // mengiterasi `for (const page of this.pages)` dan hanya MEMECAH halaman
+    // yang meluber, tidak pernah MENGGABUNG dua halaman. Jadi objek halaman
+    // baru di sini otomatis bertahan melewati paginasi berikutnya.
+    insertPageBreak() {
+      const pIdx = this.activePageIdx;
+      const page = this.pages[pIdx];
+      if (!page) return false;
+      const lIdx = this.activeLineIdx;
+      const line = page.lines[lIdx];
+      if (!line) return false;
+
+      const text = line.text || '';
+      const cut = Math.max(0, Math.min(this.cursorCharIdx, text.length));
+
+      // Tautan yang melintasi titik potong DIBELAH dua, bukan dibuang:
+      // bagian kiri tetap di halaman lama, bagian kanan ikut ke halaman baru
+      // dengan offset yang sudah dinormalkan (dikurangi cut).
+      let movedLinks = null;
+      if (Array.isArray(line.links) && line.links.length) {
+        const keep = [], move = [];
+        for (const L of line.links) {
+          if (L.start >= cut) move.push({ start: L.start - cut, end: L.end - cut, url: L.url });
+          else if (L.end > cut) {
+            keep.push({ start: L.start, end: cut, url: L.url });
+            move.push({ start: 0, end: L.end - cut, url: L.url });
+          } else keep.push(L);
+        }
+        if (keep.length) line.links = keep; else delete line.links;
+        if (move.length) movedLinks = move;
+      }
+
+      const tailText = text.slice(cut);
+      line.text = text.slice(0, cut);
+
+      // Baris ekor mewarisi gaya baris asal supaya format user tidak hilang
+      // tepat di titik pemisah halaman.
+      const tailLine = { text: tailText };
+      if (movedLinks) tailLine.links = movedLinks;
+      for (const k of LINE_STYLE_KEYS) {
+        if (line[k] !== undefined) tailLine[k] = line[k];
+        else if (this.currentStyle[k] !== undefined) tailLine[k] = this.currentStyle[k];
+      }
+
+      const movedLines = [tailLine].concat(page.lines.slice(lIdx + 1));
+      page.lines = page.lines.slice(0, lIdx + 1);
+
+      this.pages.splice(pIdx + 1, 0, {
+        pageNumber: this.pages.length + 1,
+        lines: movedLines
+      });
+
+      this.activePageIdx = pIdx + 1;
+      this.activeLineIdx = 0;
+      this.cursorCharIdx = 0;
+      this.isCaretVisible = true;
+
+      // reflowPages() melacak baris aktif lewat IDENTITAS objek (tailLine),
+      // jadi posisi kursor tetap benar walau halaman dipecah ulang di sini.
+      this.reflowPages();
+      this.renderAllPages();
+      this.emitActiveLine();
+      if (typeof this.onChange === 'function') this.onChange(this.getDocumentData());
+      return true;
     }
 
     insertNewPage() {

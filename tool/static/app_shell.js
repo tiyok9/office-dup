@@ -1163,6 +1163,7 @@
       if (menu === 'insert') {
         return [
           { label: 'Tambah Halaman Baru (Docs)', action: () => { if (this.kix) this.kix.insertNewPage(); } },
+          { label: 'Pemisah Halaman (Docs)', shortcut: 'Ctrl+Enter', action: () => { if (this.kix) this.kix.insertPageBreak(); } },
           { label: 'Tautan (Docs)', shortcut: 'Ctrl+K', action: () => this.openLinkModal() },
           { sep: true },
           { label: 'Tambah Slide Baru (Slides)', action: () => { if (this.punch) this.punch.addNewSlide(); } },

@@ -1,0 +1,10 @@
+{
+  "name": "office-dup",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dashboard tiruan Google Workspace (Docs/Kix, Sheets/Ritz-Waffle, Slides/Punch)",
+  "scripts": {
+    "test": "node tool/test_suite.mjs",
+    "test:e2e": "node tool/e2e_user_test.mjs"
+  }
+}

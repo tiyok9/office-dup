@@ -1,0 +1,10 @@
+{
+  "name": "office-dup-tool",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Google Workspace tiruan (Kix/Ritz/Punch) — server, store, dan suite uji",
+  "scripts": {
+    "test": "node test_suite.mjs",
+    "test:e2e": "node e2e_user_test.mjs"
+  }
+}

@@ -23,6 +23,24 @@ export function decodeBootstrapPayload(wbParam) {
   }
 }
 
+// Pola pesan V8 yang menandakan binary memakai fitur Wasm modern
+// (WasmGC custom descriptors / explicit supertype). Diekspor agar tes dan
+// verifier memakai SATU sumber kebenaran (hindari drift).
+// Catatan: V8 lama melaporkan konstruk yang sama sebagai "unknown type form: 77"
+// (type form 0x4D belum dikenali), V8 baru sebagai "descriptor types need ...".
+export const V8_GAP_PATTERNS = [
+  'explicit supertype',
+  'invalid type',
+  'descriptor types',
+  'custom-descriptors',
+  'unknown type form'
+];
+
+export function isV8FeatureGap(message) {
+  const msg = String(message || '');
+  return V8_GAP_PATTERNS.some(p => msg.includes(p));
+}
+
 export function inspectWasmBinary(filePath) {
   if (!fs.existsSync(filePath)) {
     return { success: false, error: `File tidak ditemukan: ${filePath}` };
@@ -72,12 +90,7 @@ export function inspectWasmBinary(filePath) {
     compilationSuccess = true;
   } catch (err) {
     compilationError = err.message;
-    if (
-      err.message.includes('explicit supertype') ||
-      err.message.includes('invalid type') ||
-      err.message.includes('descriptor types') ||
-      err.message.includes('custom-descriptors')
-    ) {
+    if (isV8FeatureGap(err.message)) {
       requiresCustomDescriptors = true;
     }
   }
@@ -95,9 +108,13 @@ export function inspectWasmBinary(filePath) {
       compiled: compilationSuccess,
       error: compilationError,
       requiresV8BleedingEdge: requiresCustomDescriptors,
-      note: requiresCustomDescriptors
-        ? 'Memerlukan fitur WasmGC / Custom Descriptors modern yang aktif di Chrome 155'
-        : 'Standar WebAssembly 1.0/2.0'
+      // CATATAN: note HARUS konsisten dengan hasil kompilasi.
+      // Dulu: gagal-kompilasi tapi note bilang "Standar 1.0/2.0" (kontradiksi).
+      note: compilationSuccess
+        ? 'Standar WebAssembly 1.0/2.0'
+        : (requiresCustomDescriptors
+            ? 'Memerlukan fitur WasmGC / Custom Descriptors modern yang aktif di Chrome 155'
+            : `Gagal dikompilasi oleh V8 runtime ini: ${compilationError}`)
     }
   };
 }

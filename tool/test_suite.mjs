@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { classifyPayload, classifyArtifact } from './gws_classifier.mjs';
-import { decodeBootstrapPayload, inspectWasmBinary } from './wasm_verifier.mjs';
+import { decodeBootstrapPayload, inspectWasmBinary, V8_GAP_PATTERNS, isV8FeatureGap } from './wasm_verifier.mjs';
 import { KixTileEngine, PunchSvgEngine, RitzGridEngine } from './engine_prototypes.mjs';
 import { evaluateFormula, evaluateAllSheetCells, isErrorToken } from './formula.mjs';
 
@@ -88,7 +88,35 @@ async function runTestSuite() {
   assert(wasmInfo.isWasmMagic === true, 'Header WASM valid (magic: \\0asm ver 1)');
   assert(wasmInfo.sizeBytes === 3945915, `Ukuran biner presisi: 3.945.915 byte (${wasmInfo.sizeBytes})`);
   assert(wasmInfo.sha256 === 'f4b2aa1d3a984f01c3e7f282eb231c0c5ed12f4e4a986ec6bca619a625b6c09e', 'SHA-256 binary WASM terverifikasi otentik');
-  assert(wasmInfo.compilation.requiresV8BleedingEdge === true, 'Deteksi feature gap V8 (explicit supertype) teridentifikasi');
+  // Invariant tahan-runtime: binary ini WAJAR valid entah V8 berhasil
+  // mengompilasinya, atau V8 menolaknya karena butuh fitur Wasm modern.
+  // Dulu asersi mengunci `requiresV8BleedingEdge === true`, sehingga run di V8
+  // yang lebih tua/lebih baru (pesan error berbeda, atau justru sudah mendukung)
+  // memerah padahal binary-nya sehat. Yang benar diuji: KONSISTENSI flag.
+  const wasmComp = wasmInfo.compilation;
+  const wasmCompiled = wasmComp.compiled === true;
+  const wasmGap = wasmComp.requiresV8BleedingEdge === true;
+  assert(
+    wasmCompiled || wasmGap,
+    `Binary WASM valid di runtime ini: terkompilasi=${wasmCompiled}, butuh-fitur-V8-modern=${wasmGap}`
+  );
+  assert(
+    wasmGap === !wasmCompiled,
+    `Flag feature-gap V8 konsisten dengan hasil kompilasi (error: ${wasmComp.error || 'tidak ada'})`
+  );
+
+  // --- Guard regresi: klasifikasi feature-gap V8 harus konsisten lintas-runtime ---
+  // Bug nyata: V8 22 melempar "unknown type form: 77" untuk konstruk yang SAMA
+  // dengan "descriptor types" di V8 24. Tanpa pola itu, kompilasi GAGAL tetapi
+  // dilaporkan "Standar WebAssembly 1.0/2.0" (kontradiksi internal).
+  assert(V8_GAP_PATTERNS.includes('unknown type form'), 'Pola V8 lama "unknown type form" terdaftar sebagai feature gap');
+  assert(isV8FeatureGap('WebAssembly.Module(): unknown type form: 77 @+27') === true, 'isV8FeatureGap mengenali pesan V8 22 (unknown type form)');
+  assert(isV8FeatureGap('WebAssembly.Module(): descriptor types need --experimental-wasm-custom-descriptors @+27') === true, 'isV8FeatureGap mengenali pesan V8 24 (descriptor types)');
+  assert(isV8FeatureGap('some unrelated wasm error') === false, 'isV8FeatureGap TIDAK salah klasifikasi error tak terkait');
+  assert(
+    wasmInfo.compilation.compiled === true || !String(wasmInfo.compilation.note).startsWith('Standar'),
+    `Catatan kompilasi tidak kontradiktif dengan hasil (compiled=${wasmInfo.compilation.compiled}, note="${wasmInfo.compilation.note}")`
+  );
 
   // TEST SUITE 4: PROTOTIPE ENGINE RUNTIME
   console.log('\n--- Suite 4: Engine Prototypes Dynamic Execution ---');

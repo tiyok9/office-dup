@@ -406,6 +406,55 @@ async function runTestSuite() {
   assert(/toggleSpeakerNotes[\s\S]{0,900}getSpeakerNotes/.test(shellSrc),
     'Shell: panel catatan pembicara memuat & menyimpan catatan slide aktif');
 
+  // Shell: dialog native (prompt/confirm/alert) DIGANTIKAN modal in-app.
+  // Dialog native memblokir event loop, tidak bisa ditutup otomasi CDP, dan
+  // tampilannya bukan gaya Google Workspace.
+  // PENTING: pindai KODE saja — komentar dibuang lebih dulu. Tanpa ini,
+  // dokumentasi yang menyebut nama dialog akan membuat asersi gagal karena
+  // prosa, bukan karena perilaku (false negative yang membingungkan).
+  const stripComments = (s) => s
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+  const nativeDialogCalls = (s) => {
+    const code = stripComments(s);
+    const hits = [];
+    for (const name of ['prompt', 'confirm', 'alert']) {
+      const re = new RegExp('\\b' + name + '\\s*\\(', 'g');
+      let m;
+      while ((m = re.exec(code))) {
+        hits.push(name + ' @baris ' + (code.slice(0, m.index).split('\n').length));
+      }
+    }
+    return hits;
+  };
+
+  const shellNative = nativeDialogCalls(shellSrc);
+  assert(shellNative.length === 0,
+    `Shell: nol dialog native prompt/confirm/alert :: ${shellNative.join('; ') || 'bersih'}`);
+  const punchNative = nativeDialogCalls(punchSrc);
+  assert(punchNative.length === 0,
+    `Punch: nol dialog native prompt/confirm/alert :: ${punchNative.join('; ') || 'bersih'}`);
+
+  // Ketiga wrapper wajib ada DAN mengembalikan Promise (bukan blocking).
+  for (const fn of ['confirmModal', 'promptModal', 'alertModal']) {
+    assert(new RegExp(fn + '\\s*\\(').test(shellSrc),
+      `Shell: wrapper ${fn} tersedia`);
+    assert(new RegExp(fn + '\\([^)]*\\)\\s*\\{\\s*return new Promise').test(shellSrc),
+      `Shell: ${fn} mengembalikan Promise (non-blocking)`);
+  }
+
+  // Escape WAJIB me-resolve Promise. closeModal() hanya menyetel display:none;
+  // tanpa resolve, `await confirmModal(...)` menggantung selamanya dan tombol
+  // Hapus tidak pernah selesai — bug yang hanya muncul saat user tekan Esc.
+  assert(/if \(this\._modalResolver\)[\s\S]{0,300}r\(null\);/.test(shellSrc),
+    'Shell: Escape me-resolve Promise modal (await tidak menggantung)');
+
+  // Pemanggil wajib benar-benar await — bukan memanggil lalu membuang Promise.
+  assert(/async deleteDoc\(id\)[\s\S]{0,240}await this\.confirmModal/.test(shellSrc),
+    'Shell: hapus dokumen memakai await confirmModal (bukan confirm native)');
+  assert(/titleEl\.ondblclick = async[\s\S]{0,320}await this\.promptModal/.test(shellSrc),
+    'Shell: rename file memakai await promptModal (bukan prompt native)');
+
   // TEST SUITE 12: INTEGRITAS STRUKTUR SEED (lanjutan penjaga anti-korupsi)
   console.log('\n--- Suite 12: Integritas Struktur Seed & Duplikasi ---');
   const seedPages = store.getDocument('docs-2002-nominee').data.pages;

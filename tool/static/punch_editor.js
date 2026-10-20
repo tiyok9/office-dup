@@ -497,7 +497,9 @@
         if (window.workspaceApp && window.workspaceApp.showToast) {
           window.workspaceApp.showToast('Presentasi harus memiliki minimal 1 slide.');
         } else {
-          alert('Presentasi harus memiliki minimal 1 slide.');
+          // Fallback non-blocking: alert() membekukan event loop dan tidak
+          // bisa ditutup otomasi CDP. Jalur utama tetap showToast di atas.
+          console.warn('Presentasi harus memiliki minimal 1 slide.');
         }
         return false;
       }

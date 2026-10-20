@@ -319,9 +319,16 @@
         });
 
         const titleEl = card.querySelector('.drive-title');
-        titleEl.ondblclick = (e) => {
+        titleEl.ondblclick = async (e) => {
           e.stopPropagation();
-          const newTitle = prompt('Ubah nama file:', doc.title);
+          const newTitle = await this.promptModal({
+            title: 'Ubah nama file',
+            message: 'Masukkan nama baru untuk file ini:',
+            defaultValue: doc.title,
+            placeholder: 'Nama file',
+            confirmText: 'Simpan',
+            cancelText: 'Batal'
+          });
           if (newTitle !== null && newTitle.trim() !== '') {
             this.renameDoc(doc.id, newTitle.trim());
           }
@@ -471,7 +478,13 @@
     }
 
     async deleteDoc(id) {
-      if (!confirm('Apakah Anda yakin ingin menghapus dokumen ini dari Drive?')) return;
+      if (!(await this.confirmModal({
+        title: 'Hapus dokumen',
+        message: 'Apakah Anda yakin ingin menghapus dokumen ini dari Drive?',
+        confirmText: 'Hapus',
+        cancelText: 'Batal',
+        danger: true
+      }))) return;
       try {
         const res = await fetch(`/api/documents/${id}`, { method: 'DELETE' });
         if (res.ok) {
@@ -1003,6 +1016,16 @@
 
         if (e.key === 'Escape') {
           this.closeAllMenus();
+          if (this._modalResolver) {
+            // Wrapper modal (confirm/prompt/alert): resolve dengan nilai batal.
+            // Tanpa ini `await` akan menggantung selamanya, karena closeModal()
+            // hanya mengeset display:none tanpa menyelesaikan Promise.
+            const r = this._modalResolver;
+            this._modalResolver = null;
+            this.closeModal();
+            r(null);
+            return;
+          }
           const m = document.getElementById('gwsModal');
           if (m) m.style.display = 'none';
           return;
@@ -1327,7 +1350,101 @@
 
     closeModal() {
       const modal = document.getElementById('gwsModal');
-      if (modal) modal.style.display = 'none';
+      if (modal) {
+        modal.style.display = 'none';
+        modal.onclick = null;
+      }
+    }
+
+    // ============== MODAL DIALOG WRAPPERS (Promise-based) ==============
+    // Menggantikan dialog native prompt()/confirm()/alert() yang memblokir
+    // event loop dan merusak otomasi CDP/E2E. Semua mengembalikan Promise
+    // dan dibangun di atas ensureModal() yang sudah dipakai modal lain.
+    // Escape (handler global initKeyboardShortcuts) menyelesaikan Promise
+    // dengan nilai batal: false untuk confirm, null untuk prompt.
+
+    confirmModal({ title = 'Konfirmasi', message = '', confirmText = 'OK', cancelText = 'Batal', danger = false } = {}) {
+      return new Promise(resolve => {
+        if (this._modalResolver) { const r = this._modalResolver; this._modalResolver = null; r(null); }
+        const modal = this.ensureModal();
+        const btnColor = danger ? '#ea4335' : '#1a73e8';
+        modal.innerHTML = `
+          <div style="background: #fff; width: 420px; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.25); padding: 24px; font-family: 'Google Sans', Arial, sans-serif;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+              <h3 style="font-size: 18px; font-weight: 500; color: #202124;">${escapeXml(title)}</h3>
+              <span class="modal-close" style="cursor: pointer; font-size: 20px; color: #5f6368;">✕</span>
+            </div>
+            <p style="font-size: 14px; color: #3c4043; line-height: 1.5; margin: 0 0 24px;">${escapeXml(message)}</p>
+            <div style="text-align: right; display: flex; gap: 8px; justify-content: flex-end;">
+              <button class="modal-cancel" style="padding: 8px 20px; background: #fff; color: #1a73e8; border: 1px solid #dadce0; border-radius: 20px; font-size: 13px; font-weight: 500; cursor: pointer;">${escapeXml(cancelText)}</button>
+              <button class="modal-ok" style="padding: 8px 20px; background: ${btnColor}; color: #fff; border: none; border-radius: 20px; font-size: 13px; font-weight: 500; cursor: pointer;">${escapeXml(confirmText)}</button>
+            </div>
+          </div>`;
+        modal.style.display = 'flex';
+        this._modalResolver = (val) => { this._modalResolver = null; this.closeModal(); resolve(val); };
+        modal.querySelector('.modal-ok').addEventListener('click', () => this._modalResolver(true));
+        modal.querySelector('.modal-cancel').addEventListener('click', () => this._modalResolver(false));
+        modal.querySelector('.modal-close').addEventListener('click', () => this._modalResolver(false));
+        modal.onclick = (e) => { if (e.target === modal) this._modalResolver(false); };
+      });
+    }
+
+    promptModal({ title = 'Input', message = '', defaultValue = '', placeholder = '', confirmText = 'OK', cancelText = 'Batal' } = {}) {
+      return new Promise(resolve => {
+        if (this._modalResolver) { const r = this._modalResolver; this._modalResolver = null; r(null); }
+        const modal = this.ensureModal();
+        modal.innerHTML = `
+          <div style="background: #fff; width: 420px; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.25); padding: 24px; font-family: 'Google Sans', Arial, sans-serif;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+              <h3 style="font-size: 18px; font-weight: 500; color: #202124;">${escapeXml(title)}</h3>
+              <span class="modal-close" style="cursor: pointer; font-size: 20px; color: #5f6368;">✕</span>
+            </div>
+            <p style="font-size: 14px; color: #3c4043; line-height: 1.5; margin: 0 0 12px;">${escapeXml(message)}</p>
+            <input type="text" class="modal-input" value="${escapeXml(defaultValue)}" placeholder="${escapeXml(placeholder)}" autocomplete="off"
+              style="width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #dadce0; border-radius: 8px; font-size: 14px; font-family: inherit; outline: none; margin-bottom: 24px;" />
+            <div style="text-align: right; display: flex; gap: 8px; justify-content: flex-end;">
+              <button class="modal-cancel" style="padding: 8px 20px; background: #fff; color: #1a73e8; border: 1px solid #dadce0; border-radius: 20px; font-size: 13px; font-weight: 500; cursor: pointer;">${escapeXml(cancelText)}</button>
+              <button class="modal-ok" style="padding: 8px 20px; background: #1a73e8; color: #fff; border: none; border-radius: 20px; font-size: 13px; font-weight: 500; cursor: pointer;">${escapeXml(confirmText)}</button>
+            </div>
+          </div>`;
+        modal.style.display = 'flex';
+        const input = modal.querySelector('.modal-input');
+        input.focus();
+        input.select();
+        this._modalResolver = (val) => { this._modalResolver = null; this.closeModal(); resolve(val); };
+        modal.querySelector('.modal-ok').addEventListener('click', () => this._modalResolver(input.value));
+        modal.querySelector('.modal-cancel').addEventListener('click', () => this._modalResolver(null));
+        modal.querySelector('.modal-close').addEventListener('click', () => this._modalResolver(null));
+        modal.onclick = (e) => { if (e.target === modal) this._modalResolver(null); };
+        input.addEventListener('keydown', (ev) => {
+          ev.stopPropagation();
+          if (ev.key === 'Enter') { ev.preventDefault(); this._modalResolver(input.value); }
+          if (ev.key === 'Escape') { ev.preventDefault(); this._modalResolver(null); }
+        });
+      });
+    }
+
+    alertModal({ title = 'Pemberitahuan', message = '', okText = 'OK' } = {}) {
+      return new Promise(resolve => {
+        if (this._modalResolver) { const r = this._modalResolver; this._modalResolver = null; r(null); }
+        const modal = this.ensureModal();
+        modal.innerHTML = `
+          <div style="background: #fff; width: 420px; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.25); padding: 24px; font-family: 'Google Sans', Arial, sans-serif;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+              <h3 style="font-size: 18px; font-weight: 500; color: #202124;">${escapeXml(title)}</h3>
+              <span class="modal-close" style="cursor: pointer; font-size: 20px; color: #5f6368;">✕</span>
+            </div>
+            <p style="font-size: 14px; color: #3c4043; line-height: 1.5; margin: 0 0 24px;">${escapeXml(message)}</p>
+            <div style="text-align: right;">
+              <button class="modal-ok" style="padding: 8px 20px; background: #1a73e8; color: #fff; border: none; border-radius: 20px; font-size: 13px; font-weight: 500; cursor: pointer;">${escapeXml(okText)}</button>
+            </div>
+          </div>`;
+        modal.style.display = 'flex';
+        this._modalResolver = () => { this._modalResolver = null; this.closeModal(); resolve(); };
+        modal.querySelector('.modal-ok').addEventListener('click', () => this._modalResolver());
+        modal.querySelector('.modal-close').addEventListener('click', () => this._modalResolver());
+        modal.onclick = (e) => { if (e.target === modal) this._modalResolver(); };
+      });
     }
 
     openWordCountModal() {

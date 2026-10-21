@@ -2929,6 +2929,63 @@ async function runTestSuite() {
     'Docs 9m: handler change tetap parseInt karena value select masih px');
 
   console.log('  Suite 9m (satuan tipografi): selesai');
+
+  // ---- Suite 9n: TEXT ALIGNMENT JUSTIFY ----
+  // Membuktikan bahwa justify terpasang end-to-end:
+  // engine menerima 'justify', UI sinkron, dan baris terakhir fallback left.
+  console.log('  Suite 9n (justify alignment):');
+
+  // 9n-1: kix menerima align='justify' tanpa exception
+  // Pakai loadWin9m yang sudah mendefinisikan noopTimer di scope-nya sendiri.
+  const win9n = loadWin9m('static/kix_editor.js');
+  const K9n = win9n.KixDocsEditor;
+  assert(typeof K9n === 'function',
+    'Docs 9n: KixDocsEditor tersedia setelah eval');
+
+  // 9n-2: penjaga sumber — renderPage punya cabang justify AKTIF (bukan di-false-kan)
+  const kixSrc9n = fs.readFileSync(path.resolve(__dirname, 'static/kix_editor.js'), 'utf8');
+  assert(/line\.align === 'justify'/.test(kixSrc9n),
+    'Docs 9n: renderPage mengenal align=justify');
+  // Guard: if(false && ...) berarti cabang dimatikan — asersi HARUS menolak.
+  assert(!/if\s*\(\s*false\s*&&[^)]*align\s*===\s*'justify'/.test(kixSrc9n),
+    'Docs 9n: cabang justify renderPage TIDAK BOLEH dibungkam false && (M10)');
+
+  // 9n-3: penjaga sumber — charIndexAtPoint punya cabang justify
+  assert((kixSrc9n.match(/line\.align === 'justify'/g) || []).length >= 2,
+    'Docs 9n: charIndexAtPoint JUGA mengenal align=justify (konsistensi hit-test)');
+  // Guard: juga di charIndexAtPoint, pastikan tidak dibungkam
+  assert(!/if\s*\(\s*false\s*&&[^)]*align\s*===\s*'justify'[^)]*segs\.length/.test(kixSrc9n),
+    'Docs 9n: cabang justify charIndexAtPoint TIDAK BOLEH dibungkam false && (M15)');
+
+  // 9n-4: penjaga sumber — justify gambar kata per kata (justifyGaps) AKTIF
+  assert(/if\s*\(justifyGaps\)\s*\{/.test(kixSrc9n),
+    'Docs 9n: renderer memiliki blok justifyGaps (distribusi spasi)');
+  assert(!/if\s*\(\s*false\s*&&\s*justifyGaps\s*\)/.test(kixSrc9n),
+    'Docs 9n: blok justifyGaps TIDAK BOLEH dibungkam false && (M11)');
+
+  // 9n-5: baris terakhir paragraf = fallback left (sIdx < segs.length - 1)
+  assert(/sIdx < segs\.length - 1/.test(kixSrc9n),
+    'Docs 9n: justify hanya berlaku untuk baris non-terakhir (standar tipografi)');
+
+  // 9n-6: dashboard punya tombol tbAlignJustify
+  const dashSrc9n = fs.readFileSync(path.resolve(__dirname, 'dashboard.html'), 'utf8');
+  assert(/id="tbAlignJustify"/.test(dashSrc9n),
+    'Docs 9n: dashboard punya tombol tbAlignJustify');
+
+  // 9n-7: shell punya binding justify
+  const shellSrc9n = fs.readFileSync(path.resolve(__dirname, 'static/app_shell.js'), 'utf8');
+  assert(/tbAlignJustify/.test(shellSrc9n),
+    'Docs 9n: shell punya binding tbAlignJustify');
+
+  // 9n-8: syncToolbar punya set justify
+  assert(/st\.align === 'justify'/.test(shellSrc9n),
+    'Docs 9n: syncToolbar menyetel tbAlignJustify');
+
+  // 9n-9: context menu punya opsi justify (exact match, bukan substring)
+  assert(/\{ label: 'Rata Kanan Kiri',/.test(shellSrc9n),
+    'Docs 9n: context menu punya opsi Rata Kanan Kiri (exact label)');
+
+  console.log('  Suite 9n (justify alignment): selesai');
     }
 
 

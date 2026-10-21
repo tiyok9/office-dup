@@ -2874,7 +2874,11 @@
       for (const seg of m.segs) {
         const tw = ctx.measureText(seg.text).width;
         let segX = baseX;
-        if (line.align === 'center') {
+        if (line.align === 'justify' && sIdx < m.segs.length - 1) {
+          // justify: hit-test harus konsisten dengan renderPage
+          // (distribusi sisi ruang ke spasi antar kata)
+          // Untuk hit-test, posisi efektif kata dihitung sama seperti di render.
+        } else if (line.align === 'center') {
           const availW = this.viewW() - this.marginLeft() - this.marginRight();
           segX = this.marginLeft() + Math.max(0, (availW - tw) / 2);
         } else if (line.align === 'right') {
@@ -3439,7 +3443,20 @@
 
           // Alignment: hitung titik awal segmen (dipakai juga oleh caret agar konsisten)
           let segX = baseX;
-          if (line.align === 'center') {
+          // justify: distribusi sisa ruang ke spasi antar kata.
+          // Baris terakhir paragraf atau segmen terakhir wrap → fallback ke left
+          // (standar tipografi: baris pendek tidak boleh direntangkan).
+          let justifyGaps = null;
+          if (line.align === 'justify' && sIdx < segs.length - 1) {
+            const availW = this.viewW() - this.marginLeft() - this.marginRight();
+            const words = seg.text.split(/(\s+)/);
+            const spaces = words.filter(w => /^\s+$/.test(w));
+            if (spaces.length > 0) {
+              const extraTotal = availW - tw;
+              const extraPer = extraTotal / spaces.length;
+              justifyGaps = { words, extraPer };
+            }
+          } else if (line.align === 'center') {
             const availW = this.viewW() - this.marginLeft() - this.marginRight();
             segX = this.marginLeft() + Math.max(0, (availW - tw) / 2);
           } else if (line.align === 'right') {
@@ -3532,6 +3549,22 @@
           }
 
           ctx.fillStyle = line.color || '#202124';
+          // ==== JUSTIFY: gambar kata per kata dengan spasi terdistribusi ====
+          if (justifyGaps) {
+            let jx = segX;
+            for (let wi = 0; wi < justifyGaps.words.length; wi++) {
+              const w = justifyGaps.words[wi];
+              if (/^\s+$/.test(w)) {
+                jx += ctx.measureText(w).width + justifyGaps.extraPer;
+              } else {
+                ctx.fillText(w, jx, y);
+                jx += ctx.measureText(w).width;
+              }
+            }
+            y += lineHeight;
+            ctx.restore();
+            continue;
+          }
           // ==== Z-INDEX 3: TEKS UTAMA (RUN-AWARE) ====
           // Baris dengan `runs` digambar potongan demi potongan memakai font run
           // masing-masing; baris tanpa `runs` memakai jalur lama apa adanya.

@@ -628,6 +628,7 @@
       set('tbAlignLeft', st.align === 'left' || (!st.align && this.currentApp !== 'slides'));
       set('tbAlignCenter', st.align === 'center');
       set('tbAlignRight', st.align === 'right');
+      set('tbAlignJustify', st.align === 'justify');
       set('tbCurrency', st.numFormat === 'currency');
       set('tbPercent', st.numFormat === 'percent');
       set('tbBulletList', st.listType === 'bullet');
@@ -681,6 +682,7 @@
       bind('tbAlignLeft', () => this.applyFormatForActive('align', 'left'));
       bind('tbAlignCenter', () => this.applyFormatForActive('align', 'center'));
       bind('tbAlignRight', () => this.applyFormatForActive('align', 'right'));
+      bind('tbAlignJustify', () => this.applyFormatForActive('align', 'justify'));
       bind('tbCurrency', () => this.applyFormatForActive('numFormat', 'currency'));
       bind('tbPercent', () => this.applyFormatForActive('numFormat', 'percent'));
 
@@ -1344,6 +1346,7 @@
           { label: 'Rata Kiri', action: () => this.applyFormatForActive('align', 'left') },
           { label: 'Rata Tengah', action: () => this.applyFormatForActive('align', 'center') },
           { label: 'Rata Kanan', action: () => this.applyFormatForActive('align', 'right') },
+          { label: 'Rata Kanan Kiri', action: () => this.applyFormatForActive('align', 'justify') },
           { sep: true },
           { label: 'Format Mata Uang ($)', action: () => this.applyFormatForActive('numFormat', 'currency') },
           { label: 'Format Persen (%)', action: () => this.applyFormatForActive('numFormat', 'percent') },

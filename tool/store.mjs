@@ -42,7 +42,7 @@ function docPath(id) {
 }
 
 export function listDocuments() {
-  return loadIndex().files;
+  return loadIndex().files.filter(f => !f.trashed);
 }
 
 export function getDocument(id) {
@@ -109,6 +109,46 @@ export function deleteDocument(id) {
     try { fs.unlinkSync(p); } catch {}
   }
   return true;
+}
+
+// ==== TRASH & RESTORE (paritas Google Drive) ====
+// Soft-delete: pindahkan ke trash (set trashed=true), bukan hapus permanen.
+export function trashDocument(id) {
+  const index = loadIndex();
+  const meta = index.files.find(f => f.id === id);
+  if (!meta) return null;
+  meta.trashed = true;
+  meta.trashedAt = new Date().toISOString();
+  saveIndex(index);
+  return meta;
+}
+
+export function restoreDocument(id) {
+  const index = loadIndex();
+  const meta = index.files.find(f => f.id === id);
+  if (!meta) return null;
+  delete meta.trashed;
+  delete meta.trashedAt;
+  saveIndex(index);
+  return meta;
+}
+
+export function listTrash() {
+  return loadIndex().files.filter(f => f.trashed === true);
+}
+
+export function emptyTrash() {
+  const index = loadIndex();
+  const trashed = index.files.filter(f => f.trashed === true);
+  for (const doc of trashed) {
+    const p = docPath(doc.id);
+    if (fs.existsSync(p)) {
+      try { fs.unlinkSync(p); } catch {}
+    }
+  }
+  index.files = index.files.filter(f => !f.trashed);
+  saveIndex(index);
+  return trashed.length;
 }
 
 // Definisi kanonik data awal (3 dokumen contoh). Diletakkan di lingkup modul

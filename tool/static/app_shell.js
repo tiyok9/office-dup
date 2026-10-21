@@ -491,14 +491,14 @@
 
     async deleteDoc(id) {
       if (!(await this.confirmModal({
-        title: 'Hapus dokumen',
-        message: 'Apakah Anda yakin ingin menghapus dokumen ini dari Drive?',
-        confirmText: 'Hapus',
+        title: 'Pindahkan ke Sampah',
+        message: 'Dokumen akan dipindahkan ke Sampah. Anda bisa memulihkannya nanti.',
+        confirmText: 'Pindahkan',
         cancelText: 'Batal',
         danger: true
       }))) return;
       try {
-        const res = await fetch(`/api/documents/${id}`, { method: 'DELETE' });
+        const res = await fetch(`/api/documents/${id}/trash`, { method: 'POST' });
         if (res.ok) {
           await this.loadDocumentList();
           if (this.currentDocId === id) {
@@ -506,10 +506,50 @@
             if (first) this.openDocument(first.id);
             else this.switchApp('drive');
           }
-          this.showToast('Dokumen berhasil dihapus dari Drive.');
+          this.showToast('Dokumen dipindahkan ke Sampah.');
         }
       } catch (err) {
-        this.showToast('Gagal menghapus: ' + err.message);
+        this.showToast('Gagal memindahkan: ' + err.message);
+      }
+    }
+
+    async restoreDoc(id) {
+      try {
+        const res = await fetch(`/api/documents/${id}/restore`, { method: 'POST' });
+        if (res.ok) {
+          await this.loadDocumentList();
+          this.showToast('Dokumen berhasil dipulihkan dari Sampah.');
+          this.switchApp('drive');
+        }
+      } catch (err) {
+        this.showToast('Gagal memulihkan: ' + err.message);
+      }
+    }
+
+    async loadTrash() {
+      try {
+        const res = await fetch('/api/trash');
+        if (res.ok) this.trashedDocs = await res.json();
+        else this.trashedDocs = [];
+      } catch { this.trashedDocs = []; }
+    }
+
+    async emptyTrash() {
+      if (!(await this.confirmModal({
+        title: 'Kosongkan Sampah',
+        message: 'Semua dokumen di Sampah akan DIHAPUS PERMANEN. Tindakan ini tidak bisa dibatalkan.',
+        confirmText: 'Hapus Permanen',
+        cancelText: 'Batal',
+        danger: true
+      }))) return;
+      try {
+        const res = await fetch('/api/trash', { method: 'DELETE' });
+        if (res.ok) {
+          this.trashedDocs = [];
+          this.showToast('Sampah berhasil dikosongkan.');
+        }
+      } catch (err) {
+        this.showToast('Gagal mengosongkan sampah: ' + err.message);
       }
     }
 
@@ -1420,6 +1460,47 @@
         if (type === 'slides' && this.punch) content = this.punch.exportSvg();
         else content = JSON.stringify(this.editorData(type), null, 2);
         mime = 'image/svg+xml; charset=utf-8';
+      } else if (format === 'html' || format === 'docx') {
+        // Pseudo-docx: HTML yang bisa dibuka di Word/LibreOffice.
+        // Browser tidak bisa menghasilkan OOXML asli tanpa library besar.
+        ext = 'html';
+        mime = 'text/html; charset=utf-8';
+        if (type === 'docs' && this.kix) {
+          const data = this.kix.getDocumentData();
+          let html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + this._escHtml(title) + '</title>';
+          html += '<style>body{font-family:Arial,sans-serif;max-width:800px;margin:40px auto;padding:20px;}</style></head><body>';
+          for (const page of (data.pages || [])) {
+            for (const line of (page.lines || [])) {
+              const style = [];
+              if (line.bold) style.push('font-weight:bold');
+              if (line.italic) style.push('font-style:italic');
+              if (line.size) style.push('font-size:' + line.size + 'px');
+              if (line.color) style.push('color:' + line.color);
+              html += '<p style="' + style.join(';') + '">' + this._escHtml(line.text || '') + '</p>';
+            }
+          }
+          html += '</body></html>';
+          content = html;
+        } else {
+          content = JSON.stringify(this.editorData(type), null, 2);
+          ext = 'json';
+          mime = 'application/json';
+        }
+      } else if (format === 'xlsx') {
+        // Pseudo-xlsx: CSV with BOM (Excel membuka ini dengan benar).
+        ext = 'csv';
+        mime = 'text/csv; charset=utf-8';
+        if (type === 'sheets' && this.ritz) {
+          content = '\uFEFF' + this.ritz.exportCsv();
+        } else {
+          content = JSON.stringify(this.editorData(type), null, 2);
+          ext = 'json';
+          mime = 'application/json';
+        }
+      } else if (format === 'pdf') {
+        // PDF: gunakan jalur cetak yang sudah ada
+        this.printOrExportPdf();
+        return;
       } else {
         ext = 'json';
         content = JSON.stringify(this.editorData(type), null, 2);
@@ -1432,6 +1513,10 @@
 
       this.saveBlob(content, `${title}.${ext}`, mime);
       this.showToast(`File ${title}.${ext} berhasil diunduh.`);
+    }
+
+    _escHtml(s) {
+      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
     editorData(type) {

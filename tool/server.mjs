@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { classifyPayload, classifyArtifact } from './gws_classifier.mjs';
 import { decodeBootstrapPayload, inspectWasmBinary } from './wasm_verifier.mjs';
 import { KixTileEngine, PunchSvgEngine, RitzGridEngine } from './engine_prototypes.mjs';
-import { initSeedData, listDocuments, getDocument, saveDocument, deleteDocument, getDocumentType, setDocumentStar } from './store.mjs';
+import { initSeedData, listDocuments, getDocument, saveDocument, deleteDocument, getDocumentType, setDocumentStar, trashDocument, restoreDocument, listTrash, emptyTrash } from './store.mjs';
 import { evaluateFormula, evaluateAllSheetCells } from './formula.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -277,6 +277,37 @@ const server = http.createServer(async (req, res) => {
       }
     });
     return;
+  }
+
+  // 5d. REST API: /api/documents/:id/trash (Soft-delete ke trash)
+  if (pathname.startsWith('/api/documents/') && pathname.endsWith('/trash') && req.method === 'POST') {
+    const trashId = path.basename(pathname.replace(/\/trash$/, ''));
+    const meta = trashDocument(trashId);
+    if (!meta) { sendJson(res, 404, { error: 'Dokumen tidak ditemukan' }); return; }
+    sendJson(res, 200, meta);
+    return;
+  }
+
+  // 5e. REST API: /api/documents/:id/restore (Pulihkan dari trash)
+  if (pathname.startsWith('/api/documents/') && pathname.endsWith('/restore') && req.method === 'POST') {
+    const restoreId = path.basename(pathname.replace(/\/restore$/, ''));
+    const meta = restoreDocument(restoreId);
+    if (!meta) { sendJson(res, 404, { error: 'Dokumen tidak ditemukan' }); return; }
+    sendJson(res, 200, meta);
+    return;
+  }
+
+  // 5f. REST API: /api/trash (List & Empty trash)
+  if (pathname === '/api/trash') {
+    if (req.method === 'GET') {
+      sendJson(res, 200, listTrash());
+      return;
+    }
+    if (req.method === 'DELETE') {
+      const count = emptyTrash();
+      sendJson(res, 200, { success: true, deleted: count });
+      return;
+    }
   }
 
   // 6. REST API: /api/sheets/eval (Formula Evaluator Mesin Ritz)

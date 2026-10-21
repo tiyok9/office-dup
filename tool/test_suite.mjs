@@ -3205,6 +3205,90 @@ async function runTestSuite() {
     'Slides 10d: onChange dipanggil cukup banyak (>= 8 tempat)');
 
   console.log('  Suite 10d (slides rotasi+group+transisi): selesai');
+
+  // ================= Suite 10e: TRASH & RESTORE + EKSPOR =================
+  console.log('\n--- Suite 10e: Trash & Restore + Ekspor PDF/DOCX/XLSX ---');
+
+  // 10e-1: store.mjs punya trashDocument
+  const storeSrc10e = fs.readFileSync(path.resolve(__dirname, 'store.mjs'), 'utf8');
+  assertActive(storeSrc10e, /export function trashDocument/,
+    'Store 10e: trashDocument ada (aktif)');
+
+  // 10e-2: store.mjs punya restoreDocument
+  assertActive(storeSrc10e, /export function restoreDocument/,
+    'Store 10e: restoreDocument ada (aktif)');
+
+  // 10e-3: store.mjs punya listTrash
+  assertActive(storeSrc10e, /export function listTrash/,
+    'Store 10e: listTrash ada (aktif)');
+
+  // 10e-4: store.mjs punya emptyTrash
+  assertActive(storeSrc10e, /export function emptyTrash/,
+    'Store 10e: emptyTrash ada (aktif)');
+
+  // 10e-5: listDocuments filter trashed
+  assert(/\.filter\(f\s*=>\s*!f\.trashed\)/.test(storeSrc10e),
+    'Store 10e: listDocuments filter trashed');
+
+  // 10e-6: trashDocument set meta.trashed = true
+  assert(/meta\.trashed\s*=\s*true/.test(storeSrc10e),
+    'Store 10e: trashDocument set trashed=true');
+
+  // 10e-7: restoreDocument delete meta.trashed
+  assert(/delete meta\.trashed/.test(storeSrc10e),
+    'Store 10e: restoreDocument delete meta.trashed');
+
+  // 10e-8: server.mjs punya route /trash
+  const serverSrc10e = fs.readFileSync(path.resolve(__dirname, 'server.mjs'), 'utf8');
+  assert(/\/trash/.test(serverSrc10e),
+    'Server 10e: route /trash ada');
+
+  // 10e-9: server.mjs punya route /restore
+  assert(/\/restore/.test(serverSrc10e),
+    'Server 10e: route /restore ada');
+
+  // 10e-10: server import trashDocument
+  assert(/trashDocument/.test(serverSrc10e),
+    'Server 10e: import trashDocument ada');
+
+  // 10e-11: shell punya restoreDoc
+  const shellSrc10e = fs.readFileSync(path.resolve(__dirname, 'static/app_shell.js'), 'utf8');
+  assertActive(shellSrc10e, /restoreDoc\s*\(/,
+    'Shell 10e: restoreDoc method ada (aktif)');
+
+  // 10e-12: shell punya loadTrash
+  assertActive(shellSrc10e, /loadTrash\s*\(/,
+    'Shell 10e: loadTrash method ada (aktif)');
+
+  // 10e-13: shell punya emptyTrash
+  assertActive(shellSrc10e, /emptyTrash\s*\(/,
+    'Shell 10e: emptyTrash method ada (aktif)');
+
+  // 10e-14: shell deleteDoc menggunakan /trash (soft-delete)
+  assert(/\/trash/.test(shellSrc10e),
+    'Shell 10e: deleteDoc menggunakan /trash route');
+
+  // 10e-15: downloadCurrentDoc mendukung html format
+  assert(/format === 'html'/.test(shellSrc10e),
+    'Shell 10e: downloadCurrentDoc mendukung format html');
+
+  // 10e-16: downloadCurrentDoc mendukung xlsx format
+  assert(/format === 'xlsx'/.test(shellSrc10e),
+    'Shell 10e: downloadCurrentDoc mendukung format xlsx');
+
+  // 10e-17: downloadCurrentDoc mendukung pdf format
+  assert(/format === 'pdf'/.test(shellSrc10e),
+    'Shell 10e: downloadCurrentDoc mendukung format pdf');
+
+  // 10e-18: _escHtml helper ada
+  assertActive(shellSrc10e, /_escHtml\s*\(/,
+    'Shell 10e: _escHtml helper ada (aktif)');
+
+  // 10e-19: BOM untuk xlsx/csv
+  assert(/\\uFEFF/.test(shellSrc10e),
+    'Shell 10e: BOM prefix untuk xlsx/csv');
+
+  console.log('  Suite 10e (trash+restore+ekspor): selesai');
     }
 
 

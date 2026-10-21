@@ -33,6 +33,16 @@
     heading3: { size: 14, bold: true }
   };
 
+  // ==== PRESET UKURAN KERTAS (paritas Google Docs: File > Penyiapan Halaman) ====
+  // 'kix' = ukuran asli engine (636x850) dan DIPAKAI SEBAGAI DEFAULT supaya
+  // dokumen seed yang sudah ada tetap tampil identik byte-per-byte.
+  const PAPER_PRESETS = {
+    kix:    { width: PAGE_CANVAS_WIDTH, height: PAGE_CANVAS_HEIGHT, label: 'Kix (default)' },
+    a4:     { width: 794,  height: 1123, label: 'A4' },
+    letter: { width: 816,  height: 1056, label: 'Letter' },
+    legal:  { width: 816,  height: 1344, label: 'Legal' }
+  };
+
   class KixDocsEditor {
     constructor(scrollContainerId, hiddenInputId, onPageChange) {
       this.scrollBox = document.getElementById(scrollContainerId);
@@ -115,6 +125,39 @@
       // Default MATI agar dokumen lama tampil identik seperti sebelumnya; user
       // menyalakannya lewat toolbarAction('pageNumbers') / setPageNumbers(true).
       this.showPageNumbers = false;
+      // ==== STATE SELEKSI RENTANG (paritas Google Docs) ====
+      // Seleksi disimpan sebagai pasangan TITIK DOKUMEN {pageIdx, lineIdx, charIdx},
+      // bukan sekadar indeks baris aktif, supaya rentang bisa melintasi baris DAN
+      // halaman. `anchor` = tempat drag dimulai (tetap), `focus` = ujung yang
+      // bergerak. Urutan normal (start <= end) dihitung saat dibutuhkan oleh
+      // getSelectionRange(), sehingga arah seleksi (maju/mundur) tidak pernah
+      // membuat render atau pemotongan teks salah sisi.
+      this.selection = null;
+      this._dragging = false;
+      this.selectionColor = 'rgba(66,133,244,0.28)'; // biru seleksi Docs
+      this._clipboard = '';                            // fallback clipboard internal
+      // ==== STATE TABEL KANVAS ====
+      // Tabel disimpan sebagai BARIS KHUSUS (line.type === 'table') agar ikut
+      // alur paginasi, snapshot undo, dan autosave yang sudah ada — tanpa
+      // saluran persistensi baru. Bentuk: line.table = { rows: [[cell,...]], colWidths, rowHeight }
+      // dengan cell = { text, bold?, italic?, ... }.
+      this.activeCell = null;      // { r, c } sel yang sedang disunting
+      this.cellCaret = 0;          // offset kursor DI DALAM teks sel aktif
+      this._tableBoxes = [];       // kotak hit-test sel (diisi renderPage)
+      // ==== STATE GAMBAR INLINE ====
+      this._imageCache = new Map(); // src -> HTMLImageElement (atau null bila gagal)
+      this._imageBoxes = [];        // kotak hit-test gambar (diisi renderPage)
+      // ==== PENYIAPAN HALAMAN ====
+      // Default: ukuran asli engine + margin 30px di semua sisi. Nilai ini
+      // SENGAJA sama dengan konstanta lama sehingga dokumen lama tidak berubah.
+      this.pageSetup = {
+        paperSize: 'kix',
+        orientation: 'portrait',
+        marginTop: MARGIN,
+        marginBottom: MARGIN,
+        marginLeft: MARGIN,
+        marginRight: MARGIN
+      };
       this.initEvents();
       this.startCaretBlink();
       this.renderAllPages();
@@ -149,10 +192,25 @@
     }
 
     initEvents() {
-      // Klik pada scroll box memfokuskan interceptor input teks Kix
-      this.scrollBox.addEventListener('click', (e) => {
+      // ==== MOUSE: KLIK, DRAG-SELEKSI, DOUBLE-CLICK ====
+      // `click` diganti `mousedown` karena seleksi butuh titik AWAL (anchor)
+      // sebelum pointer bergerak. Seluruh perilaku klik lama (komentar, tautan,
+      // kotak centang, fokus input) dipertahankan apa adanya.
+      this.scrollBox.addEventListener('mousedown', (e) => {
         const canvas = e.target.closest('.kix-page')?.querySelector('canvas');
         if (canvas) {
+          // Cegah DEFAULT ACTION mousedown memindahkan fokus ke #docsScrollBox
+          // (div itu punya tabindex="0"). Tanpa ini, focus() kita ditimpa
+          // browser SETELAH handler selesai -> activeElement jadi div, dan
+          // SELURUH ketikan/Enter/Backspace tidak pernah sampai ke engine.
+          // Ditempatkan DI DALAM cabang canvas: mousedown pada scrollbar
+          // (target = div itu sendiri) tidak boleh ikut dibatalkan, kalau
+          // tidak drag scrollbar mati.
+          e.preventDefault();
+          // Fokus dipasang di sini juga (bukan hanya di akhir handler) supaya
+          // cabang yang return lebih awal — komentar, tautan, ceklis, sel
+          // tabel — tetap meninggalkan kursor input di interceptor.
+          if (this.hiddenInput) this.hiddenInput.focus();
           const pIdxRaw = parseInt(canvas.getAttribute('data-page') || '0', 10);
           const rect = canvas.getBoundingClientRect();
           // Kompensasi zoom: rect mengembalikan ukuran SETELAH transform,
@@ -225,6 +283,61 @@
               return;
             }
           }
+
+          // ==== KLIK SEL TABEL ====
+          // WAJIB diperiksa sebelum pemetaan karakter baris: baris tabel tidak
+          // punya line.text yang bisa dipetakan, jadi tanpa cabang ini klik
+          // pada sel hanya akan menaruh kursor di baris tabel tanpa efek.
+          const cellHit = this.tableCellAt(pIdx, clickXl, clickYl);
+          if (cellHit) {
+            this.activePageIdx = pIdx;
+            this.activeLineIdx = cellHit.lIdx;
+            this.activeCell = { r: cellHit.r, c: cellHit.c };
+            const cl = this.pages[pIdx].lines[cellHit.lIdx];
+            const cell = cl.table.rows[cellHit.r][cellHit.c] || { text: '' };
+            // Kursor sel diletakkan di ujung teks sel (perilaku Docs saat klik sel).
+            this.cellCaret = (cell.text || '').length;
+            this.selection = null;
+            this._dragging = false;
+            if (this.hiddenInput) this.hiddenInput.focus();
+            this.isCaretVisible = true;
+            this.emitActiveLine();
+            this.renderAllPages();
+            return;
+          }
+          // Klik di luar tabel = keluar dari mode sunting sel.
+          this.activeCell = null;
+
+          // ==== PEMBENTUKAN SELEKSI ====
+          const here = {
+            pageIdx: this.activePageIdx,
+            lineIdx: this.activeLineIdx,
+            charIdx: this.cursorCharIdx
+          };
+          if (e.detail >= 3) {
+            // Triple-click: seluruh baris.
+            this.selection = {
+              anchor: { pageIdx: here.pageIdx, lineIdx: here.lineIdx, charIdx: 0 },
+              focus: { pageIdx: here.pageIdx, lineIdx: here.lineIdx, charIdx: (line ? (line.text || '').length : 0) }
+            };
+            this._dragging = false;
+          } else if (e.detail === 2) {
+            // Double-click: satu kata (paritas Docs).
+            const w = this._wordRangeAt(pIdx, this.activeLineIdx, this.cursorCharIdx);
+            this.selection = {
+              anchor: { pageIdx: here.pageIdx, lineIdx: here.lineIdx, charIdx: w.start },
+              focus: { pageIdx: here.pageIdx, lineIdx: here.lineIdx, charIdx: w.end }
+            };
+            this._dragging = false;
+          } else if (e.shiftKey) {
+            // Shift+klik: perpanjang seleksi dari anchor lama.
+            const base = (this.selection && this.selection.anchor) ? this.selection.anchor : here;
+            this.selection = { anchor: base, focus: here };
+            this._dragging = false;
+          } else {
+            this.selection = { anchor: here, focus: here };
+            this._dragging = true;   // mulai drag; focus mengikuti mousemove
+          }
         }
         if (this.hiddenInput) this.hiddenInput.focus();
         this.isCaretVisible = true;
@@ -237,6 +350,44 @@
         this.hiddenInput.addEventListener('keydown', (e) => {
           if (window.currentApp !== 'docs') return;
           this.handleKey(e);
+        });
+      }
+
+      // ==== DRAG GLOBAL ====
+      // Dipasang di window (bukan kanvas) supaya drag yang keluar dari tepi
+      // halaman — termasuk melintasi halaman lain — tetap terlacak.
+      if (typeof window !== 'undefined' && window.addEventListener) {
+        window.addEventListener('mousemove', (e) => {
+          if (!this._dragging || !this.selection) return;
+          const pt = this._pointFromClient(e.clientX, e.clientY);
+          if (!pt) return;
+          this.selection.focus = pt;
+          this.activePageIdx = pt.pageIdx;
+          this.activeLineIdx = pt.lineIdx;
+          this.cursorCharIdx = pt.charIdx;
+          this.isCaretVisible = true;
+          this.renderAllPages();
+        });
+        window.addEventListener('mouseup', () => {
+          if (!this._dragging) return;
+          this._dragging = false;
+          // Seleksi kosong (klik tanpa geser) = bukan seleksi.
+          if (!this.hasSelection()) this.selection = null;
+          this.emitActiveLine();
+          this.renderAllPages();
+        });
+      }
+
+      // ==== PASTE ====
+      // Ctrl+V sengaja TIDAK di-preventDefault di handleKey supaya browser
+      // memicu event `paste` pada textarea tersembunyi; di sinilah isi
+      // clipboard asli dibaca lalu disisipkan ke model teks kanvas.
+      if (this.hiddenInput) {
+        this.hiddenInput.addEventListener('paste', (e) => {
+          if (window.currentApp !== 'docs') return;
+          const t = e.clipboardData ? e.clipboardData.getData('text/plain') : '';
+          e.preventDefault();
+          if (t) this.insertText(t);
         });
       }
 
@@ -313,9 +464,43 @@
       }
 
       let modified = false;
+      const mod = e.ctrlKey || e.metaKey;
+
+      // ==== JALUR SUNTING SEL TABEL ====
+      // Ditaruh paling awal: seluruh tombol bermakna berbeda saat fokus berada
+      // di dalam sel (Tab pindah sel, Enter pindah baris, dsb). Tanpa cabang
+      // ini, Tab akan memindahkan fokus DOM dan isi sel tak pernah bisa diisi.
+      if (line && line.type === 'table' && this.activeCell) {
+        if (this._handleTableKey(e, line)) return;
+      }
+
+      // ==== PINTASAN SELEKSI & CLIPBOARD ====
+      // Ctrl+A / Ctrl+C / Ctrl+X ditangani di sini; Ctrl+V TIDAK (dibiarkan
+      // lolos ke event `paste` textarea supaya clipboard asli terbaca).
+      if (mod && (e.key === 'a' || e.key === 'A')) {
+        e.preventDefault();
+        this.selectAll();
+        return;
+      }
+      if (mod && (e.key === 'c' || e.key === 'C')) {
+        if (this.hasSelection()) {
+          e.preventDefault();
+          this.copySelection();
+          return;
+        }
+      }
+      if (mod && (e.key === 'x' || e.key === 'X')) {
+        if (this.hasSelection()) {
+          e.preventDefault();
+          this.cutSelection();
+          return;
+        }
+      }
 
       if (e.key === 'Backspace') {
         e.preventDefault();
+        // Seleksi aktif: Backspace menghapus SELURUH rentang, bukan 1 karakter.
+        if (this.hasSelection()) { this.deleteSelection(); return; }
         if (this.cursorCharIdx > 0) {
           line.text = line.text.slice(0, this.cursorCharIdx - 1) + line.text.slice(this.cursorCharIdx);
           this._editRuns(line, this.cursorCharIdx - 1, 1, '');
@@ -373,6 +558,7 @@
         }
       } else if (e.key === 'Delete') {
         e.preventDefault();
+        if (this.hasSelection()) { this.deleteSelection(); return; }
         if (this.cursorCharIdx < line.text.length) {
           line.text = line.text.slice(0, this.cursorCharIdx) + line.text.slice(this.cursorCharIdx + 1);
           this._editRuns(line, this.cursorCharIdx, 1, '');
@@ -465,34 +651,97 @@
         this.activeLineIdx++;
         this.cursorCharIdx = 0;
         modified = true;
-      } else if (e.key === 'ArrowLeft') {
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' ||
+                 e.key === 'ArrowUp' || e.key === 'ArrowDown') {
         e.preventDefault();
-        if (this.cursorCharIdx > 0) this.cursorCharIdx--;
-        else if (this.activeLineIdx > 0) {
-          this.activeLineIdx--;
-          this.cursorCharIdx = page.lines[this.activeLineIdx].text.length;
+        // Tanpa Shift + ada seleksi = RUNTUHKAN ke sisi sesuai arah panah
+        // (paritas Docs: panah tidak melompat satu karakter, hanya menutup seleksi).
+        if (!e.shiftKey && this.hasSelection()) {
+          const r = this.getSelectionRange();
+          const to = (e.key === 'ArrowLeft' || e.key === 'ArrowUp') ? r.start : r.end;
+          this.selection = null;
+          this.activePageIdx = to.pageIdx;
+          this.activeLineIdx = to.lineIdx;
+          this.cursorCharIdx = to.charIdx;
+          this.renderAllPages();
+          this.emitActiveLine();
+          return;
         }
-      } else if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        if (this.cursorCharIdx < line.text.length) this.cursorCharIdx++;
-        else if (this.activeLineIdx < page.lines.length - 1) {
-          this.activeLineIdx++;
-          this.cursorCharIdx = 0;
+        // Titik jangkar: bila sudah ada seleksi, anchor lama DIPERTAHANKAN
+        // sehingga Shift+panah berikutnya memperluas/mempersempit rentang.
+        const anchorPt = (e.shiftKey && this.selection && this.selection.anchor)
+          ? this.selection.anchor
+          : this._pointOf(this.activePageIdx, this.activeLineIdx, this.cursorCharIdx);
+
+        const curPage = this.pages[this.activePageIdx];
+        const curLine = curPage && curPage.lines[this.activeLineIdx];
+        const curLen = curLine ? (curLine.text || '').length : 0;
+        if (e.key === 'ArrowLeft') {
+          if (this.cursorCharIdx > 0) this.cursorCharIdx--;
+          else if (this.activeLineIdx > 0) {
+            this.activeLineIdx--;
+            this.cursorCharIdx = (curPage.lines[this.activeLineIdx].text || '').length;
+          } else if (this.activePageIdx > 0) {
+            // Mundur ke halaman sebelumnya: baris terakhir halaman itu.
+            this.activePageIdx--;
+            const prevPage = this.pages[this.activePageIdx];
+            this.activeLineIdx = Math.max(0, prevPage.lines.length - 1);
+            const pl = prevPage.lines[this.activeLineIdx];
+            this.cursorCharIdx = pl ? (pl.text || '').length : 0;
+          }
+        } else if (e.key === 'ArrowRight') {
+          if (this.cursorCharIdx < curLen) this.cursorCharIdx++;
+          else if (this.activeLineIdx < curPage.lines.length - 1) {
+            this.activeLineIdx++;
+            this.cursorCharIdx = 0;
+          } else if (this.activePageIdx < this.pages.length - 1) {
+            // Maju ke halaman berikutnya: baris pertama halaman itu.
+            this.activePageIdx++;
+            this.activeLineIdx = 0;
+            this.cursorCharIdx = 0;
+          }
+        } else if (e.key === 'ArrowUp') {
+          if (this.activeLineIdx > 0) {
+            this.activeLineIdx--;
+            this.cursorCharIdx = Math.min(this.cursorCharIdx, (curPage.lines[this.activeLineIdx].text || '').length);
+          } else if (this.activePageIdx > 0) {
+            this.activePageIdx--;
+            const prevPage = this.pages[this.activePageIdx];
+            this.activeLineIdx = Math.max(0, prevPage.lines.length - 1);
+            const pl = prevPage.lines[this.activeLineIdx];
+            this.cursorCharIdx = Math.min(this.cursorCharIdx, pl ? (pl.text || '').length : 0);
+          }
+        } else if (e.key === 'ArrowDown') {
+          if (this.activeLineIdx < curPage.lines.length - 1) {
+            this.activeLineIdx++;
+            this.cursorCharIdx = Math.min(this.cursorCharIdx, (curPage.lines[this.activeLineIdx].text || '').length);
+          } else if (this.activePageIdx < this.pages.length - 1) {
+            this.activePageIdx++;
+            this.activeLineIdx = 0;
+            this.cursorCharIdx = 0;
+          }
         }
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        if (this.activeLineIdx > 0) {
-          this.activeLineIdx--;
-          this.cursorCharIdx = Math.min(this.cursorCharIdx, page.lines[this.activeLineIdx].text.length);
-        }
-      } else if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        if (this.activeLineIdx < page.lines.length - 1) {
-          this.activeLineIdx++;
-          this.cursorCharIdx = Math.min(this.cursorCharIdx, page.lines[this.activeLineIdx].text.length);
+
+        if (e.shiftKey) {
+          this.selection = {
+            anchor: anchorPt,
+            focus: this._pointOf(this.activePageIdx, this.activeLineIdx, this.cursorCharIdx)
+          };
+          this.renderAllPages();
+        } else {
+          this.selection = null;
         }
       } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
+        // Mengetik saat ada seleksi = TIMPA rentang (paritas Docs).
+        if (this.hasSelection()) {
+          this.deleteSelection();
+          // deleteSelection() sudah me-reflow; ambil ulang referensi baris
+          // karena objek `line` lama bisa sudah tidak dipakai lagi.
+          const np = this.pages[this.activePageIdx];
+          line = np && np.lines[this.activeLineIdx];
+          if (!line) return;
+        }
         line.text = line.text.slice(0, this.cursorCharIdx) + e.key + line.text.slice(this.cursorCharIdx);
         // Sisip 1 karakter: batas run, tautan & komentar ikut bergeser.
         this._editRuns(line, this.cursorCharIdx, 0, e.key);
@@ -541,6 +790,576 @@
       const line = page && page.lines[this.activeLineIdx];
       const cur = line ? !!line[prop] : !!this.currentStyle[prop];
       this.applyFormatting(prop, !cur);
+    }
+
+    // ==== GEOMETRI HALAMAN (satu sumber kebenaran) ====
+    // Semua posisi memakai helper ini, BUKAN konstanta langsung, supaya
+    // penyiapan halaman (ukuran kertas/margin/orientasi) benar-benar berlaku.
+    // Nilai default SENGAJA identik dengan konstanta lama (636x850, margin 30,
+    // teks mulai y=60, batas bawah 770) sehingga dokumen seed tidak berubah.
+    pageWidth() {
+      const ps = this.pageSetup || {};
+      const preset = PAPER_PRESETS[ps.paperSize] || PAPER_PRESETS.kix;
+      return (ps.orientation === 'landscape') ? preset.height : preset.width;
+    }
+
+    pageHeight() {
+      const ps = this.pageSetup || {};
+      const preset = PAPER_PRESETS[ps.paperSize] || PAPER_PRESETS.kix;
+      return (ps.orientation === 'landscape') ? preset.width : preset.height;
+    }
+
+    marginLeft()  { return (this.pageSetup && this.pageSetup.marginLeft  != null) ? this.pageSetup.marginLeft  : MARGIN; }
+    marginRight() { return (this.pageSetup && this.pageSetup.marginRight != null) ? this.pageSetup.marginRight : MARGIN; }
+    marginTop()   { return (this.pageSetup && this.pageSetup.marginTop   != null) ? this.pageSetup.marginTop   : MARGIN; }
+    marginBottom(){ return (this.pageSetup && this.pageSetup.marginBottom!= null) ? this.pageSetup.marginBottom: MARGIN; }
+
+    // Y tempat baris pertama dimulai. Default 60 (= LINE_TOP_OFFSET lama).
+    textTop() {
+      return LINE_TOP_OFFSET + (this.marginTop() - MARGIN);
+    }
+
+    // Batas bawah area teks. Default 770 (= MAX_TEXT_Y lama).
+    maxTextY() {
+      return this.pageHeight() - 80 + (this.marginBottom() - MARGIN);
+    }
+
+    getPageSetup() {
+      return {
+        paperSize: this.pageSetup.paperSize,
+        orientation: this.pageSetup.orientation,
+        marginTop: this.marginTop(),
+        marginBottom: this.marginBottom(),
+        marginLeft: this.marginLeft(),
+        marginRight: this.marginRight(),
+        width: this.pageWidth(),
+        height: this.pageHeight()
+      };
+    }
+
+    // Terapkan penyiapan halaman. Nilai tak dikenal diabaikan (bukan di-throw)
+    // supaya pemanggil dari UI/menu tidak bisa merusak dokumen.
+    setPageSetup(opts) {
+      const o = opts || {};
+      const ps = this.pageSetup;
+      if (o.paperSize && PAPER_PRESETS[o.paperSize]) ps.paperSize = o.paperSize;
+      if (o.orientation === 'portrait' || o.orientation === 'landscape') ps.orientation = o.orientation;
+      const clampM = (v, fallback) => {
+        const n = Number(v);
+        if (!isFinite(n)) return fallback;
+        // Margin dibatasi agar area teks tidak pernah kosong/negatif.
+        return Math.max(0, Math.min(200, Math.round(n)));
+      };
+      if (o.marginTop !== undefined)    ps.marginTop = clampM(o.marginTop, ps.marginTop);
+      if (o.marginBottom !== undefined) ps.marginBottom = clampM(o.marginBottom, ps.marginBottom);
+      if (o.marginLeft !== undefined)   ps.marginLeft = clampM(o.marginLeft, ps.marginLeft);
+      if (o.marginRight !== undefined)  ps.marginRight = clampM(o.marginRight, ps.marginRight);
+      this.reflowPages();
+      this.renderAllPages();
+      this.notifyChange();
+      return this.getPageSetup();
+    }
+
+    // ==== TABEL KANVAS (paritas Google Docs: Sisipkan > Tabel) ====
+    // Lebar kolom & tinggi baris adalah SATU SUMBER KEBENARAN yang dipakai
+    // bersama oleh render, hit-test, dan paginasi. Kalau masing-masing
+    // menghitung sendiri, klik pada sel bisa mendarat di sel tetangga.
+    tableColWidths(line) {
+      const t = line && line.table;
+      if (!t) return [];
+      const nCols = (t.rows && t.rows[0]) ? t.rows[0].length : 0;
+      if (Array.isArray(t.colWidths) && t.colWidths.length === nCols) return t.colWidths;
+      const total = this.pageWidth() - this.marginLeft() - this.marginRight();
+      return new Array(nCols).fill(nCols ? total / nCols : 0);
+    }
+
+    tableRowHeight(line) {
+      return (line && line.table && line.table.rowHeight) || 30;
+    }
+
+    // Tinggi total blok tabel (dipakai measureLine sehingga paginasi otomatis benar).
+    tableHeight(line) {
+      const t = line && line.table;
+      if (!t || !Array.isArray(t.rows)) return this.tableRowHeight(line);
+      return Math.max(1, t.rows.length) * this.tableRowHeight(line);
+    }
+
+    // Y puncak sebuah baris di kanvas — dihitung dengan rumus yang SAMA dengan
+    // renderPage (akumulasi measureLine), jadi tabel tidak pernah "melayang".
+    lineTopY(pIdx, lIdx) {
+      const page = this.pages[pIdx];
+      if (!page) return LINE_TOP_OFFSET;
+      const canvas = document.getElementById(`kixCanvas${pIdx + 1}`);
+      let y = this.textTop();
+      for (let i = 0; i < lIdx; i++) {
+        const m = this.measureLine(page, i, canvas);
+        y += m.height;
+      }
+      return y;
+    }
+
+    tableCellRect(pIdx, lIdx, r, c) {
+      const line = this.pages[pIdx] && this.pages[pIdx].lines[lIdx];
+      const t = line && line.table;
+      if (!t || !Array.isArray(t.rows) || !t.rows[r] || !t.rows[r][c]) return null;
+      const widths = this.tableColWidths(line);
+      const rh = this.tableRowHeight(line);
+      const yTop = this.lineTopY(pIdx, lIdx);
+      let x = this.marginLeft();
+      for (let i = 0; i < c; i++) x += widths[i];
+      return { x, y: yTop + r * rh, w: widths[c], h: rh };
+    }
+
+    tableCellAt(pIdx, x, y) {
+      for (const b of this._tableBoxes) {
+        if (b.pIdx !== pIdx) continue;
+        if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return b;
+      }
+      return null;
+    }
+
+    // Sisipkan tabel baru (rows x cols) SETELAH baris aktif. Baris pertama
+    // selalu kosong (bukan menyalin teks baris aktif) — paritas Docs.
+    insertTable(rows, cols) {
+      const nR = Math.max(1, Math.min(50, rows || 2));
+      const nC = Math.max(1, Math.min(12, cols || 2));
+      const grid = [];
+      for (let r = 0; r < nR; r++) {
+        const row = [];
+        for (let c = 0; c < nC; c++) row.push({ text: '' });
+        grid.push(row);
+      }
+      const line = {
+        type: 'table',
+        text: '',
+        table: { rows: grid, rowHeight: 30 }
+      };
+      const page = this.pages[this.activePageIdx];
+      if (!page) return false;
+      const at = Math.min(page.lines.length, this.activeLineIdx + 1);
+      page.lines.splice(at, 0, line);
+      this.activeLineIdx = at;
+      this.activeCell = { r: 0, c: 0 };
+      this.reflowPages();
+      this.renderAllPages();
+      this.emitActiveLine();
+      this.notifyChange();
+      return true;
+    }
+
+    // Baris aktif adalah tabel?
+    activeTableLine() {
+      const page = this.pages[this.activePageIdx];
+      const line = page && page.lines[this.activeLineIdx];
+      return (line && line.type === 'table') ? line : null;
+    }
+
+    // Navigasi sel. `wrap` = kembali ke kolom 0 baris berikutnya; bila sudah di
+    // sel terakhir, TAMBAH baris baru (paritas Docs: Tab di ujung tabel).
+    moveCell(dr, dc) {
+      const line = this.activeTableLine();
+      if (!line || !this.activeCell) return false;
+      const t = line.table;
+      const nR = t.rows.length;
+      const nC = (t.rows[0] || []).length;
+      let { r, c } = this.activeCell;
+      if (dc) {
+        c += dc;
+        if (c >= nC) {
+          if (r === nR - 1) {
+            const row = [];
+            for (let i = 0; i < nC; i++) row.push({ text: '' });
+            t.rows.push(row);
+          }
+          r++; c = 0;
+        } else if (c < 0) {
+          if (r === 0) { c = 0; }
+          else { r--; c = nC - 1; }
+        }
+      }
+      if (dr) {
+        r += dr;
+        if (r >= nR) r = nR - 1;
+        if (r < 0) r = 0;
+        if (c >= nC) c = nC - 1;
+      }
+      this.activeCell = { r, c };
+      // Caret pindah ke UJUNG teks sel tujuan. Tanpa ini caret bisa menunjuk
+      // offset melewati panjang teks sel baru (sel lama 20 huruf -> sel baru
+      // 3 huruf), dan ketikan berikutnya tampak "hilang".
+      const newRow = t.rows[r];
+      const newCell = newRow ? newRow[c] : null;
+      this.cellCaret = newCell ? (newCell.text || '').length : 0;
+      this.renderAllPages();
+      this.emitActiveLine();
+      return true;
+    }
+
+    // Teks sel aktif (dipakai handleTableKey).
+    _cell() {
+      const line = this.activeTableLine();
+      if (!line || !this.activeCell) return null;
+      const row = line.table.rows[this.activeCell.r];
+      return row ? row[this.activeCell.c] : null;
+    }
+
+    // ==== MODEL SELEKSI RENTANG ====
+    // Semua posisi memakai bentuk seragam { pageIdx, lineIdx, charIdx } dan
+    // charIdx SELALU berada pada basis line.text (tanpa penanda butir), sama
+    // seperti cursorCharIdx — sehingga seleksi, caret, tautan, dan komentar
+    // memakai satu sistem koordinat yang sama.
+    _pointOf(pageIdx, lineIdx, charIdx) {
+      return { pageIdx: pageIdx || 0, lineIdx: lineIdx || 0, charIdx: charIdx || 0 };
+    }
+
+    _comparePoints(a, b) {
+      if (!a || !b) return 0;
+      if (a.pageIdx !== b.pageIdx) return a.pageIdx - b.pageIdx;
+      if (a.lineIdx !== b.lineIdx) return a.lineIdx - b.lineIdx;
+      return a.charIdx - b.charIdx;
+    }
+
+    _isSamePos(a, b) {
+      return this._comparePoints(a, b) === 0;
+    }
+
+    hasSelection() {
+      return !!(this.selection && this.selection.anchor && this.selection.focus &&
+                !this._isSamePos(this.selection.anchor, this.selection.focus));
+    }
+
+    // Selalu mengembalikan rentang TERURUT. Arah seleksi (maju/mundur) tidak
+    // pernah perlu diperiksa pemanggil — ini mencegah pemotongan teks salah sisi
+    // saat user men-drag dari kanan ke kiri.
+    getSelectionRange() {
+      if (!this.hasSelection()) return null;
+      const a = this.selection.anchor, f = this.selection.focus;
+      const backward = this._comparePoints(a, f) > 0;
+      return {
+        start: backward ? f : a,
+        end: backward ? a : f,
+        backward
+      };
+    }
+
+    selectAll() {
+      const lastP = this.pages.length - 1;
+      if (lastP < 0) return;
+      const lastL = Math.max(0, this.pages[lastP].lines.length - 1);
+      const lastLine = this.pages[lastP].lines[lastL];
+      this.selection = {
+        anchor: this._pointOf(0, 0, 0),
+        focus: this._pointOf(lastP, lastL, lastLine ? (lastLine.text || '').length : 0)
+      };
+      this.activePageIdx = lastP;
+      this.activeLineIdx = lastL;
+      this.cursorCharIdx = lastLine ? (lastLine.text || '').length : 0;
+      this.renderAllPages();
+      this.emitActiveLine();
+    }
+
+
+    // API publik: menetapkan seleksi rentang secara programatik (paritas Docs).
+    // Dua alasan kenapa ini ada, bukan sekadar seleksi via mouse:
+    //   1) UI membutuhkannya untuk memilih hasil Find & Replace / tautan;
+    //   2) pengujian otomatis tidak bisa mensimulasikan drag mouse di kanvas,
+    //      jadi tanpa jalur ini seluruh perilaku seleksi mustahil diverifikasi.
+    // Titik masukan dinormalkan lewat _pointOf() supaya indeks liar (mis. charIdx
+    // melebihi panjang baris) tidak pernah merusak render.
+    setSelectionRange(anchor, focus) {
+      if (!anchor || !focus) { this.selection = null; return null; }
+      const a = this._pointOf(anchor.pageIdx, anchor.lineIdx, anchor.charIdx);
+      const f = this._pointOf(focus.pageIdx, focus.lineIdx, focus.charIdx);
+      this.selection = { anchor: a, focus: f };
+      this.activePageIdx = f.pageIdx;
+      this.activeLineIdx = f.lineIdx;
+      this.cursorCharIdx = f.charIdx;
+      this.renderAllPages();
+      this.emitActiveLine();
+      return this.getSelectionRange();
+    }
+    collapseSelection(to) {
+      const r = this.getSelectionRange();
+      if (!r) { this.selection = null; return null; }
+      const pt = (to === 'start') ? r.start : r.end;
+      this.selection = null;
+      this.activePageIdx = pt.pageIdx;
+      this.activeLineIdx = pt.lineIdx;
+      this.cursorCharIdx = pt.charIdx;
+      return pt;
+    }
+
+    // Batas kata di sekitar `charIdx` (paritas double-click Docs).
+    _wordRangeAt(pIdx, lIdx, charIdx) {
+      const line = this.pages[pIdx] && this.pages[pIdx].lines[lIdx];
+      const text = line ? (line.text || '') : '';
+      if (!text) return { start: 0, end: 0 };
+      const isWord = (ch) => /[A-Za-z0-9_\u00C0-\u024F]/.test(ch);
+      let s = Math.max(0, Math.min(text.length, charIdx));
+      let e = s;
+      while (s > 0 && isWord(text[s - 1])) s--;
+      while (e < text.length && isWord(text[e])) e++;
+      // Klik tepat di atas spasi/tanda baca: ambil kata di sebelah kanan.
+      if (s === e) {
+        let k = e;
+        while (k < text.length && !isWord(text[k])) k++;
+        let m = k;
+        while (m < text.length && isWord(text[m])) m++;
+        if (m > k) return { start: k, end: m };
+      }
+      return { start: s, end: e };
+    }
+
+    // Koordinat klien -> titik dokumen, dengan kompensasi zoom (rasio
+    // canvas.width / rect.width) supaya seleksi tetap akurat saat di-zoom.
+    _pointFromClient(clientX, clientY) {
+      if (typeof document === 'undefined') return null;
+      const el = document.elementFromPoint ? document.elementFromPoint(clientX, clientY) : null;
+      const host = el && el.closest ? el.closest('.kix-page') : null;
+      if (!host) return null;
+      const canvas = host.querySelector('canvas');
+      if (!canvas) return null;
+      const pIdxRaw = parseInt(canvas.getAttribute('data-page') || '0', 10);
+      const rect = canvas.getBoundingClientRect();
+      const zx = rect.width ? canvas.width / rect.width : 1;
+      const zy = rect.height ? canvas.height / rect.height : 1;
+      const lx = (clientX - rect.left) * zx;
+      const ly = (clientY - rect.top) * zy;
+      const lIdxRaw = Math.floor((ly - LINE_TOP_OFFSET) / LINE_HEIGHT);
+      const clamped = this.clampPoint(pIdxRaw, lIdxRaw, lx);
+      const charIdx = this.charIndexAtPoint(clamped.pIdx, clamped.lIdx, lx);
+      return this._pointOf(clamped.pIdx, clamped.lIdx, charIdx);
+    }
+
+    // Teks murni dari rentang terpilih; baris digabung dengan newline.
+    getSelectedText() {
+      const r = this.getSelectionRange();
+      if (!r) return '';
+      const out = [];
+      for (let p = r.start.pageIdx; p <= r.end.pageIdx; p++) {
+        const page = this.pages[p];
+        if (!page) continue;
+        const from = (p === r.start.pageIdx) ? r.start.lineIdx : 0;
+        const to = (p === r.end.pageIdx) ? r.end.lineIdx : page.lines.length - 1;
+        for (let l = from; l <= to; l++) {
+          const line = page.lines[l];
+          if (!line) continue;
+          const t = line.text || '';
+          const a = (p === r.start.pageIdx && l === r.start.lineIdx) ? r.start.charIdx : 0;
+          const b = (p === r.end.pageIdx && l === r.end.lineIdx) ? r.end.charIdx : t.length;
+          out.push(t.slice(Math.max(0, a), Math.max(a, b)));
+        }
+      }
+      return out.join('\n');
+    }
+
+    // Salin rentang terpilih ke clipboard sistem. `_clipboard` internal dipakai
+    // sebagai cadangan karena navigator.clipboard butuh konteks aman (https /
+    // localhost) dan izin — tanpa cadangan ini Ctrl+C diam-diam gagal.
+    copySelection() {
+      const text = this.getSelectedText();
+      if (!text) return false;
+      this._clipboard = text;
+      try {
+        if (typeof navigator !== 'undefined' && navigator.clipboard &&
+            typeof navigator.clipboard.writeText === 'function') {
+          navigator.clipboard.writeText(text).catch(() => {});
+        }
+      } catch (_) { /* clipboard ditolak: cadangan internal tetap terisi */ }
+      if (typeof this.onCopy === 'function') this.onCopy(text);
+      return true;
+    }
+
+    cutSelection() {
+      if (!this.hasSelection()) return false;
+      const text = this.getSelectedText();
+      this.copySelection();
+      this.deleteSelection();
+      return !!text;
+    }
+
+    // Hapus seluruh isi rentang terpilih dan runtuhkan kursor ke awal rentang.
+    // Baris perantara dihapus; baris awal & akhir disambung. Offset tautan dan
+    // komentar pada baris akhir digeser agar tidak menunjuk karakter yang salah.
+    deleteSelection() {
+      const r = this.getSelectionRange();
+      if (!r) return false;
+      const { start, end } = r;
+      const sp = this.pages[start.pageIdx], ep = this.pages[end.pageIdx];
+      if (!sp || !ep) { this.selection = null; return false; }
+
+      if (start.pageIdx === end.pageIdx && start.lineIdx === end.lineIdx) {
+        const line = sp.lines[start.lineIdx];
+        if (!line) { this.selection = null; return false; }
+        const a = Math.max(0, Math.min((line.text || '').length, start.charIdx));
+        const b = Math.max(a, Math.min((line.text || '').length, end.charIdx));
+        if (b > a) {
+          line.text = (line.text || '').slice(0, a) + (line.text || '').slice(b);
+          this._editRuns(line, a, b - a, '');
+          this._shiftLinks(line, a, -(b - a));
+          this._shiftComments(line, a, -(b - a));
+        }
+        this.selection = null;
+        this.activePageIdx = start.pageIdx;
+        this.activeLineIdx = start.lineIdx;
+        this.cursorCharIdx = a;
+        this.reflowPages();
+        this.renderAllPages();
+        this.emitActiveLine();
+        this.notifyChange();
+        return true;
+      }
+
+      // ==== RENTANG LINTAS BARIS / HALAMAN ====
+      const startLine = sp.lines[start.lineIdx];
+      const endLine = ep.lines[end.lineIdx];
+      if (!startLine || !endLine) { this.selection = null; return false; }
+      const a = Math.max(0, Math.min((startLine.text || '').length, start.charIdx));
+      const b = Math.max(0, Math.min((endLine.text || '').length, end.charIdx));
+      const head = (startLine.text || '').slice(0, a);
+      const tail = (endLine.text || '').slice(b);
+      startLine.text = head + tail;
+
+      // Gaya baris akhir dilebur: runs & tautan baris akhir digeser sepanjang `head`.
+      if (Array.isArray(endLine.runs) && endLine.runs.length) {
+        const shifted = endLine.runs
+          .map(r => ({ ...r, text: r.text }))
+          .filter(Boolean);
+        // Bangun ulang runs hasil sambungan: runs baris awal (dipotong di a)
+        // diikuti runs baris akhir (dipotong di b, digeser).
+        const keepRuns = (Array.isArray(startLine.runs) && startLine.runs.length)
+          ? startLine.runs : null;
+        const mergedRuns = [];
+        if (keepRuns) {
+          let pos = 0;
+          for (const r of keepRuns) {
+            const len = r.text.length;
+            if (pos >= a) break;
+            const take = Math.min(len, a - pos);
+            if (take > 0) mergedRuns.push({ ...r, text: r.text.slice(0, take) });
+            pos += len;
+          }
+        }
+        let pos2 = 0;
+        for (const r of shifted) {
+          const len = r.text.length;
+          if (pos2 + len > b) {
+            const cut = Math.max(0, b - pos2);
+            const rest = r.text.slice(cut);
+            if (rest) mergedRuns.push({ ...r, text: rest });
+          }
+          pos2 += len;
+        }
+        if (mergedRuns.length) {
+          startLine.runs = mergedRuns;
+        } else {
+          delete startLine.runs;
+        }
+      }
+      if (Array.isArray(endLine.links) && endLine.links.length) {
+        const moved = endLine.links
+          .filter(L => L.end > b)
+          .map(L => ({ start: Math.max(a, L.start - b + a), end: L.end - b + a, url: L.url }));
+        startLine.links = (Array.isArray(startLine.links) ? startLine.links : []).concat(moved);
+        delete endLine.links;
+      }
+      if (Array.isArray(endLine.comments) && endLine.comments.length) {
+        const movedC = endLine.comments
+          .filter(C => C.end > b)
+          .map(C => ({ ...C, start: Math.max(a, C.start - b + a), end: C.end - b + a }));
+        startLine.comments = (Array.isArray(startLine.comments) ? startLine.comments : []).concat(movedC);
+        delete endLine.comments;
+      }
+
+      // Hapus baris di antara start dan end (termasuk baris akhir), lalu sisakan baris awal.
+      if (start.pageIdx === end.pageIdx) {
+        sp.lines.splice(start.lineIdx + 1, end.lineIdx - start.lineIdx);
+      } else {
+        sp.lines.splice(start.lineIdx + 1, sp.lines.length - start.lineIdx - 1);
+        for (let p = start.pageIdx + 1; p < end.pageIdx; p++) this.pages[p].lines = [];
+        ep.lines.splice(0, end.lineIdx + 1);
+      }
+      this.selection = null;
+      this.activePageIdx = start.pageIdx;
+      this.activeLineIdx = start.lineIdx;
+      this.cursorCharIdx = a;
+      this.reflowPages();
+      this.renderAllPages();
+      this.emitActiveLine();
+      this.notifyChange();
+      return true;
+    }
+
+    // Sisip teks pada kursor (dipakai paste & jalur ketik multi-karakter).
+    insertText(text) {
+      if (!text) return false;
+      if (this.hasSelection()) this.deleteSelection();
+      const page = this.pages[this.activePageIdx];
+      const line = page && page.lines[this.activeLineIdx];
+      if (!line) return false;
+      const t = String(text).replace(/\r\n/g, '\n');
+      const parts = t.split('\n');
+      const at = this.cursorCharIdx;
+      const head = (line.text || '').slice(0, at);
+      const tail = (line.text || '').slice(at);
+      line.text = head + parts[0];
+      this._editRuns(line, at, 0, parts[0]);
+      this._shiftLinks(line, at, parts[0].length);
+      this._shiftComments(line, at, parts[0].length);
+      this.cursorCharIdx = (head + parts[0]).length;
+      if (parts.length > 1) {
+        // Multi-baris: sisa bagian menjadi baris-baris baru setelah baris aktif.
+        let insertAt = this.activeLineIdx + 1;
+        for (let i = 1; i < parts.length; i++) {
+          const isLast = (i === parts.length - 1);
+          const nl = { text: isLast ? parts[i] + tail : parts[i] };
+          for (const k of LINE_STYLE_KEYS) {
+            if (line[k] !== undefined) nl[k] = line[k];
+          }
+          if (nl.listType) delete nl.checked;
+          page.lines.splice(insertAt, 0, nl);
+          insertAt++;
+        }
+        this.activeLineIdx = insertAt - 1;
+        this.cursorCharIdx = parts[parts.length - 1].length;
+      }
+      this.reflowPages();
+      this.renderAllPages();
+      this.emitActiveLine();
+      this.notifyChange();
+      return true;
+    }
+
+    // Terapkan gaya run-level ke SELURUH rentang seleksi, lintas baris & halaman.
+    applyFormatToSelection(prop, value) {
+      const r = this.getSelectionRange();
+      if (!r) return false;
+      for (let p = r.start.pageIdx; p <= r.end.pageIdx; p++) {
+        const page = this.pages[p];
+        if (!page) continue;
+        const from = (p === r.start.pageIdx) ? r.start.lineIdx : 0;
+        const to = (p === r.end.pageIdx) ? r.end.lineIdx : page.lines.length - 1;
+        for (let l = from; l <= to; l++) {
+          const line = page.lines[l];
+          if (!line) continue;
+          const len = (line.text || '').length;
+          const a = (p === r.start.pageIdx && l === r.start.lineIdx) ? r.start.charIdx : 0;
+          const b = (p === r.end.pageIdx && l === r.end.lineIdx) ? r.end.charIdx : len;
+          if (b <= a) continue;
+          // applyInlineFormat bekerja pada baris AKTIF, jadi arahkan dulu.
+          this.activePageIdx = p;
+          this.activeLineIdx = l;
+          this.applyInlineFormat(a, b, { [prop]: value });
+        }
+      }
+      // Kembalikan fokus ke ujung seleksi agar caret tidak melompat.
+      this.activePageIdx = r.end.pageIdx;
+      this.activeLineIdx = r.end.lineIdx;
+      this.cursorCharIdx = r.end.charIdx;
+      this.renderAllPages();
+      this.emitActiveLine();
+      this.notifyChange();
+      return true;
     }
 
     emitActiveLine() {
@@ -670,7 +1489,8 @@
       const page = this.pages[safeP];
       const maxL = Math.max(0, (page && page.lines ? page.lines.length : 1) - 1);
       const safeL = Math.max(0, Math.min(maxL, lIdx || 0));
-      const safeX = Math.max(MARGIN, Math.min(PAGE_CANVAS_WIDTH - MARGIN, x || MARGIN));
+      const mL = this.marginLeft();
+      const safeX = Math.max(mL, Math.min(this.pageWidth() - this.marginRight(), x || mL));
       return { pIdx: safeP, lIdx: safeL, x: safeX };
     }
 
@@ -1524,21 +2344,23 @@
     reflowPages() {
       const activeLine = this.pages[this.activePageIdx]?.lines[this.activeLineIdx];
       const measCanvas = document.createElement('canvas');
-      measCanvas.width = PAGE_CANVAS_WIDTH;
-      measCanvas.height = PAGE_CANVAS_HEIGHT;
+      measCanvas.width = this.pageWidth();
+      measCanvas.height = this.pageHeight();
 
       const out = [];
+      const yStart = this.textTop();
+      const yLimit = this.maxTextY();
       for (const page of this.pages) {
         let cur = { pageNumber: out.length + 1, lines: [] };
-        let y = 60;
+        let y = yStart;
         for (let lIdx = 0; lIdx < page.lines.length; lIdx++) {
           // Tinggi baris memakai sumber kebenaran yang SAMA dengan renderPage(),
           // sehingga paginasi tidak pernah melenceng dari yang terlihat user.
           const m = this.measureLine(page, lIdx, measCanvas);
-          if (y + m.height > MAX_TEXT_Y && cur.lines.length > 0) {
+          if (y + m.height > yLimit && cur.lines.length > 0) {
             out.push(cur);
             cur = { pageNumber: out.length + 1, lines: [] };
-            y = 60;
+            y = yStart;
           }
           cur.lines.push(m.line);
           y += m.height;
@@ -1577,7 +2399,7 @@
         pageDiv.setAttribute('data-page-index', i.toString());
         pageDiv.innerHTML = `
           <div class="kix-page-header">Halaman ${i + 1}</div>
-          <canvas class="kix-canvas-tile-content" id="kixCanvas${i + 1}" data-page="${i}" width="${PAGE_CANVAS_WIDTH}" height="${PAGE_CANVAS_HEIGHT}"></canvas>
+          <canvas class="kix-canvas-tile-content" id="kixCanvas${i + 1}" data-page="${i}" width="${this.pageWidth()}" height="${this.pageHeight()}"></canvas>
         `;
         container.appendChild(pageDiv);
       }
@@ -1601,7 +2423,9 @@
       if (bold) style += 'bold ';
       const baseFont = `${style}${fontSize}px ${fontFamily || 'Arial'}, sans-serif`;
       ctx.font = baseFont;
-      const maxWidth = canvas.width - 60 - (extraLeft || 0); // margin + indentasi/penanda
+      // Lebar area teks memakai MARGIN AKTIF (bukan angka 60 hardcoded), supaya
+      // penyiapan halaman benar-benar mengubah titik wrap.
+      const maxWidth = canvas.width - this.marginLeft() - this.marginRight() - (extraLeft || 0);
       if (!text) return [{ text: '', start: 0 }];
 
       // ==== JALUR RUN-AWARE (hanya aktif bila baris punya runs) ====
@@ -1794,6 +2618,30 @@
     // antara hasil paginasi dan hasil gambar.
     measureLine(page, lIdx, canvas) {
       const line = page.lines[lIdx] || { text: '' };
+      // ==== BARIS GAMBAR DIUKUR SEBAGAI SATU BLOK ====
+      // Tanpa cabang ini, baris gambar diukur sebagai teks kosong (~20px)
+      // sehingga paginasi menaruh paragraf berikutnya DI ATAS gambar.
+      if (line.type === 'image') {
+        const szI = this.imageSize(line);
+        const prevI = lIdx > 0 ? page.lines[lIdx - 1] : null;
+        const gapI = lIdx === 0 ? 0 : ((line.heading || (prevI && prevI.heading)) ? 12 : 4);
+        return {
+          line, segs: [{ text: '', start: 0 }], indent: 0, prefix: '',
+          base: szI.height, paragraphGap: gapI, height: szI.height + gapI
+        };
+      }
+      // ==== BARIS TABEL DIUKUR SEBAGAI SATU BLOK ====
+      // Kalau tabel diukur sebagai baris teks biasa, paginasi akan memotong
+      // tabel di tengah dan sel-selnya bertumpuk dengan paragraf berikutnya.
+      if (line.type === 'table') {
+        const hT = this.tableHeight(line);
+        const prevT = lIdx > 0 ? page.lines[lIdx - 1] : null;
+        const gapT = lIdx === 0 ? 0 : ((line.heading || (prevT && prevT.heading)) ? 12 : 4);
+        return {
+          line, segs: [{ text: '', start: 0 }], indent: 0, prefix: '',
+          base: hT, paragraphGap: gapT, height: hT + gapT
+        };
+      }
       const fontSize = line.size || 13;
       const indent = this.indentFor(line);
       const prefix = this.listPrefixFor(page, lIdx);
@@ -1806,6 +2654,322 @@
       const prev = lIdx > 0 ? page.lines[lIdx - 1] : null;
       const gap = lIdx === 0 ? 0 : ((line.heading || (prev && prev.heading)) ? 12 : 4);
       return { line, segs, indent, prefix, base, paragraphGap: gap, height: segs.length * base + gap };
+    }
+
+    // ==== GAMBAR INLINE (paritas Google Docs: Sisipkan > Gambar) ====
+    // Gambar disimpan sebagai BARIS KHUSUS (line.type === 'image') sehingga
+    // otomatis ikut paginasi, snapshot undo, dan autosave — tanpa saluran
+    // persistensi baru. Bentuk: line.image = { src, width, height, align }
+    imageSize(line) {
+      const im = line && line.image;
+      if (!im) return { width: 0, height: 0 };
+      const maxW = this.pageWidth() - this.marginLeft() - this.marginRight();
+      const w = Math.max(8, Math.min(maxW, Number(im.width) || 200));
+      // Rasio aspek: bila hanya satu sisi diberikan, sisi lain diturunkan dari
+      // gambar asli supaya gambar tidak gepeng.
+      const cached = this._imageCache.get(im.src);
+      let h = Number(im.height) || 0;
+      if (!h) {
+        if (cached && cached.naturalWidth) h = w * (cached.naturalHeight / cached.naturalWidth);
+        else h = Math.round(w * 0.6);
+      }
+      return { width: w, height: Math.max(8, Math.round(h)) };
+    }
+
+    // Pastikan HTMLImageElement untuk `src` ada di cache. Di lingkungan tanpa
+    // Image (mis. harness Node) fungsi ini mengembalikan null dan render jatuh
+    // ke placeholder — TIDAK melempar, supaya unit test tidak pecah.
+    _ensureImage(src) {
+      if (!src) return null;
+      if (this._imageCache.has(src)) return this._imageCache.get(src);
+      const ImgCtor = (typeof window !== 'undefined' && window.Image) ? window.Image : null;
+      if (!ImgCtor) { this._imageCache.set(src, null); return null; }
+      let img = null;
+      try {
+        img = new ImgCtor();
+        img.onload = () => {
+          // Muat selesai: gambar ulang supaya placeholder berganti isi asli.
+          this._imageCache.set(src, img);
+          this.renderAllPages();
+        };
+        img.onerror = () => { this._imageCache.set(src, null); };
+        img.src = src;
+      } catch (_) {
+        this._imageCache.set(src, null);
+        return null;
+      }
+      this._imageCache.set(src, img);
+      return img;
+    }
+
+    insertImage(src, opts) {
+      if (!src || typeof src !== 'string') return false;
+      const o = opts || {};
+      const line = {
+        type: 'image',
+        text: '',
+        image: {
+          src: src,
+          width: o.width || 240,
+          height: o.height || 0,
+          align: o.align || 'left'
+        }
+      };
+      const page = this.pages[this.activePageIdx];
+      if (!page) return false;
+      const at = Math.min(page.lines.length, this.activeLineIdx + 1);
+      page.lines.splice(at, 0, line);
+      this.activeLineIdx = at;
+      this.activeCell = null;
+      this._ensureImage(src);
+      this.reflowPages();
+      this.renderAllPages();
+      this.emitActiveLine();
+      this.notifyChange();
+      return true;
+    }
+
+    // Ubah ukuran gambar aktif (proporsi terjaga bila `height` tidak diberikan).
+    resizeActiveImage(width, height) {
+      const page = this.pages[this.activePageIdx];
+      const line = page && page.lines[this.activeLineIdx];
+      if (!line || line.type !== 'image' || !line.image) return false;
+      const maxW = this.pageWidth() - this.marginLeft() - this.marginRight();
+      line.image.width = Math.max(8, Math.min(maxW, Number(width) || line.image.width));
+      if (height !== undefined && height !== null) {
+        line.image.height = Math.max(8, Number(height) || line.image.height);
+      } else {
+        const sz = this.imageSize(line);
+        line.image.height = sz.height;
+      }
+      this.reflowPages();
+      this.renderAllPages();
+      this.notifyChange();
+      return true;
+    }
+
+    setActiveImageAlign(align) {
+      const page = this.pages[this.activePageIdx];
+      const line = page && page.lines[this.activeLineIdx];
+      if (!line || line.type !== 'image' || !line.image) return false;
+      line.image.align = (align === 'center' || align === 'right') ? align : 'left';
+      this.renderAllPages();
+      this.notifyChange();
+      return true;
+    }
+
+    imageAt(pIdx, x, y) {
+      for (const b of this._imageBoxes) {
+        if (b.pIdx !== pIdx) continue;
+        if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return b;
+      }
+      return null;
+    }
+
+    // ==== KEYBOARD DI DALAM SEL TABEL ====
+    // Mengembalikan true bila tombol SUDAH ditangani di sini (handleKey harus
+    // berhenti), false bila tombol harus jatuh ke jalur teks biasa.
+    // Kontrak paritas Docs: Tab = sel berikutnya, Shift+Tab = sebelumnya,
+    // Enter = baris berikutnya, dan mengetik langsung masuk ke sel.
+    _handleTableKey(e, line) {
+      const cell = this._cell();
+      if (!cell) return false;
+      const t = line.table;
+      const nC = (t.rows[0] || []).length;
+      const text = cell.text || '';
+      let caret = Math.max(0, Math.min(text.length, this.cellCaret || 0));
+      const commit = () => {
+        this.reflowPages();
+        this.renderAllPages();
+        this.emitActiveLine();
+        this.notifyChange();
+      };
+
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        this.moveCell(0, e.shiftKey ? -1 : 1);
+        return true;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        // Enter di sel = pindah ke baris sel berikutnya (paritas Docs).
+        this.moveCell(1, 0);
+        return true;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        this.activeCell = null;
+        this.renderAllPages();
+        this.emitActiveLine();
+        return true;
+      }
+      if (e.key === 'Backspace') {
+        e.preventDefault();
+        if (caret > 0) {
+          cell.text = text.slice(0, caret - 1) + text.slice(caret);
+          this.cellCaret = caret - 1;
+          commit();
+        }
+        return true;
+      }
+      if (e.key === 'Delete') {
+        e.preventDefault();
+        if (caret < text.length) {
+          cell.text = text.slice(0, caret) + text.slice(caret + 1);
+          commit();
+        }
+        return true;
+      }
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        if (caret > 0) this.cellCaret = caret - 1;
+        else if (this.activeCell.c > 0) { this.moveCell(0, -1); this.cellCaret = 1e9; }
+        this.renderAllPages();
+        return true;
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        if (caret < text.length) this.cellCaret = caret + 1;
+        else if (this.activeCell.c < nC - 1) { this.moveCell(0, 1); this.cellCaret = 0; }
+        this.renderAllPages();
+        return true;
+      }
+      if (e.key === 'ArrowUp') { e.preventDefault(); this.moveCell(-1, 0); this.cellCaret = Math.min(this.cellCaret || 0, 1e9); return true; }
+      if (e.key === 'ArrowDown') { e.preventDefault(); this.moveCell(1, 0); this.cellCaret = Math.min(this.cellCaret || 0, 1e9); return true; }
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        cell.text = text.slice(0, caret) + e.key + text.slice(caret);
+        this.cellCaret = caret + 1;
+        commit();
+        return true;
+      }
+      return false;
+    }
+
+    // ==== RENDER GAMBAR ====
+    // Menggambar gambar asli bila sudah termuat; bila belum/gagal, menggambar
+    // PLACEHOLDER bergaris tepi. Placeholder wajib ada supaya tata letak tidak
+    // melompat dan user tetap melihat ada objek di posisi itu.
+    _renderImage(ctx, pIdx, lIdx, line, yTop) {
+      const sz = this.imageSize(line);
+      const im = line.image || {};
+      const mL = this.marginLeft(), mR = this.marginRight();
+      let x = mL;
+      if (im.align === 'center') x = Math.max(mL, (this.pageWidth() - sz.width) / 2);
+      else if (im.align === 'right') x = Math.max(mL, this.pageWidth() - mR - sz.width);
+
+      ctx.save();
+      const img = this._ensureImage(im.src);
+      // `complete` bisa undefined pada stub; anggap termuat hanya bila
+      // naturalWidth > 0 supaya stub Node tidak memicu drawImage yang melempar.
+      const loaded = !!(img && img.naturalWidth > 0);
+      if (loaded) {
+        try {
+          ctx.drawImage(img, x, yTop, sz.width, sz.height);
+        } catch (_) {
+          ctx.fillStyle = '#f1f3f4';
+          ctx.fillRect(x, yTop, sz.width, sz.height);
+        }
+      } else {
+        ctx.fillStyle = '#f1f3f4';
+        ctx.fillRect(x, yTop, sz.width, sz.height);
+        ctx.strokeStyle = '#dadce0';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x, yTop, sz.width, sz.height);
+        ctx.fillStyle = '#5f6368';
+        ctx.font = '12px Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Gambar', x + sz.width / 2, yTop + sz.height / 2 + 4);
+        ctx.textAlign = 'left';
+      }
+      // Penanda objek terpilih (baris gambar aktif).
+      if (this.activePageIdx === pIdx && this.activeLineIdx === lIdx) {
+        ctx.strokeStyle = '#1a73e8';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x - 1, yTop - 1, sz.width + 2, sz.height + 2);
+      }
+      ctx.restore();
+
+      this._imageBoxes.push({
+        pIdx, lIdx, src: im.src,
+        x, y: yTop, w: sz.width, h: sz.height
+      });
+    }
+
+    // ==== RENDER TABEL ====
+    // Menggambar grid + isi sel, dan MEREKAM kotak tiap sel untuk hit-test klik.
+    // Sel yang sedang disunting diberi penanda biru (paritas Docs).
+    _renderTable(ctx, pIdx, lIdx, line, yTop) {
+      const t = line.table;
+      if (!t || !Array.isArray(t.rows) || !t.rows.length) return;
+      const widths = this.tableColWidths(line);
+      const rh = this.tableRowHeight(line);
+      const nR = t.rows.length;
+      const nC = (t.rows[0] || []).length;
+
+      ctx.save();
+      // Latar putih: tabel harus menutupi apa pun di belakangnya.
+      const totalW = widths.reduce((a, b) => a + b, 0);
+      const tmL = this.marginLeft();
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(tmL, yTop, totalW, nR * rh);
+
+      for (let r = 0; r < nR; r++) {
+        for (let c = 0; c < nC; c++) {
+          const cell = t.rows[r][c] || { text: '' };
+          let x = tmL;
+          for (let i = 0; i < c; i++) x += widths[i];
+          const cy = yTop + r * rh;
+
+          // Sorotan sel aktif (hanya bila baris ini yang sedang disunting).
+          const isActive = this.activeCell && this.activePageIdx === pIdx &&
+                           this.activeLineIdx === lIdx &&
+                           this.activeCell.r === r && this.activeCell.c === c;
+          if (isActive) {
+            ctx.fillStyle = 'rgba(66,133,244,0.10)';
+            ctx.fillRect(x, cy, widths[c], rh);
+          }
+
+          // Isi sel: dipotong agar tidak meluber keluar kolom.
+          ctx.fillStyle = cell.color || '#202124';
+          let cStyle = '';
+          if (cell.italic) cStyle += 'italic ';
+          if (cell.bold) cStyle += 'bold ';
+          const cSize = cell.size || 13;
+          ctx.font = `${cStyle}${cSize}px ${cell.fontFamily || 'Arial'}, sans-serif`;
+          ctx.textAlign = 'left';
+          const pad = 6;
+          let label = cell.text || '';
+          // Potong per karakter sampai muat (tanpa ellipsis agar uji deterministik).
+          while (label && ctx.measureText(label).width > widths[c] - pad * 2) {
+            label = label.slice(0, -1);
+          }
+          if (label) ctx.fillText(label, x + pad, cy + rh / 2 + cSize * 0.35);
+
+          // Rekam kotak sel untuk hit-test.
+          this._tableBoxes.push({ pIdx, lIdx, r, c, x, y: cy, w: widths[c], h: rh });
+        }
+      }
+
+      // Garis grid: digambar SETELAH isi supaya tidak tertimpa latar sel.
+      ctx.strokeStyle = '#dadce0';
+      ctx.lineWidth = 1;
+      let gx = tmL;
+      for (let c = 0; c <= nC; c++) {
+        ctx.beginPath();
+        ctx.moveTo(gx, yTop);
+        ctx.lineTo(gx, yTop + nR * rh);
+        ctx.stroke();
+        if (c < nC) gx += widths[c];
+      }
+      for (let r = 0; r <= nR; r++) {
+        const gy = yTop + r * rh;
+        ctx.beginPath();
+        ctx.moveTo(tmL, gy);
+        ctx.lineTo(tmL + totalW, gy);
+        ctx.stroke();
+      }
+      ctx.restore();
     }
 
     renderPage(pIdx) {
@@ -1824,11 +2988,21 @@
       // tiap 530 ms tanpa lewat renderAllPages(), jadi tanpa filter ini
       // _commentBoxes menumpuk duplikat dan hit-test jadi makin lambat.
       this._commentBoxes = this._commentBoxes.filter(b => b.pIdx !== pIdx);
+      // Alasan sama untuk kotak sel tabel & gambar: caret blink memanggil
+      // renderPage() tiap 530 ms tanpa lewat renderAllPages(), jadi tanpa
+      // filter ini kotak menumpuk dan hit-test makin lambat tiap kedipan.
+      this._tableBoxes = this._tableBoxes.filter(b => b.pIdx !== pIdx);
+      this._imageBoxes = this._imageBoxes.filter(b => b.pIdx !== pIdx);
 
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      let y = 60;
+      // Rentang seleksi dihitung SEKALI per halaman (bukan per segmen) supaya
+      // render tetap murah. null = tidak ada seleksi -> seluruh blok di bawah
+      // dilewati, sehingga dokumen tanpa seleksi berperilaku persis seperti dulu.
+      const selRange = this.getSelectionRange();
+
+      let y = this.textTop();
 
       for (let lIdx = 0; lIdx < page.lines.length; lIdx++) {
         const m = this.measureLine(page, lIdx, canvas);
@@ -1836,6 +3010,25 @@
         const fontSize = line.size || 13;
         const fontFamily = line.fontFamily || 'Arial';
         const segs = m.segs;
+
+        // ==== RENDER GAMBAR (jalur terpisah dari teks) ====
+        // `y` dimajukan manual lalu `continue`, sehingga blok teks di bawah
+        // tidak pernah menimpa gambar.
+        if (line.type === 'image') {
+          this._renderImage(ctx, pIdx, lIdx, line, y);
+          y += m.base + m.paragraphGap;
+          continue;
+        }
+
+        // ==== RENDER TABEL (jalur terpisah dari teks) ====
+        // Tabel bukan teks yang di-wrap: ia blok bergaris dengan sel sendiri.
+        // `y` dimajukan manual lalu `continue`, sehingga blok teks di bawah
+        // tidak pernah menimpa tabel.
+        if (line.type === 'table') {
+          this._renderTable(ctx, pIdx, lIdx, line, y);
+          y += m.base + m.paragraphGap;
+          continue;
+        }
 
         ctx.save();
         let fontStyle = '';
@@ -1848,6 +3041,22 @@
         const lineHeight = m.base;
         const baseX = MARGIN + m.indent;
 
+        // Batas seleksi untuk BARIS INI pada basis line.text (tanpa penanda
+        // butir). Baris di luar rentang mendapat from === to sehingga tidak
+        // ada piksel yang digambar.
+        let selFrom = 0, selTo = 0;
+        if (selRange) {
+          const sp = selRange.start, ep = selRange.end;
+          const linePos = { pageIdx: pIdx, lineIdx: lIdx, charIdx: 0 };
+          const afterStart = this._comparePoints(linePos, sp) >= 0;
+          const beforeEnd = this._comparePoints(linePos, ep) <= 0;
+          if (afterStart && beforeEnd) {
+            const textLen = (line.text || '').length;
+            selFrom = (pIdx === sp.pageIdx && lIdx === sp.lineIdx) ? sp.charIdx : 0;
+            selTo = (pIdx === ep.pageIdx && lIdx === ep.lineIdx) ? ep.charIdx : textLen;
+          }
+        }
+
         for (let sIdx = 0; sIdx < segs.length; sIdx++) {
           const seg = segs[sIdx];
           const tw = ctx.measureText(seg.text).width;
@@ -1856,6 +3065,30 @@
           let segX = baseX;
           if (line.align === 'center') segX = Math.max(MARGIN, (canvas.width - tw) / 2);
           else if (line.align === 'right') segX = Math.max(MARGIN, canvas.width - MARGIN - tw);
+
+          // ==== HIGHLIGHT SELEKSI RENTANG ====
+          // Digambar SEBELUM fillText: kalau sesudah, teks ikut tertimpa biru
+          // dan jadi tidak terbaca. Offset seleksi berada pada line.text TANPA
+          // penanda butir, jadi digeser m.prefix.length lalu diiris per segmen
+          // agar baris yang di-wrap tersorot bersambung.
+          if (selRange && selTo > selFrom) {
+            const sS = seg.start;
+            const sE = seg.start + seg.text.length;
+            const a3 = Math.max(selFrom + m.prefix.length, sS);
+            const b3 = Math.min(selTo + m.prefix.length, sE);
+            if (b3 > a3) {
+              const pre3 = seg.text.slice(0, a3 - sS);
+              const mid3 = seg.text.slice(a3 - sS, b3 - sS);
+              const xOff3 = ctx.measureText(pre3).width;
+              const sw = ctx.measureText(mid3).width;
+              ctx.save();
+              ctx.fillStyle = this.selectionColor || 'rgba(66,133,244,0.28)';
+              // Lebar minimum 2px: baris kosong di tengah seleksi lintas baris
+              // tetap menampilkan penanda, tidak terlihat "bolong".
+              ctx.fillRect(segX + xOff3, y - fontSize + 2, Math.max(sw, 2), fontSize + 4);
+              ctx.restore();
+            }
+          }
 
           // ==== HIGHLIGHT FIND & REPLACE ====
           // Offset match dihitung pada line.text TANPA penanda butir, sedangkan
@@ -2009,7 +3242,9 @@
           // Caret diletakkan pada segmen hasil wrap yang memuat posisi kursor.
           // cursorCharIdx dihitung pada TEKS baris (tanpa penanda butir), jadi
           // posisinya harus digeser sebesar panjang penanda di dalam segmen.
-          if (this.activePageIdx === pIdx && this.activeLineIdx === lIdx && this.isCaretVisible) {
+          // Caret disembunyikan saat ada seleksi aktif (paritas Docs): dua
+          // penanda sekaligus membuat batas seleksi ambigu.
+          if (this.activePageIdx === pIdx && this.activeLineIdx === lIdx && this.isCaretVisible && !selRange) {
             const cIdx = this.cursorCharIdx + m.prefix.length;
             const segEnd = seg.start + seg.text.length;
             const isLast = sIdx === segs.length - 1;
@@ -2038,7 +3273,7 @@
         ctx.font = '11px Arial, sans-serif';
         ctx.fillStyle = '#70757a';
         ctx.textAlign = 'center';
-        ctx.fillText(String(pIdx + 1), PAGE_CANVAS_WIDTH / 2, PAGE_CANVAS_HEIGHT - 22);
+        ctx.fillText(String(pIdx + 1), this.pageWidth() / 2, this.pageHeight() - 22);
         ctx.restore();
       } else {
         // Watermark identitas engine Kix di bagian bawah halaman
@@ -2048,7 +3283,7 @@
         // data yang baru dimuat lewat setDocumentData() belum melewati
         // reflowPages(), sehingga pageNumber masih undefined dan watermark
         // akan tercetak "Tile #0undefined".
-        ctx.fillText(`[Kix Engine Tile #0${pIdx + 1} · Canvas 2D Text Buffer · 0 DOM Text Glyphs]`, MARGIN, 810);
+        ctx.fillText(`[Kix Engine Tile #0${pIdx + 1} · Canvas 2D Text Buffer · 0 DOM Text Glyphs]`, this.marginLeft(), this.pageHeight() - 40);
       }
     }
   }

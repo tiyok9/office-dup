@@ -2134,6 +2134,131 @@ async function runTestSuite() {
     console.log('  Suite 9h (fitur & paritas baru Kix): selesai');
   }
 
+  {
+    console.log('\n--- Suite 9i: Wiring UI Docs (Tabel/Gambar/Page Setup/Cetak) + Seleksi Rentang ---');
+    const kx9i = fs.readFileSync('static/kix_editor.js', 'utf8');
+    const sh9i = fs.readFileSync('static/app_shell.js', 'utf8');
+
+    // 9i-01..04: tiap dialog ADA dan TERDEFINISI TEPAT SATU KALI.
+    // Duplikasi nama metode adalah bug nyata yang pernah terjadi (openWordCountModal
+    // terdefinisi 2x dan membuat E2E "catatan pembicara" gagal), jadi jumlah
+    // definisi dijadikan asersi, bukan sekadar keberadaan.
+    const countDef = (s, name) =>
+      (s.match(new RegExp('^    (?:async\\s+)?' + name + '\\s*\\(', 'gm')) || []).length;
+    for (const m of ['openInsertTableModal', 'openInsertImageModal', 'openPageSetupModal', 'printOrExportPdf']) {
+      const c = countDef(sh9i, m);
+      assert(c === 1, `Docs 9i: app_shell.${m} terdefinisi tepat 1x :: ${c}`);
+    }
+
+    // 9i-05: tidak ada SATU PUN nama metode duplikat di seluruh app_shell.
+    const shNames = (sh9i.match(/^    (?:async\s+)?([A-Za-z_$][\w$]*)\s*\(/gm) || [])
+      .map(s => s.trim().replace(/^async\s+/, '').replace(/\s*\($/, ''));
+    const dupNames = [...new Set(shNames.filter((n, i) => shNames.indexOf(n) !== i))];
+    assert(dupNames.length === 0,
+      `Docs 9i: app_shell bebas metode duplikat :: ${JSON.stringify(dupNames)}`);
+
+    // 9i-06..08: entri menu Sisipkan benar-benar terpasang dan memanggil dialog.
+    assert(/label: 'Tabel \(Docs\)', action: \(\) => this\.openInsertTableModal\(\)/.test(sh9i),
+      'Docs 9i: menu Sisipkan -> Tabel (Docs) memanggil openInsertTableModal');
+    assert(/label: 'Gambar \(Docs\)', action: \(\) => this\.openInsertImageModal\(\)/.test(sh9i),
+      'Docs 9i: menu Sisipkan -> Gambar (Docs) memanggil openInsertImageModal');
+    assert(/label: 'Penyiapan Halaman \(Docs\)', action: \(\) => this\.openPageSetupModal\(\)/.test(sh9i),
+      'Docs 9i: menu Sisipkan -> Penyiapan Halaman (Docs) memanggil openPageSetupModal');
+
+    // 9i-09..10: Cetak diarahkan ke jalur rasterisasi, BUKAN window.print() mentah.
+    // Canvas tidak ikut alur cetak browser, jadi window.print() polos = halaman kosong.
+    assert(/label: 'Cetak \/ Print'[^\n]*this\.printOrExportPdf\(\)/.test(sh9i),
+      'Docs 9i: menu File -> Cetak / Print memanggil printOrExportPdf');
+    assert(!/label: 'Cetak \/ Print'[^\n]*window\.print\(\)/.test(sh9i),
+      'Docs 9i: Cetak / Print TIDAK lagi memakai window.print() mentah');
+    assert(/toDataURL\('image\/png'\)/.test(sh9i),
+      'Docs 9i: printOrExportPdf merasterisasi tiap canvas via toDataURL');
+
+    // 9i-11..13: shell benar-benar menyentuh API engine (bukan cuma punya dialog).
+    for (const api of ['insertTable', 'insertImage', 'setPageSetup']) {
+      assert(sh9i.includes('this.kix.' + api + '('),
+        `Docs 9i: shell memanggil this.kix.${api}(...) pada engine`);
+    }
+
+    // 9i-14: dialog memakai promptModal yang SUDAH ada (anti sistem modal kedua).
+    assert(/openPageSetupModal\(\)\s*\{[\s\S]{0,700}?this\.promptModal\(/.test(sh9i),
+      'Docs 9i: openPageSetupModal memakai promptModal bersama, bukan modal baru');
+    // 9i-15: gambar divalidasi skemanya sebelum masuk engine.
+    assert(sh9i.includes('URL tidak diizinkan') && sh9i.includes('data:image'),
+      'Docs 9i: openInsertImageModal menolak skema URL di luar http/https/data:image');
+
+    // 9i-16..18: SELEKSI RENTANG — perilaku nyata lewat API publik.
+    const Kix9i = loadEditor('static/kix_editor.js', 'KixDocsEditor');
+    const k9i = new Kix9i('docsScrollBox', 'kixHiddenInput');
+    k9i.setDocumentData({ pages: [{ lines: [{ text: 'Halo Dunia Indah' }, { text: 'Baris Kedua' }] }] });
+    const r9i = k9i.setSelectionRange(
+      { pageIdx: 0, lineIdx: 0, charIdx: 5 },
+      { pageIdx: 0, lineIdx: 1, charIdx: 5 }
+    );
+    assert(r9i && r9i.start.lineIdx === 0 && r9i.start.charIdx === 5 &&
+           r9i.end.lineIdx === 1 && r9i.end.charIdx === 5,
+      `Docs 9i: setSelectionRange membentuk rentang lintas baris :: ${JSON.stringify(r9i && { s: r9i.start, e: r9i.end })}`);
+    assert(k9i.hasSelection() === true,
+      'Docs 9i: hasSelection() true setelah setSelectionRange');
+    const selText9i = k9i.getSelectedText();
+    assert(selText9i.includes('Dunia Indah') && selText9i.includes('Baris'),
+      `Docs 9i: getSelectedText memuat teks terpilih :: ${JSON.stringify(selText9i)}`);
+
+    // 9i-19: seleksi MUNDUR dinormalkan — start selalu <= end.
+    const rBack9i = k9i.setSelectionRange(
+      { pageIdx: 0, lineIdx: 1, charIdx: 5 },
+      { pageIdx: 0, lineIdx: 0, charIdx: 0 }
+    );
+    assert(rBack9i && rBack9i.backward === true && rBack9i.start.lineIdx === 0 && rBack9i.start.charIdx === 0,
+      'Docs 9i: seleksi arah mundur dinormalkan (start <= end, backward=true)');
+
+    // 9i-20: deleteSelection benar-benar memotong teks terpilih.
+    k9i.setSelectionRange({ pageIdx: 0, lineIdx: 0, charIdx: 0 }, { pageIdx: 0, lineIdx: 0, charIdx: 5 });
+    k9i.deleteSelection();
+    assert(k9i.pages[0].lines[0].text.indexOf('Halo') === -1 && k9i.pages[0].lines[0].text.startsWith('Dunia'),
+      `Docs 9i: deleteSelection menghapus rentang terpilih :: "${k9i.pages[0].lines[0].text}"`);
+
+    // 9i-21..22: TABEL — perilaku nyata.
+    const k9t = new Kix9i('docsScrollBox', 'kixHiddenInput');
+    k9t.setDocumentData({ pages: [{ lines: [{ text: 'awal' }] }] });
+    k9t.activePageIdx = 0; k9t.activeLineIdx = 0;
+    const okT9i = k9t.insertTable(3, 4);
+    const tl9i = k9t.pages[0].lines.find(l => l.type === 'table');
+    assert(okT9i === true && tl9i && tl9i.table.rows.length === 3 && tl9i.table.rows[0].length === 4,
+      `Docs 9i: insertTable(3,4) menghasilkan baris tabel 3x4 :: ${tl9i ? tl9i.table.rows.length + 'x' + tl9i.table.rows[0].length : 'null'}`);
+    assert(tl9i && tl9i.table.rows.every(r => r.every(c => c.text === '')),
+      'Docs 9i: sel tabel baru kosong (bukan undefined)');
+
+    // 9i-23..26: PAGE SETUP — default identik seed, lalu berubah terkendali.
+    const k9p = new Kix9i('docsScrollBox', 'kixHiddenInput');
+    k9p.setDocumentData({ pages: [{ lines: [{ text: 'x' }] }] });
+    assert(k9p.pageWidth() === 636 && k9p.pageHeight() === 850 && k9p.marginLeft() === 30,
+      `Docs 9i: default page setup identik seed (636x850, margin 30) :: ${k9p.pageWidth()}x${k9p.pageHeight()} m=${k9p.marginLeft()}`);
+    k9p.setPageSetup({ paperSize: 'a4', orientation: 'portrait' });
+    assert(k9p.pageWidth() === 794 && k9p.pageHeight() === 1123,
+      `Docs 9i: setPageSetup(a4) -> 794x1123 :: ${k9p.pageWidth()}x${k9p.pageHeight()}`);
+    k9p.setPageSetup({ paperSize: 'a4', orientation: 'landscape' });
+    assert(k9p.pageWidth() === 1123 && k9p.pageHeight() === 794,
+      `Docs 9i: orientasi landscape menukar lebar/tinggi :: ${k9p.pageWidth()}x${k9p.pageHeight()}`);
+    k9p.setPageSetup({ paperSize: 'ngawur' });
+    assert(k9p.pageWidth() === 1123,
+      'Docs 9i: paperSize tak dikenal diabaikan (dokumen tidak rusak)');
+
+    // 9i-27..28: GAMBAR — perilaku nyata.
+    const k9g = new Kix9i('docsScrollBox', 'kixHiddenInput');
+    k9g.setDocumentData({ pages: [{ lines: [{ text: 'a' }] }] });
+    k9g.activePageIdx = 0; k9g.activeLineIdx = 0;
+    const okG9i = k9g.insertImage('https://example.com/x.png');
+    const il9i = k9g.pages[0].lines.find(l => l.type === 'image');
+    assert(okG9i === true && il9i && il9i.image.src === 'https://example.com/x.png' && il9i.image.width === 240,
+      `Docs 9i: insertImage menambah baris gambar (lebar default 240) :: ${il9i ? il9i.image.width : 'null'}`);
+    assert(k9g.insertImage('') === false,
+      'Docs 9i: insertImage menolak src kosong (guard, bukan crash)');
+
+    console.log('  Suite 9i (wiring UI Docs + seleksi rentang): selesai');
+  }
+
+
     // Laporan keutuhan ISI seed (informatif, bukan kegagalan): pengujian E2E
   // mengetik & menyimpan dokumen contoh secara nyata, jadi isinya bisa berubah.
   // Struktur tetap diuji di Suite 8/12; nilai persisnya dilaporkan di sini.

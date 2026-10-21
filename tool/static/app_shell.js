@@ -866,6 +866,23 @@
     applyFormatForActive(prop, value) {
       const app = this.currentApp;
       if (app === 'docs' && this.kix) {
+        // ==== JALUR SELEKSI RENTANG (paritas Google Docs) ====
+        // Bila user menyorot teks, format diterapkan HANYA pada rentang itu
+        // (run-level). Tanpa cabang ini, klik Bold selalu memformat SATU BARIS
+        // PENUH — perilaku yang salah dan membuat run-level tak pernah terpakai.
+        if (typeof this.kix.hasSelection === 'function' && this.kix.hasSelection()) {
+          // Nilai efektif untuk properti boolean: kebalikan dari run pertama
+          // pada rentang, supaya klik pada teks campuran tetap terasa "toggle".
+          let eff = value;
+          if (eff === undefined) {
+            const cur = this.kix.getActiveFormatting()[prop];
+            eff = !cur;
+          }
+          if (this.kix.applyFormatToSelection(prop, eff)) {
+            this.syncToolbar();
+            return;
+          }
+        }
         if (value === undefined) this.kix.toggleFormatting(prop);
         else this.kix.applyFormatting(prop, value);
       } else if (app === 'sheets' && this.ritz) {
@@ -1222,7 +1239,7 @@
           { label: 'Unduh Slide (.svg)', action: () => this.downloadCurrentDoc('svg') },
           { label: 'Unduh Data (.json)', action: () => this.downloadCurrentDoc('json') },
           { sep: true },
-          { label: 'Cetak / Print', shortcut: 'Ctrl+P', action: () => window.print() }
+          { label: 'Cetak / Print', shortcut: 'Ctrl+P', action: () => this.printOrExportPdf() }
         ];
       }
       if (menu === 'edit') {
@@ -1262,6 +1279,11 @@
           { label: 'Pemisah Halaman (Docs)', shortcut: 'Ctrl+Enter', action: () => { if (this.kix) this.kix.insertPageBreak(); } },
           { label: 'Tautan (Docs)', shortcut: 'Ctrl+K', action: () => this.openLinkModal() },
           { label: 'Nomor Halaman (Docs)', action: () => this.toolbarAction('pageNumbers') },
+          { sep: true },
+          { label: 'Tabel (Docs)', action: () => this.openInsertTableModal() },
+          { label: 'Gambar (Docs)', action: () => this.openInsertImageModal() },
+          { sep: true },
+          { label: 'Penyiapan Halaman (Docs)', action: () => this.openPageSetupModal() },
           { label: 'Komentar', shortcut: 'Ctrl+Alt+M', action: () => { if (this.currentApp === 'sheets') this.openSheetCommentModal(); else this.openCommentModal(); } },
           { sep: true },
           { label: 'Tambah Slide Baru (Slides)', action: () => { if (this.punch) this.punch.addNewSlide(); } },
@@ -1541,6 +1563,94 @@
         modal.querySelector('.modal-close').addEventListener('click', () => this._resolveModal());
         modal.onclick = (e) => { if (e.target === modal) this._resolveModal(); };
       });
+    }
+
+
+    // ==== SISIPKAN: TABEL / GAMBAR / PENYIAPAN HALAMAN / CETAK (paritas Google Docs) ====
+    // Semua dialog di bawah memakai promptModal()/alertModal() yang SUDAH ada, supaya
+    // tidak lahir sistem modal kedua — itu penyebab bug duplikat openWordCountModal dulu.
+    async openInsertTableModal() {
+      if (!this.kix || this.currentApp !== 'docs') return;
+      const val = await this.promptModal({
+        title: 'Sisipkan Tabel',
+        message: 'Ukuran tabel dalam format baris x kolom, contoh: 3x4',
+        defaultValue: '3x4',
+        confirmText: 'Sisipkan'
+      });
+      if (val === null || val === undefined) return;
+      const m = String(val).trim().match(/^(\d{1,2})\s*[x\u00d7]\s*(\d{1,2})$/i);
+      if (!m) {
+        return this.alertModal({ title: 'Format tidak valid', message: 'Gunakan format baris x kolom, contoh: 3x4' });
+      }
+      const rows = Math.max(1, Math.min(50, parseInt(m[1], 10)));
+      const cols = Math.max(1, Math.min(12, parseInt(m[2], 10)));
+      this.kix.insertTable(rows, cols);
+      this.showToast('Tabel ' + rows + 'x' + cols + ' disisipkan.');
+    }
+
+    async openInsertImageModal() {
+      if (!this.kix || this.currentApp !== 'docs') return;
+      const url = await this.promptModal({
+        title: 'Sisipkan Gambar',
+        message: 'Masukkan URL gambar (http/https atau data:image/...)',
+        defaultValue: '',
+        placeholder: 'https://...',
+        confirmText: 'Sisipkan'
+      });
+      if (url === null || url === undefined) return;
+      const clean = String(url).trim();
+      if (!clean) return;
+      // Validasi skema sejalan dengan sanitizeUrl() di engine: hanya http/https dan
+      // data:image yang lolos, sehingga javascript:/vbscript:/file: tidak pernah masuk.
+      if (!/^(https?:\/\/|data:image\/)/i.test(clean)) {
+        return this.alertModal({ title: 'URL tidak diizinkan', message: 'Gunakan URL http/https atau data:image/...' });
+      }
+      this.kix.insertImage(clean);
+      this.showToast('Gambar disisipkan.');
+    }
+
+    async openPageSetupModal() {
+      if (!this.kix || this.currentApp !== 'docs') return;
+      const cur = this.kix.getPageSetup();
+      const val = await this.promptModal({
+        title: 'Penyiapan Halaman',
+        message: 'Ukuran kertas: kix | a4 | letter | legal. Tambahkan -l untuk lanskap, contoh: a4-l',
+        defaultValue: cur.paperSize + (cur.orientation === 'landscape' ? '-l' : ''),
+        confirmText: 'Terapkan'
+      });
+      if (val === null || val === undefined) return;
+      const raw = String(val).trim().toLowerCase();
+      if (!raw) return;
+      const landscape = /-l(andscape)?$/.test(raw);
+      const paper = raw.replace(/-l(andscape)?$/, '');
+      if (['kix', 'a4', 'letter', 'legal'].indexOf(paper) === -1) {
+        return this.alertModal({ title: 'Ukuran tidak dikenal', message: 'Pilih salah satu: kix, a4, letter, legal (boleh diakhiri -l untuk lanskap).' });
+      }
+      this.kix.setPageSetup({ paperSize: paper, orientation: landscape ? 'landscape' : 'portrait' });
+      this.showToast('Penyiapan halaman: ' + paper + (landscape ? ' lanskap' : ' potret'));
+    }
+
+    printOrExportPdf() {
+      if (this.currentApp !== 'docs' || !this.kix) { window.print(); return; }
+      // Canvas tidak ikut alur cetak browser secara otomatis. Setiap halaman Kix
+      // dirasterisasi ke <img> lalu ditulis ke jendela cetak — jalur yang sama
+      // dipakai untuk "ekspor PDF" lewat dialog cetak (Save as PDF).
+      const canvases = document.querySelectorAll('.kix-page-paginated canvas, .kix-page canvas');
+      if (!canvases.length) { window.print(); return; }
+      const win = window.open('', '_blank');
+      if (!win) { this.showToast('Popup diblokir - izinkan popup untuk mencetak.'); return; }
+      let html = '<!DOCTYPE html><html><head><title>Cetak Dokumen</title>';
+      html += '<style>@page{margin:0}body{margin:0;background:#fff}img{display:block;width:100%;page-break-after:always}</style>';
+      html += '</head><body>';
+      for (let i = 0; i < canvases.length; i++) {
+        html += '<img src="' + canvases[i].toDataURL('image/png') + '" />';
+      }
+      html += '</body></html>';
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+      win.focus();
+      setTimeout(() => win.print(), 300);
     }
 
     openWordCountModal() {

@@ -15,7 +15,14 @@
   // oleh penghitungan kotak centang, DAN oleh pengujian otomatis — sebelumnya
   // angka 60/24 ditulis terpisah di dua tempat sehingga mudah meleset.
   const LINE_TOP_OFFSET = 60;
+  // LEGACY: tidak lagi dipakai hit-test. Geometri baris kini diturunkan dari
+  // measureLine().height (lihat _lineTops). Nilai dipertahankan karena masih
+  // menjadi kontrak API/konstanta yang diuji (Suite 9g-02e).
   const LINE_HEIGHT = 24;
+  // Padding .kix-page di dashboard.html (padding: 72px 90px). Dipakai untuk
+  // menghitung ukuran tile supaya kertas A4/Letter tidak meluber keluar kotak.
+  const PAGE_PAD_X = 90;
+  const PAGE_PAD_Y = 72;
 
   // Properti gaya yang diwariskan ke baris baru saat user menekan Enter.
   // Tanpa daftar ini, underline/strike/list hilang begitu user menekan Enter.
@@ -249,13 +256,14 @@
           // Kompensasi zoom: rect mengembalikan ukuran SETELAH transform,
           // sedangkan koordinat gambar kanvas tetap 1:1 (PAGE_CANVAS_WIDTH).
           // Tanpa rasio ini, klik saat ter-zoom memilih baris yang salah.
-          const zx = rect.width ? canvas.width / rect.width : 1;
-          const zy = rect.height ? canvas.height / rect.height : 1;
-          const clickY = (e.clientY - rect.top) * zy - LINE_TOP_OFFSET;
+          const zx = rect.width ? this.viewW() / rect.width : 1;
+          const zy = rect.height ? this.viewH() / rect.height : 1;
           const clickXl = (e.clientX - rect.left) * zx;
           const clickYl = (e.clientY - rect.top) * zy;
 
-          const lIdxRaw = Math.floor(clickY / LINE_HEIGHT);
+          // Baris ditentukan dari geometri GAMBAR (measureLine), bukan dari
+          // konstanta 24 — lihat catatan _lineTops().
+          const lIdxRaw = this.lineIndexAtY(pIdxRaw, clickYl);
           const clamped = this.clampPoint(pIdxRaw, lIdxRaw, clickXl);
           this.activePageIdx = clamped.pIdx;
           this.activeLineIdx = clamped.lIdx;
@@ -943,15 +951,11 @@
     // Y puncak sebuah baris di kanvas — dihitung dengan rumus yang SAMA dengan
     // renderPage (akumulasi measureLine), jadi tabel tidak pernah "melayang".
     lineTopY(pIdx, lIdx) {
-      const page = this.pages[pIdx];
-      if (!page) return LINE_TOP_OFFSET;
-      const canvas = document.getElementById(`kixCanvas${pIdx + 1}`);
-      let y = this.textTop();
-      for (let i = 0; i < lIdx; i++) {
-        const m = this.measureLine(page, i, canvas);
-        y += m.height;
-      }
-      return y;
+      // Delegasi ke _lineTops supaya hanya ada SATU rumus tinggi baris di
+      // seluruh engine (tabel, ceklis, hit-test, dan pengujian).
+      const tops = this._lineTops(pIdx);
+      const n = Math.max(0, tops.length - 1);
+      return tops[Math.max(0, Math.min(n, lIdx))];
     }
 
     tableCellRect(pIdx, lIdx, r, c) {
@@ -1249,11 +1253,11 @@
       if (!canvas) return null;
       const pIdxRaw = parseInt(canvas.getAttribute('data-page') || '0', 10);
       const rect = canvas.getBoundingClientRect();
-      const zx = rect.width ? canvas.width / rect.width : 1;
-      const zy = rect.height ? canvas.height / rect.height : 1;
+      const zx = rect.width ? this.viewW() / rect.width : 1;
+      const zy = rect.height ? this.viewH() / rect.height : 1;
       const lx = (clientX - rect.left) * zx;
       const ly = (clientY - rect.top) * zy;
-      const lIdxRaw = Math.floor((ly - LINE_TOP_OFFSET) / LINE_HEIGHT);
+      const lIdxRaw = this.lineIndexAtY(pIdxRaw, ly);
       const clamped = this.clampPoint(pIdxRaw, lIdxRaw, lx);
       const charIdx = this.charIndexAtPoint(clamped.pIdx, clamped.lIdx, lx);
       return this._pointOf(clamped.pIdx, clamped.lIdx, charIdx);
@@ -2620,6 +2624,12 @@
       for (let i = 0; i < this.pages.length; i++) {
         const pageDiv = document.createElement('div');
         pageDiv.className = 'kix-page kix-page-paginated';
+        // Kotak tile ikut ukuran kertas aktif; tanpa ini kanvas A4 (794px)
+        // meluber keluar content box 636px milik .kix-page.
+        if (pageDiv.style) {
+          pageDiv.style.width = (this.pageWidth() + PAGE_PAD_X * 2) + 'px';
+          pageDiv.style.minHeight = (this.pageHeight() + PAGE_PAD_Y * 2) + 'px';
+        }
         pageDiv.id = `kixPage${i + 1}`;
         pageDiv.setAttribute('data-page-index', i.toString());
         pageDiv.innerHTML = `
@@ -2668,7 +2678,10 @@
       ctx.font = baseFont;
       // Lebar area teks memakai MARGIN AKTIF (bukan angka 60 hardcoded), supaya
       // penyiapan halaman benar-benar mengubah titik wrap.
-      const maxWidth = canvas.width - this.marginLeft() - this.marginRight() - (extraLeft || 0);
+      // viewW() (px logis), BUKAN canvas.width (yang sudah dikali dpr). Kalau
+      // memakai canvas.width, di layar HiDPI area teks akan dianggap 2x lebih
+      // lebar dan wrap tidak pernah terpicu.
+      const maxWidth = this.viewW() - this.marginLeft() - this.marginRight() - (extraLeft || 0);
       if (!text) return [{ text: '', start: 0 }];
 
       // ==== JALUR RUN-AWARE (hanya aktif bila baris punya runs) ====
@@ -2768,9 +2781,57 @@
     // ==== METRIK BARIS (satu sumber kebenaran) ====
     // Geometri BARIS mana pun (bukan hanya baris ceklis) — dipakai pengujian
     // untuk mengklik baris tertentu secara tepat, tanpa angka ajaib.
+    // ==== SATU SUMBER KEBENARAN TINGGI BARIS ====
+    // Sebelum ini ada DUA rumus yang tidak pernah bertemu: renderPage memakai
+    // measureLine().height (variabel per fontSize/spacing), sedangkan hit-test
+    // klik dan lineRectAt memakai konstanta LINE_HEIGHT=24. Akibatnya pita klik
+    // bergeser dari glyph: terukur sampai -46px (~2 baris) pada dokumen
+    // ber-heading, sehingga klik di bagian atas huruf memilih baris sebelumnya.
+    //
+    // `tops` berisi n+1 nilai: tops[i] = y puncak baris i, tops[n] = batas bawah.
+    // Dihitung dengan measureLine yang SAMA dengan renderPage, jadi paritas
+    // gambar-vs-klik menjadi by construction, bukan hasil penyelarasan manual.
+    //
+    // SENGAJA TIDAK DI-CACHE. Cache yang tidak di-invalidasi saat fontSize atau
+    // spacing berubah akan mereproduksi bug kelas yang sama (angka basi yang
+    // dipakai hit-test). Biayanya satu measureLine per baris, hanya saat klik.
+    _lineTops(pIdx) {
+      const page = this.pages[pIdx];
+      const top = this.textTop();
+      if (!page || !page.lines) return [top, top];
+      const canvas = document.getElementById(`kixCanvas${pIdx + 1}`);
+      const tops = [top];
+      let y = top;
+      for (let i = 0; i < page.lines.length; i++) {
+        y += this.measureLine(page, i, canvas).height;
+        tops.push(y);
+      }
+      return tops;
+    }
+
+    // Y kanvas -> indeks baris. Binary search (satu halaman bisa ratusan baris).
+    lineIndexAtY(pIdx, y) {
+      const page = this.pages[pIdx];
+      const n = (page && page.lines) ? page.lines.length : 0;
+      if (n === 0) return 0;
+      const tops = this._lineTops(pIdx);
+      if (y <= tops[0]) return 0;
+      if (y >= tops[n]) return n - 1;
+      let lo = 0, hi = n - 1;
+      while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1;
+        if (tops[mid] <= y) lo = mid; else hi = mid - 1;
+      }
+      return lo;
+    }
+
     lineRectAt(pIdx, lIdx) {
-      const top = LINE_TOP_OFFSET + lIdx * LINE_HEIGHT;
-      return { top, height: LINE_HEIGHT, centerY: top + LINE_HEIGHT / 2 };
+      const tops = this._lineTops(pIdx);
+      const n = Math.max(0, tops.length - 1);
+      const i = Math.max(0, Math.min(n - 1, lIdx));
+      const top = tops[i];
+      const bottom = tops[i + 1];
+      return { top, height: bottom - top, centerY: (top + bottom) / 2 };
     }
 
     // Peta koordinat-x kanvas -> offset karakter di line.text.
@@ -2795,13 +2856,17 @@
       if (line.italic) style += 'italic ';
       if (line.bold) style += 'bold ';
       ctx.font = `${style}${fontSize}px ${fontFamily}, sans-serif`;
-      const baseX = MARGIN + m.indent;
+      const baseX = this.marginLeft() + m.indent;
       const prefixLen = m.prefix.length;
       for (const seg of m.segs) {
         const tw = ctx.measureText(seg.text).width;
         let segX = baseX;
-        if (line.align === 'center') segX = Math.max(MARGIN, (canvas.width - tw) / 2);
-        else if (line.align === 'right') segX = Math.max(MARGIN, canvas.width - MARGIN - tw);
+        if (line.align === 'center') {
+          const availW = this.viewW() - this.marginLeft() - this.marginRight();
+          segX = this.marginLeft() + Math.max(0, (availW - tw) / 2);
+        } else if (line.align === 'right') {
+          segX = Math.max(this.marginLeft(), this.viewW() - this.marginRight() - tw);
+        }
         // Di kiri segmen ini: offset paling awal yang mungkin pada segmen itu.
         if (x < segX) return Math.max(0, seg.start - prefixLen);
         if (x <= segX + tw) {
@@ -2826,9 +2891,9 @@
     checklistBoxRect(pIdx, lIdx) {
       const line = this.pages[pIdx] && this.pages[pIdx].lines[lIdx];
       if (!line || line.listType !== 'checklist') return null;
-      const boxLeft = MARGIN + this.indentFor(line);
+      const boxLeft = this.marginLeft() + this.indentFor(line);
       const row = this.lineRectAt(pIdx, lIdx);
-      return { left: boxLeft - 5, top: row.top, width: 25, height: LINE_HEIGHT, centerX: boxLeft + 7, centerY: row.centerY };
+      return { left: boxLeft - 5, top: row.top, width: 25, height: row.height, centerX: boxLeft + 7, centerY: row.centerY };
     }
 
     // Penanda butir daftar: "• " bullet, "1. " bernomor, "☐ "/"☑ " ceklis.
@@ -3215,12 +3280,64 @@
       ctx.restore();
     }
 
+    // Ukuran tampil kanvas HARUS sama dengan resolusi backing store-nya.
+    // Dulu CSS memaku `.kix-canvas-tile-content { height: 900px }` sementara
+    // atribut kanvas 850, sehingga setiap glyph diregangkan +5,88% ke bawah:
+    // teks tidak hanya buram, GEOMETRINYA salah (batas baris di layar tidak
+    // sama dengan koordinat internal yang dipakai hit-test).
+    // ==== RESOLUSI LAYAR (devicePixelRatio) ====
+    // Kanvas 2D punya dua ukuran: BACKING STORE (atribut width/height, piksel
+    // fisik) dan UKURAN TAMPIL (CSS px). Bila keduanya sama di layar HiDPI
+    // (dpr 2), browser meng-upscale kanvas 2x sehingga teks jadi buram.
+    // Solusi standar: backing store = ukuran logis x dpr, lalu ctx di-skala
+    // dpr sehingga SEMUA koordinat gambar tetap dalam px logis.
+    //
+    // `this.devicePixelRatio` bisa di-override (dipakai pengujian untuk
+    // memaksa dpr=2; kalau hanya mengandalkan layar nyata, bug HiDPI tidak
+    // akan pernah tertangkap di mesin ber-dpr 1).
+    _dpr() {
+      const raw = (this.devicePixelRatio != null)
+        ? this.devicePixelRatio
+        : ((typeof window !== 'undefined' && window.devicePixelRatio) ? window.devicePixelRatio : 1);
+      const n = Number(raw);
+      if (!isFinite(n) || n <= 0) return 1;
+      // Batas atas 4: dpr 8 (zoom ekstrem) akan meledakkan memori kanvas.
+      return Math.min(4, n);
+    }
+
+    // Ukuran LOGIS halaman (px CSS). Ini yang dipakai seluruh geometri:
+    // gambar, hit-test, wrap, dan align. JANGAN pakai canvas.width langsung,
+    // karena nilainya sudah dikali dpr.
+    viewW() { return this.pageWidth(); }
+    viewH() { return this.pageHeight(); }
+
+    _applyCanvasSize(canvas) {
+      if (!canvas) return 1;
+      const dpr = this._dpr();
+      const w = this.pageWidth();
+      const h = this.pageHeight();
+      const bw = Math.max(1, Math.round(w * dpr));
+      const bh = Math.max(1, Math.round(h * dpr));
+      // Menulis canvas.width/height mereset konteks & transform, jadi hanya
+      // dilakukan bila nilainya benar-benar berubah (caret blink memanggil
+      // renderPage tiap 530 ms).
+      if (canvas.width !== bw) canvas.width = bw;
+      if (canvas.height !== bh) canvas.height = bh;
+      if (canvas.style) {
+        // Ukuran tampil TETAP px logis -> tidak ada peregangan glyph.
+        canvas.style.width = w + 'px';
+        canvas.style.height = h + 'px';
+      }
+      return dpr;
+    }
+
     renderPage(pIdx) {
       const page = this.pages[pIdx];
       if (!page) return;
 
       const canvas = document.getElementById(`kixCanvas${pIdx + 1}`);
       if (!canvas) return;
+      const dpr = this._applyCanvasSize(canvas);
 
       // Buang kotak hit-test MILIK HALAMAN INI sebelum menggambar ulang.
       // renderPage() dipanggil ulang tiap 530 ms oleh caret blink, dan render
@@ -3238,7 +3355,10 @@
       this._imageBoxes = this._imageBoxes.filter(b => b.pIdx !== pIdx);
 
       const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      // setTransform HARUS setelah resize: menulis canvas.width/height
+      // mereset seluruh state konteks, termasuk transform.
+      if (typeof ctx.setTransform === 'function') ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, this.viewW(), this.viewH());
 
       // Rentang seleksi dihitung SEKALI per halaman (bukan per segmen) supaya
       // render tetap murah. null = tidak ada seleksi -> seluruh blok di bawah
@@ -3282,7 +3402,7 @@
         ctx.textAlign = 'left';
 
         const lineHeight = m.base;
-        const baseX = MARGIN + m.indent;
+        const baseX = this.marginLeft() + m.indent;
 
         // Batas seleksi untuk BARIS INI pada basis line.text (tanpa penanda
         // butir). Baris di luar rentang mendapat from === to sehingga tidak
@@ -3306,8 +3426,12 @@
 
           // Alignment: hitung titik awal segmen (dipakai juga oleh caret agar konsisten)
           let segX = baseX;
-          if (line.align === 'center') segX = Math.max(MARGIN, (canvas.width - tw) / 2);
-          else if (line.align === 'right') segX = Math.max(MARGIN, canvas.width - MARGIN - tw);
+          if (line.align === 'center') {
+            const availW = this.viewW() - this.marginLeft() - this.marginRight();
+            segX = this.marginLeft() + Math.max(0, (availW - tw) / 2);
+          } else if (line.align === 'right') {
+            segX = Math.max(this.marginLeft(), this.viewW() - this.marginRight() - tw);
+          }
 
           // ==== HIGHLIGHT SELEKSI RENTANG ====
           // Digambar SEBELUM fillText: kalau sesudah, teks ikut tertimpa biru

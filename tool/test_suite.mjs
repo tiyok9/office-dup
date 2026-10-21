@@ -2638,6 +2638,212 @@ async function runTestSuite() {
       console.log('  Suite 9k (header & footer teks): selesai');
     }
 
+    // ================= Suite 9l: GEOMETRI & RESOLUSI TEKS =================
+    // Suite ini lahir dari audit mendalam atas dokumen nyata. Tiga cacat yang
+    // ditemukan SEMUANYA lolos karena tidak ada satu pun asersi yang menjaganya:
+    //   1. kanvas 636x850 di-stretch CSS ke 900px  -> glyph melar 5,88% vertikal
+    //   2. hit-test klik memakai konstanta LINE_HEIGHT=24 sementara renderPage
+    //      memakai measureLine().height (variabel) -> klik meleset s.d. 46px
+    //   3. baseX memakai MARGIN mentah -> margin kiri/kanan hanya mengubah wrap
+    //   4. tanpa devicePixelRatio -> teks buram di layar HiDPI
+    console.log('\n--- Suite 9l: Geometri Kanvas, Margin, Tinggi Baris & devicePixelRatio ---');
+    {
+      const Kix9l = loadEditor('static/kix_editor.js', 'KixDocsEditor');
+      const srcKix9l = fs.readFileSync(path.resolve(__dirname, 'static/kix_editor.js'), 'utf8');
+      const html9l = fs.readFileSync(path.resolve(__dirname, 'dashboard.html'), 'utf8');
+
+      // Buang komentar SEBELUM memeriksa kode. Tanpa ini, asersi `includes()`
+      // akan lolos hanya karena simbolnya masih tertulis di komentar — persis
+      // jebakan yang membuat mutasi SURVIVED pada falsifikasi batch 1.
+      const codeOnly9l = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '')
+        .split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+      const code9l = codeOnly9l(srcKix9l);
+      // Komentar CSS juga dibuang: komentar di dashboard.html MENJELASKAN nilai
+      // lama `height: 900px`, jadi memeriksa teks mentah akan menuduh dokumentasi
+      // sendiri sebagai pelanggaran (jebakan yang sama seperti falsifikasi batch 1).
+      const htmlCode9l = html9l.replace(/\/\*[\s\S]*?\*\//g, '');
+
+      // ---- 9l-01..05: UKURAN KANVAS == UKURAN KERTAS (anti-distorsi) ----
+      const kSz = new Kix9l('docsScrollBox', 'kixHiddenInput');
+      kSz.setDocumentData({ pages: [{ lines: [{ text: 'satu' }] }] });
+      const cvsSz = docStub.getElementById('kixCanvas1');
+      const dprSz = kSz._applyCanvasSize(cvsSz);
+      assert(dprSz === 1,
+        `Docs 9l: dpr default 1 (mesin uji tanpa HiDPI) :: ${dprSz}`);
+      assert(cvsSz.width === 636 && cvsSz.height === 850,
+        `Docs 9l: backing store = ukuran kertas 636x850 :: ${cvsSz.width}x${cvsSz.height}`);
+      assert(cvsSz.style.width === '636px' && cvsSz.style.height === '850px',
+        `Docs 9l: ukuran TAMPIL = ukuran kertas, tidak melar :: ${cvsSz.style.width}x${cvsSz.style.height}`);
+
+      // Kertas A4: tinggi tampil WAJIB ikut berubah. Dulu CSS memaku 900px,
+      // sehingga preset apa pun tetap tampil 900px dan Page Setup tidak nyata.
+      kSz.pageSetup = { paperSize: 'a4', orientation: 'portrait' };
+      kSz._applyCanvasSize(cvsSz);
+      assert(cvsSz.width === 794 && cvsSz.height === 1123,
+        `Docs 9l: A4 -> backing store 794x1123 :: ${cvsSz.width}x${cvsSz.height}`);
+      assert(cvsSz.style.height === '1123px',
+        `Docs 9l: A4 -> tinggi TAMPIL ikut jadi 1123px (Page Setup nyata) :: ${cvsSz.style.height}`);
+
+      // ---- 9l-06..09: MARGIN MENGGESER TINTA (bukan hanya wrap) ----
+      const calls9l = [], transforms9l = [], clears9l = [];
+      const mkSpy9l = () => {
+        const ctx = {
+          font: '', fillStyle: '', strokeStyle: '', textAlign: '', lineWidth: 1,
+          save() {}, restore() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {},
+          fillRect() {}, strokeRect() {}, arc() {}, closePath() {}, translate() {},
+          setTransform(a, b, c, d, e, f) { transforms9l.push([a, b, c, d, e, f]); },
+          clearRect(x, y, w, h) { clears9l.push([x, y, w, h]); },
+          measureText(s) { return { width: String(s).length * 7 }; },
+          fillText(t, x, y) { calls9l.push({ t: String(t), x: x, y: y }); },
+          createLinearGradient() { return { addColorStop() {} }; },
+          drawImage() {}
+        };
+        const cv = docStub.getElementById('kixCanvas1');
+        cv.getContext = () => ctx;
+        cv.width = 636; cv.height = 850;
+        return cv;
+      };
+
+      const kMg = new Kix9l('docsScrollBox', 'kixHiddenInput');
+      kMg.setDocumentData({ pages: [{ lines: [{ text: 'satu', size: 13 }] }] });
+      mkSpy9l();
+      kMg.renderPage(0);
+      const inkDefault = calls9l.find(c => c.t === 'satu');
+      assert(inkDefault && inkDefault.x === 30,
+        `Docs 9l: margin default -> tinta di x=30 :: ${inkDefault ? inkDefault.x : 'NA'}`);
+
+      kMg.pageSetup.marginLeft = 90;
+      kMg.pageSetup.marginRight = 90;
+      kMg.reflowPages();
+      calls9l.length = 0;
+      mkSpy9l();
+      kMg.renderPage(0);
+      const inkWide = calls9l.find(c => c.t === 'satu');
+      assert(inkWide && inkWide.x === 90,
+        `Docs 9l: marginLeft 90 -> tinta BERGESER ke x=90 (dulu tetap 30) :: ${inkWide ? inkWide.x : 'NA'}`);
+      assert(kMg.viewW() - kMg.marginLeft() - kMg.marginRight() === 456,
+        `Docs 9l: lebar area teks ikut menyempit jadi 456 :: ${kMg.viewW() - kMg.marginLeft() - kMg.marginRight()}`);
+
+      // ---- 9l: ALIGN memakai margin AKTIF, bukan MARGIN mentah ----
+      // Falsifikasi menemukan celah: memutasi align center kembali ke MARGIN
+      // SURVIVED karena tidak ada asersi yang merender baris center/right dengan
+      // margin non-default. Diuji terpisah supaya mutasi itu benar-benar mati.
+      const kAl = new Kix9l('docsScrollBox', 'kixHiddenInput');
+      kAl.setDocumentData({ pages: [{ lines: [{ text: 'satu', size: 13, align: 'center' }] }] });
+      kAl.pageSetup.marginLeft = 90;
+      kAl.pageSetup.marginRight = 90;
+      calls9l.length = 0;
+      mkSpy9l();
+      kAl.renderPage(0);
+      const inkCenter = calls9l.find(c => c.t === 'satu');
+      // availW = 636-90-90 = 456; tw = 4*7 = 28 -> 90 + (456-28)/2 = 304
+      assert(inkCenter && inkCenter.x === 304,
+        `Docs 9l: align center memakai margin aktif (x=304, bukan 244) :: ${inkCenter ? inkCenter.x : 'NA'}`);
+
+      kAl.pages[0].lines[0].align = 'right';
+      calls9l.length = 0;
+      mkSpy9l();
+      kAl.renderPage(0);
+      const inkRight = calls9l.find(c => c.t === 'satu');
+      // max(90, 636-90-28) = 518
+      assert(inkRight && inkRight.x === 518,
+        `Docs 9l: align right memakai marginRight aktif (x=518) :: ${inkRight ? inkRight.x : 'NA'}`);
+
+      // ---- 9l: KOTAK CENTANG ikut margin aktif ----
+      // Celah kedua dari falsifikasi: checklistBoxRect masih memakai MARGIN
+      // mentah -> kotak centang meleset dari teksnya begitu margin diubah.
+      const kCk = new Kix9l('docsScrollBox', 'kixHiddenInput');
+      kCk.setDocumentData({ pages: [{ lines: [
+        { text: 'tugas', size: 13, listType: 'checklist', checked: false }
+      ] }] });
+      const boxDefault = kCk.checklistBoxRect(0, 0);
+      assert(boxDefault && boxDefault.left === 25 && boxDefault.centerX === 37,
+        `Docs 9l: kotak centang default ikut margin 30 :: left=${boxDefault && boxDefault.left} cx=${boxDefault && boxDefault.centerX}`);
+      kCk.pageSetup.marginLeft = 90;
+      const boxWide = kCk.checklistBoxRect(0, 0);
+      assert(boxWide && boxWide.left === 85 && boxWide.centerX === 97,
+        `Docs 9l: kotak centang BERGESER saat marginLeft 90 (dulu tetap 25) :: left=${boxWide && boxWide.left} cx=${boxWide && boxWide.centerX}`);
+
+      // ---- 9l-10..14: SATU SUMBER KEBENARAN TINGGI BARIS ----
+      const kTop = new Kix9l('docsScrollBox', 'kixHiddenInput');
+      kTop.setDocumentData({ pages: [{ lines: [
+        { text: 'A', size: 20 }, { text: 'B', size: 14 },
+        { text: 'C', size: 13 }, { text: 'D', size: 13 }
+      ] }] });
+      const tops = kTop._lineTops(0);
+      assert(tops.length === 5 && tops[0] === 60,
+        `Docs 9l: _lineTops = n+1 titik, mulai textTop()=60 :: len=${tops.length} top0=${tops[0]}`);
+      // base = round(size*1.5), gap = 0 (baris 0) / 4 (antar paragraf)
+      assert(tops[1] === 90 && tops[2] === 115,
+        `Docs 9l: tinggi baris VARIABEL per fontSize (30 lalu 21+4) :: ${tops[1]}/${tops[2]}`);
+      assert(tops[2] === 115 && (60 + 2 * 24) === 108,
+        `Docs 9l: rumus konstanta 24 TERBUKTI meleset 7px (115 vs 108)`);
+
+      for (let i = 0; i < 4; i++) {
+        const r = kTop.lineRectAt(0, i);
+        assert(r.top === tops[i] && r.height === tops[i + 1] - tops[i],
+          `Docs 9l: lineRectAt[${i}] identik dengan geometri gambar :: top=${r.top} h=${r.height}`);
+      }
+      for (let i = 0; i < 4; i++) {
+        const mid = (tops[i] + tops[i + 1]) / 2;
+        assert(kTop.lineIndexAtY(0, mid) === i,
+          `Docs 9l: klik di tengah baris ${i} mengembalikan baris ${i} :: ${kTop.lineIndexAtY(0, mid)}`);
+      }
+
+      // Titik UJUNG, bukan hanya titik tengah. Ini pelajaran dari falsifikasi:
+      // asersi titik-tengah saja TIDAK mendiskriminasi — dengan rumus konstanta 24,
+      // titik-tengah tiap baris kebetulan masih jatuh di baris yang benar sehingga
+      // mutasi "kembali ke 24" SURVIVED. Hanya 1px di atas garis batas bawah yang
+      // membedakan kedua rumus (drift terakumulasi 7px pada baris ke-2).
+      for (let i = 0; i < 4; i++) {
+        const nearBottom = tops[i + 1] - 1;
+        const gotB = kTop.lineIndexAtY(0, nearBottom);
+        assert(gotB === i,
+          `Docs 9l: 1px di atas batas bawah baris ${i} (y=${nearBottom}) tetap baris ${i} :: ${gotB}`);
+        const nearTop = tops[i] + 1;
+        const gotT = kTop.lineIndexAtY(0, nearTop);
+        assert(gotT === i,
+          `Docs 9l: 1px di bawah puncak baris ${i} (y=${nearTop}) tetap baris ${i} :: ${gotT}`);
+      }
+      // Di luar area teks: clamp ke baris pertama / terakhir, bukan -1 atau n.
+      assert(kTop.lineIndexAtY(0, 0) === 0,
+        `Docs 9l: y di atas baris pertama -> clamp ke 0 :: ${kTop.lineIndexAtY(0, 0)}`);
+      assert(kTop.lineIndexAtY(0, 9999) === 3,
+        `Docs 9l: y jauh di bawah baris terakhir -> clamp ke n-1 :: ${kTop.lineIndexAtY(0, 9999)}`);
+
+      // ---- 9l-15..18: devicePixelRatio (teks tajam di HiDPI) ----
+      const kDpr = new Kix9l('docsScrollBox', 'kixHiddenInput');
+      kDpr.setDocumentData({ pages: [{ lines: [{ text: 'satu', size: 13 }] }] });
+      kDpr.devicePixelRatio = 2;
+      transforms9l.length = 0; clears9l.length = 0;
+      const cvsDpr = mkSpy9l();
+      kDpr.renderPage(0);
+      assert(cvsDpr.width === 1272 && cvsDpr.height === 1700,
+        `Docs 9l: dpr 2 -> backing store 2x (1272x1700) :: ${cvsDpr.width}x${cvsDpr.height}`);
+      assert(cvsDpr.style.width === '636px' && cvsDpr.style.height === '850px',
+        `Docs 9l: dpr 2 -> ukuran tampil TETAP logis 636x850 :: ${cvsDpr.style.width}x${cvsDpr.style.height}`);
+      assert(transforms9l.length > 0 && transforms9l[0][0] === 2 && transforms9l[0][3] === 2,
+        `Docs 9l: ctx.setTransform(dpr,...) dipasang :: ${JSON.stringify(transforms9l[0])}`);
+      assert(clears9l.length > 0 && clears9l[0][2] === 636 && clears9l[0][3] === 850,
+        `Docs 9l: clearRect memakai koordinat LOGIS, bukan backing store :: ${JSON.stringify(clears9l[0])}`);
+
+      // ---- 9l-19..24: PENJAGA SUMBER (kode, bukan komentar) ----
+      assert(!/Math\.floor\(\s*clickY\s*\/\s*LINE_HEIGHT/.test(code9l),
+        'Docs 9l: hit-test TIDAK lagi memakai konstanta LINE_HEIGHT');
+      assert(!/const baseX = MARGIN \+ m\.indent/.test(code9l),
+        'Docs 9l: baseX memakai marginLeft(), bukan MARGIN mentah');
+      assert(!/canvas\.width \/ rect\.width/.test(code9l),
+        'Docs 9l: rasio zoom memakai viewW(), bukan canvas.width (dpr-aware)');
+      assert(/setTransform\(dpr/.test(code9l),
+        'Docs 9l: renderPage memasang setTransform(dpr)');
+      assert(!/height:\s*900px/.test(htmlCode9l),
+        'Docs 9l: CSS tidak lagi memaku tinggi kanvas 900px');
+      assert(/overflow-x:\s*auto/.test(htmlCode9l),
+        'Docs 9l: kontainer bisa digeser horizontal untuk kertas lebar (A4/Letter)');
+
+      console.log('  Suite 9l (geometri & resolusi teks): selesai');
+    }
+
 
 
     // Laporan keutuhan ISI seed (informatif, bukan kegagalan): pengujian E2E

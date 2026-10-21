@@ -572,6 +572,34 @@
       this.syncToolbar();
     }
 
+    // Dropdown ukuran SELALU harus punya opsi untuk nilai aktif.
+    // Sebelumnya preset "Title" (26px) tidak ada di daftar <option>, sehingga
+    // browser mengosongkan select: selectedIndex -1, kotak ukuran jadi kosong
+    // dan user kehilangan indikator ukuran (terukur di probe16).
+    // Injeksi generik menutup SELURUH kelas bug ini, bukan hanya 26.
+    syncFontSizeSelect(px) {
+      const sel = document.getElementById('tbFontSize');
+      // Number() dulu: nilai dari storage bisa berupa string. Guard `!px` lama
+      // meloloskan -5 dan Infinity (keduanya truthy) sehingga <option value="-5">
+      // benar-benar disuntik ke dropdown — kelas bug "kotak aneh", arah sebaliknya.
+      const n = Number(px);
+      if (!sel || !Number.isFinite(n) || n <= 0) return;
+      const val = String(n);
+      const ada = Array.from(sel.options).some((o) => o.value === val);
+      if (!ada) {
+        const opt = document.createElement('option');
+        opt.value = val;
+        opt.textContent = (typeof window !== 'undefined' && window.KixUnits)
+          ? window.KixUnits.ptLabel(n) : val;
+        sel.appendChild(opt);
+        // Urutkan ulang supaya opsi sisipan tidak menumpuk di ekor daftar.
+        const urut = Array.from(sel.options).sort((a, b) => parseFloat(a.value) - parseFloat(b.value));
+        while (sel.firstChild) sel.removeChild(sel.firstChild);
+        urut.forEach((o) => sel.appendChild(o));
+      }
+      sel.value = val;
+    }
+
     syncToolbar(stOverride) {
       const set = (id, on) => {
         const el = document.getElementById(id);
@@ -583,14 +611,12 @@
         st = stOverride;
         const fam = document.getElementById('tbFontFamily');
         if (fam && st.fontFamily) fam.value = st.fontFamily;
-        const sz = document.getElementById('tbFontSize');
-        if (sz && st.size) sz.value = String(st.size);
+        this.syncFontSizeSelect(st.size);
       } else if (this.currentApp === 'docs' && this.kix) {
         st = (this.kix.getActiveFormatting ? this.kix.getActiveFormatting() : (this.kix.pages[this.kix.activePageIdx]?.lines[this.kix.activeLineIdx] || this.kix.currentStyle || {}));
         const fam = document.getElementById('tbFontFamily');
         if (fam && st.fontFamily) fam.value = st.fontFamily;
-        const sz = document.getElementById('tbFontSize');
-        if (sz && st.size) sz.value = String(st.size);
+        this.syncFontSizeSelect(st.size);
       } else if (this.currentApp === 'sheets' && this.ritz) {
         st = this.ritz.cells[this.ritz.getActiveCoord()] || {};
       }

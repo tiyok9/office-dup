@@ -2842,6 +2842,93 @@ async function runTestSuite() {
         'Docs 9l: kontainer bisa digeser horizontal untuk kertas lebar (A4/Letter)');
 
       console.log('  Suite 9l (geometri & resolusi teks): selesai');
+
+  // ================= Suite 9m: SATUAN TIPOGRAFI (pt <-> px) =================
+  console.log('\n--- Suite 9m: Satuan Tipografi (point vs pixel) ---');
+  const loadWin9m = (file) => {
+    const win = {
+      addEventListener() {}, removeEventListener() {}, dispatchEvent() { return true; },
+      requestAnimationFrame: (cb) => setTimeout(cb, 0), cancelAnimationFrame: () => {},
+      getSelection: () => ({ rangeCount: 0, removeAllRanges() {}, addRange() {} }),
+      getComputedStyle: () => ({ display: 'block' })
+    };
+    win.window = win; win.document = docStub;
+    const noopTimer = () => 0;
+    // eslint-disable-next-line no-new-func
+    new Function('window', 'document', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout',
+      fs.readFileSync(path.resolve(__dirname, file), 'utf8'))(win, docStub, noopTimer, () => {}, noopTimer, () => {});
+    return win;
+  };
+  const win9m = loadWin9m('static/kix_editor.js');
+  const U = win9m.KixUnits;
+  assert(U && typeof U.ptToPx === 'function' && typeof U.pxToPt === 'function',
+    'Docs 9m: KixUnits diekspos (satu rumus untuk shell + tes)');
+
+  assert(Math.abs(U.PT_TO_PX - 4 / 3) < 1e-12,
+    `Docs 9m: PT_TO_PX = 4/3 (96dpi / 72pt) :: ${U.PT_TO_PX}`);
+  assert(U.pxToPt(13) === 9.75, `Docs 9m: 13px = 9,75pt :: ${U.pxToPt(13)}`);
+  assert(U.ptToPx(9.75) === 13, `Docs 9m: 9,75pt = 13px :: ${U.ptToPx(9.75)}`);
+
+  // INVARIAN INTI: round-trip harus EKSAK untuk semua ukuran yang dipakai.
+  // Kalau ini gagal, konversi akan menggeser tinggi baris lewat Math.round.
+  const sizes9m = [10, 12, 13, 14, 16, 18, 20, 24, 26, 32];
+  const bad9m = sizes9m.filter((px) => U.ptToPx(U.pxToPt(px)) !== px);
+  assert(bad9m.length === 0,
+    `Docs 9m: round-trip px->pt->px EKSAK untuk semua ukuran :: meleset=${JSON.stringify(bad9m)}`);
+
+  // Tinggi baris tidak boleh bergeser gara-gara pembulatan konversi.
+  const base9m = sizes9m.map((px) => Math.round(U.ptToPx(U.pxToPt(px)) * 1.5));
+  const baseRef9m = sizes9m.map((px) => Math.round(px * 1.5));
+  assert(JSON.stringify(base9m) === JSON.stringify(baseRef9m),
+    `Docs 9m: tinggi baris (round(size*1.5)) tidak bergeser :: ${JSON.stringify(base9m)}`);
+
+  assert(U.ptLabel(13) === '9,75' && U.ptLabel(14) === '10,5' && U.ptLabel(20) === '15',
+    `Docs 9m: label tampilan memakai koma :: ${U.ptLabel(13)} / ${U.ptLabel(14)} / ${U.ptLabel(20)}`);
+
+  // ---- Dropdown: value px, label pt, dan SETIAP label balik eksak ----
+  const html9m = fs.readFileSync(path.resolve(__dirname, 'dashboard.html'), 'utf8');
+  // WAJIB di-scope ke blok <select id="tbFontSize"> SAJA. Tanpa ini regex ikut
+  // menyapu dropdown spasi baris (value "1" -> label "1,0"), yang bukan ukuran
+  // font sama sekali — dan assertion round-trip gagal karena 1pt memang bukan 1px.
+  const blok9m = (html9m.match(/<select[^>]*id="tbFontSize"[^>]*>([\s\S]*?)<\/select>/) || [])[1] || '';
+  assert(blok9m.length > 0, 'Docs 9m: blok select#tbFontSize ditemukan di dashboard.html');
+  const opts9m = [...blok9m.matchAll(/<option value="(\d+)">([0-9,]+)<\/option>/g)]
+    .map((m) => ({ px: parseFloat(m[1]), label: m[2] }));
+  assert(opts9m.length >= 9,
+    `Docs 9m: dropdown ukuran punya >=9 opsi :: ${opts9m.length}`);
+  const salah9m = opts9m.filter((o) => {
+    const pt = parseFloat(o.label.replace(',', '.'));
+    return U.ptToPx(pt) !== o.px;
+  });
+  assert(salah9m.length === 0,
+    `Docs 9m: setiap label pt menunjuk balik ke px yang sama :: salah=${JSON.stringify(salah9m)}`);
+
+  // Bug yang terukur di probe16: preset title = 26px, dulu tak ada opsinya.
+  assert(opts9m.some((o) => o.px === 26),
+    'Docs 9m: dropdown punya opsi untuk preset Title (26px) — dulu kotak jadi kosong');
+  assert(opts9m.every((o) => o.px !== undefined && !Number.isNaN(o.px)),
+    'Docs 9m: tidak ada opsi ukuran tanpa value numerik');
+
+  // ---- Penjaga sumber shell ----
+  const shell9m = fs.readFileSync(path.resolve(__dirname, 'static/app_shell.js'), 'utf8');
+  assert(/syncFontSizeSelect\(px\)\s*\{/.test(shell9m),
+    'Docs 9m: shell punya syncFontSizeSelect (injeksi opsi hilang)');
+  // probe18: guard `!px` meloloskan -5 dan Infinity (keduanya truthy), lalu
+  // <option value="-5"> benar-benar disuntik. Number() menormalkan string,
+  // Number.isFinite menolak NaN/Infinity, n <= 0 menolak negatif/nol.
+  assert(/const n = Number\(px\);/.test(shell9m) &&
+    /!Number\.isFinite\(n\)\s*\|\|\s*n\s*<=\s*0/.test(shell9m),
+    'Docs 9m: syncFontSizeSelect menolak ukuran non-finite/non-positif (NaN, -5, Infinity)');
+  assert(/ptLabel\(n\)/.test(shell9m),
+    'Docs 9m: label opsi sisipan memakai nilai ternormalisasi, bukan input mentah');
+  assert((shell9m.match(/this\.syncFontSizeSelect\(st\.size\)/g) || []).length === 2,
+    'Docs 9m: KEDUA cabang syncToolbar memakai syncFontSizeSelect');
+  assert(!/sz\.value\s*=\s*String\(st\.size\)/.test(shell9m),
+    'Docs 9m: tidak ada lagi penulisan langsung sz.value (sumber kosongnya select)');
+  assert(/parseInt\(sz\.value, 10\)/.test(shell9m),
+    'Docs 9m: handler change tetap parseInt karena value select masih px');
+
+  console.log('  Suite 9m (satuan tipografi): selesai');
     }
 
 

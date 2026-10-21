@@ -24,6 +24,19 @@
   const PAGE_PAD_X = 90;
   const PAGE_PAD_Y = 72;
 
+  // ==== SATUAN TIPOGRAFI (paritas Google Docs) ====
+  // Google Docs menampilkan ukuran font dalam POINT; engine ini menyimpan
+  // PIXEL. Konversi 96dpi/72pt -> 1pt = 4/3 px.
+  // Pembulatan 2 desimal BUKAN kosmetik: measureLine memakai
+  // Math.round(size * 1.5), jadi nilai 12.999999 akan jatuh ke 19 (bukan 20)
+  // dan tinggi baris menyusut 1px per baris tanpa terlihat di layar.
+  const PT_TO_PX = 4 / 3;
+  const PX_TO_PT = 3 / 4;
+  const pxToPt = (px) => Math.round(px * PX_TO_PT * 100) / 100;
+  const ptToPx = (pt) => Math.round(pt * PT_TO_PX * 100) / 100;
+  // Label tampilan memakai koma (lokal Indonesia): 13px -> "9,75".
+  const ptLabel = (px) => String(pxToPt(px)).replace('.', ',');
+
   // Properti gaya yang diwariskan ke baris baru saat user menekan Enter.
   // Tanpa daftar ini, underline/strike/list hilang begitu user menekan Enter.
   const LINE_STYLE_KEYS = [
@@ -3657,6 +3670,9 @@
       }
     }
   }
+
+  // Diekspos supaya test suite dan shell memakai rumus YANG SAMA.
+  window.KixUnits = { PT_TO_PX, PX_TO_PT, pxToPt, ptToPx, ptLabel };
 
   window.KixDocsEditor = KixDocsEditor;
 })(window);

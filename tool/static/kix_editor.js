@@ -41,7 +41,7 @@
   // Tanpa daftar ini, underline/strike/list hilang begitu user menekan Enter.
   const LINE_STYLE_KEYS = [
     'bold', 'italic', 'underline', 'strike', 'size', 'color', 'align',
-    'fontFamily', 'heading', 'listType', 'indent', 'spacing', 'checked'
+    'fontFamily', 'heading', 'listType', 'indent', 'spacing', 'letterSpacing', 'checked'
   ];
 
   // Gaya paragraf ala Google Docs (dropdown "Normal text / Title / Heading n").
@@ -1875,6 +1875,16 @@
       if (typeof this.onChange === 'function') this.onChange(this.getDocumentData());
     }
 
+    changeLetterSpacing(v) {
+      const line = this.activeLineRef();
+      if (!line) return;
+      line.letterSpacing = v;
+      this.reflowPages();
+      this.renderAllPages();
+      this.emitActiveLine();
+      if (typeof this.onChange === 'function') this.onChange(this.getDocumentData());
+    }
+
     clearFormatting() {
       const line = this.activeLineRef();
       if (!line) return;
@@ -2709,6 +2719,7 @@
       if (useRuns) {
         cum = this.runsCumWidths(canvas, text, prefixLen || 0, runs, baseFont);
         ctx.font = baseFont;
+        ctx.textBaseline = 'alphabetic';
       }
       const widthOf = (a, b) => {
         if (cum) return cum[b] - cum[a];
@@ -3417,6 +3428,12 @@
         ctx.font = `${fontStyle}${fontSize}px ${fontFamily}, sans-serif`;
         ctx.fillStyle = line.color || '#202124';
         ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic';
+        // letterSpacing: properti Canvas 2D (Chrome 94+).
+        // Disimpan per baris di line.letterSpacing (px string, mis. '2px').
+        if (typeof ctx.letterSpacing !== 'undefined') {
+          ctx.letterSpacing = line.letterSpacing || '0px';
+        }
 
         const lineHeight = m.base;
         const baseX = this.marginLeft() + m.indent;

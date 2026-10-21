@@ -3289,6 +3289,44 @@ async function runTestSuite() {
     'Shell 10e: BOM prefix untuk xlsx/csv');
 
   console.log('  Suite 10e (trash+restore+ekspor): selesai');
+
+  // ================= Suite 10f: DOCS letterSpacing + textBaseline =================
+  console.log('\n--- Suite 10f: Docs letterSpacing + textBaseline ---');
+  const kixSrc10f = fs.readFileSync(path.resolve(__dirname, 'static/kix_editor.js'), 'utf8');
+
+  // 10f-1: ctx.textBaseline = 'alphabetic' ada di renderPage
+  assert((kixSrc10f.match(/ctx\.textBaseline\s*=\s*'alphabetic'/g) || []).length >= 2,
+    'Docs 10f: ctx.textBaseline alphabetic ada >= 2 tempat (render + hitTest)');
+
+  // 10f-2: ctx.letterSpacing ada di renderPage
+  assert(/ctx\.letterSpacing/.test(kixSrc10f),
+    'Docs 10f: ctx.letterSpacing ada di kix');
+
+  // 10f-3: line.letterSpacing property dipakai
+  assert(/line\.letterSpacing/.test(kixSrc10f),
+    'Docs 10f: line.letterSpacing property dipakai');
+
+  // 10f-4: letterSpacing ada di daftar properti
+  assert(/letterSpacing/.test(kixSrc10f),
+    'Docs 10f: letterSpacing ada di daftar properti');
+
+  // 10f-5: guard typeof ctx.letterSpacing (backward compat)
+  assertActive(kixSrc10f, /typeof ctx\.letterSpacing/,
+    'Docs 10f: guard typeof ctx.letterSpacing (backward compat, aktif)');
+
+  // 10f-6: default '0px' untuk letterSpacing
+  assert(/letterSpacing \|\| '0px'/.test(kixSrc10f),
+    'Docs 10f: default 0px untuk letterSpacing');
+
+  // 10f-7: letterSpacing di daftar prop yang disync
+  assert(/'letterSpacing'/.test(kixSrc10f),
+    "Docs 10f: 'letterSpacing' sebagai string property name");
+
+  // 10f-8: changeLetterSpacing method ada
+  assertActive(kixSrc10f, /changeLetterSpacing\s*\(/,
+    'Docs 10f: changeLetterSpacing method ada (aktif)');
+
+  console.log('  Suite 10f (letterSpacing + textBaseline): selesai');
     }
 
 

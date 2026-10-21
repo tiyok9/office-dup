@@ -1623,23 +1623,25 @@ async function stopIsolatedServer() {
   await cdp.eval('window.workspaceApp.closeModal()');
   await sleep(300);
 
-  // ================= S12b: ESCAPE MODAL MELEPAS FOKUS =================
-  // m4 memperbaiki modal yang tidak melepas fokus saat ditutup. Sisa jalur yang
-  // belum terjaga: Escape pada modal TANPA _modalResolver (komentar Docs/Sheets)
-  // dulu menyembunyikan #gwsModal secara mentah, tanpa blur(). Akibatnya
-  // activeElement tertinggal di dalam modal tersembunyi -> guard inModalField
-  // (:1027) tetap true -> SELURUH pintasan mati. Tombol toolbar tetap jalan,
-  // jadi gejalanya menyesatkan.
+  // ================= S12b: PENJAGA PERILAKU, BUKAN PEMBEDA BLUR =================
+  // Chrome memindahkan activeElement ke <body> saat leluhur display:none,
+  // sehingga asersi fokus S12b lulus IDENTIK dengan DAN tanpa closeModal().
+  // Falsifikasi m6 membuktikan ini: kode lama (hide mentah) tetap 191/0.
   //
-  // JEBAKAN yang harus dihindari: guardTextarea() di openSheetCommentModal
-  // memasang listener Escape LOKAL dengan stopPropagation. Bila fokus ada di
-  // textarea, cabang fallback global TIDAK PERNAH diuji -> tes lulus palsu.
-  // Karena itu fokus sengaja ditempatkan pada TOMBOL di dalam modal.
+  // PEMBEDA SAH untuk bug hide-mentah ada di Suite 9d (source-level,
+  // falsifikasi: 2 FAILED saat closeModal() dihapus dari blok Escape).
   //
-  // Probe pintasan memakai Ctrl+Alt+M, BUKAN Ctrl+B: Ctrl+B hanya untuk docs
-  // (:1059), sehingga di Sheets ia tidak akan pernah membuka apa pun dan tes
-  // gagal secara palsu. Ctrl+Alt+M justru dijaga `!inModalField` (:1093) —
-  // persis guard yang dirusak bug ini.
+  // S12b tetap berguna menangkap regresi TOTAL — jika closeModal() rusak
+  // (throw/noop), modal tidak tertutup dan shortcut mati. Tapi ia TIDAK
+  // membedakan closeModal() vs hide mentah. Jangan naikkan klaimnya.
+  //
+  // JEBAKAN: guardTextarea() memasang listener Escape LOKAL dengan
+  // stopPropagation. Fokus HARUS di TOMBOL, bukan textarea, agar cabang
+  // fallback global benar-benar diuji.
+  //
+  // Probe pintasan memakai Ctrl+Alt+M, BUKAN Ctrl+B: Ctrl+B hanya docs
+  // (:1059); Ctrl+Alt+M dijaga `!inModalField` (:1093) — persis guard
+  // yang diperiksa.
   console.log('\n--- S12b: Escape pada modal komentar melepas fokus ---');
   const appB = await cdp.eval('window.workspaceApp.currentApp');
   check('S12b: konteks masih Sheets', appB === 'sheets', String(appB));

@@ -1725,6 +1725,103 @@ async function runTestSuite() {
   assert(rSel.colLabel(1) === 'B' && rSel.colLabel(3) === 'D',
     `Seleksi: kolom -> huruf konsisten :: ${rSel.colLabel(1)}/${rSel.colLabel(3)}`);
 
+  // ================= SUITE 9f: KONTRAK UNDO/REDO + RENDER SEGITIGA =================
+  // Tiga celah yang ditemukan audit cakupan (m7):
+  // - Undo round-trip Sheets: 0 asersi unit (state di app_shell, E2E saja)
+  // - Render segitiga cellComment: 0 asersi sumber (hanya render canvas)
+  // Solusi: kontrak source-level yang terukur dan diskriminatif.
+  console.log('\n--- Suite 9f: Kontrak undo/redo + render segitiga ---');
+  {
+    // ---- A. UNDO/REDO: kontrak sumber app_shell ----
+    // Undo/redo sepenuhnya di app_shell (undoStack/redoStack).
+    // Yang dikunci: recordHistory push, performUndo pop + apply,
+    //               performRedo pop + apply, batas 60, dedup.
+
+    // A1. recordHistory ada dan push ke undoStack
+    assert(/recordHistory\s*\(app,\s*data\)/.test(shellSrc),
+      'Undo: recordHistory(app, data) terdefinisi');
+    assert(shellSrc.includes('stack.push(key)'),
+      'Undo: recordHistory push ke stack');
+    assert(/stack\.length\s*>\s*60/.test(shellSrc),
+      'Undo: batas 60 entri diterapkan (shift saat melebihi)');
+
+    // A2. performUndo: pop undoStack, push ke redoStack, applySnapshot
+    const iUndo = shellSrc.indexOf('performUndo(app)');
+    assert(iUndo !== -1, 'Undo: performUndo terdefinisi');
+    const undoBlock = shellSrc.slice(iUndo, iUndo + 500);
+    assert(undoBlock.includes('u.pop()') || undoBlock.includes('.pop()'),
+      'Undo: performUndo pop dari undoStack');
+    assert(undoBlock.includes('redoStack') && undoBlock.includes('.push('),
+      'Undo: performUndo push ke redoStack');
+    assert(undoBlock.includes('applySnapshot'),
+      'Undo: performUndo memanggil applySnapshot');
+
+    // A3. performRedo: pop redoStack, push ke undoStack, applySnapshot
+    const iRedo = shellSrc.indexOf('performRedo(app)');
+    assert(iRedo !== -1, 'Undo: performRedo terdefinisi');
+    const redoBlock = shellSrc.slice(iRedo, iRedo + 500);
+    assert(redoBlock.includes('.pop()'),
+      'Undo: performRedo pop dari redoStack');
+    assert(redoBlock.includes('undoStack') && redoBlock.includes('.push('),
+      'Undo: performRedo push ke undoStack');
+    assert(redoBlock.includes('applySnapshot'),
+      'Undo: performRedo memanggil applySnapshot');
+
+    // A4. recordSheetsHistory: guard pindah-tab (hanya ganti puncak, tidak push)
+    assert(/recordSheetsHistory\s*\(data\)/.test(shellSrc),
+      'Undo: recordSheetsHistory terdefinisi (guard pindah-tab)');
+    assert(shellSrc.includes('JSON.stringify(prev.sheets) === JSON.stringify(data.sheets)'),
+      'Undo: guard pindah-tab membandingkan sheets[], bukan cells');
+
+    // A5. dedup: snapshot identik tidak di-push ulang
+    assert(shellSrc.includes('stack[stack.length - 1] === key') &&
+      shellSrc.includes('return'),
+      'Undo: snapshot identik didedup (tidak push ulang)');
+
+    // A6. resetHistory: menyetel ulang stack
+    assert(/resetHistory\s*\(app,\s*data\)/.test(shellSrc),
+      'Undo: resetHistory terdefinisi');
+
+    // ---- B. RENDER SEGITIGA CELLCOMMENT: kontrak sumber ritz ----
+    // Segitiga digambar oleh renderCellCommentIndicators() yang dipanggil
+    // dari render(). Yang dikunci: fungsi ada, dipanggil di render,
+    // warna amber (terbuka) vs abu-abu (selesai), ukuran 8px.
+
+    // ritzSrc sudah ada: editorSrc.ritz (didefinisikan di :512)
+
+    // B1. Fungsi renderCellCommentIndicators ada
+    assert(/renderCellCommentIndicators\s*\(ctx/.test(ritzSrc),
+      'Comment render: renderCellCommentIndicators(ctx,...) terdefinisi');
+
+    // B2. Dipanggil di render()
+    assert(ritzSrc.includes('this.renderCellCommentIndicators(ctx'),
+      'Comment render: dipanggil dari render()');
+
+    // B3. Memakai visibleCommentCoords()
+    const iRender = ritzSrc.indexOf('renderCellCommentIndicators(ctx');
+    const renderBlock = ritzSrc.slice(iRender, iRender + 1500);
+    assert(renderBlock.includes('visibleCommentCoords'),
+      'Comment render: memakai visibleCommentCoords()');
+
+    // B4. Warna: amber untuk terbuka, abu-abu untuk selesai
+    assert(renderBlock.includes("'#f9ab00'") || renderBlock.includes('#f9ab00'),
+      'Comment render: warna amber #f9ab00 untuk komentar terbuka');
+    assert(renderBlock.includes("'#9aa0a6'") || renderBlock.includes('#9aa0a6'),
+      'Comment render: warna abu-abu #9aa0a6 untuk komentar selesai');
+
+    // B5. Logika: anyOpen = some(!resolved) menentukan warna
+    assert(renderBlock.includes('anyOpen') && renderBlock.includes('!c.resolved'),
+      'Comment render: logika anyOpen = ada komentar belum resolved');
+
+    // B6. Ukuran segitiga = 8px
+    assert(/size\s*=\s*8/.test(renderBlock),
+      'Comment render: ukuran segitiga = 8px');
+
+    // B7. Clipping: header area tidak digambar
+    assert(renderBlock.includes('ctx.clip()') && renderBlock.includes('this.headerWidth'),
+      'Comment render: clipping menghindari area header');
+  }
+
   // Laporan keutuhan ISI seed (informatif, bukan kegagalan): pengujian E2E
   // mengetik & menyimpan dokumen contoh secara nyata, jadi isinya bisa berubah.
   // Struktur tetap diuji di Suite 8/12; nilai persisnya dilaporkan di sini.

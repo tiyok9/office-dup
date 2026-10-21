@@ -1,0 +1,12 @@
+# Normalisasi line ending - semua teks = LF di index dan worktree.
+# Menghapus kelas bug 'anchor patch meleset karena eol campur'.
+* text=auto eol=lf
+
+# Binari - jangan sentuh
+*.png binary
+*.jpg binary
+*.ico binary
+*.gif binary
+*.woff binary
+*.woff2 binary
+*.ttf binary

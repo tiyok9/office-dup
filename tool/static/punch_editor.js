@@ -318,6 +318,9 @@
         const w = Math.max(40, (el.text || '').length * size * 0.55);
         return { el, x: this.absX(el, slide), y: this.absY(el, slide) - size, w, h: size + 8, kind: 'text' };
       }
+      if (el.type === 'group') {
+        return { el, x: el.x, y: el.y, w: el.width, h: el.height, kind: 'group' };
+      }
       return null;
     }
 
@@ -729,6 +732,105 @@
       return true;
     }
 
+    // ==== ROTASI ELEMEN (paritas Google Slides) ====
+    // angle dalam derajat, searah jarum jam. Disimpan di el.angle.
+    rotateElement(degrees) {
+      const slide = this.getActiveSlide();
+      if (!slide || !this.selectedElementId) return false;
+      const el = slide.elements.find(x => x.id === this.selectedElementId);
+      if (!el) return false;
+      el.angle = ((el.angle || 0) + degrees) % 360;
+      this.render();
+      if (typeof this.onChange === 'function') this.onChange(this.slides);
+      return true;
+    }
+
+    setElementAngle(degrees) {
+      const slide = this.getActiveSlide();
+      if (!slide || !this.selectedElementId) return false;
+      const el = slide.elements.find(x => x.id === this.selectedElementId);
+      if (!el) return false;
+      el.angle = degrees % 360;
+      this.render();
+      if (typeof this.onChange === 'function') this.onChange(this.slides);
+      return true;
+    }
+
+    // ==== GROUP / UNGROUP ELEMEN (paritas Google Slides) ====
+    // groupElements: gabungkan elemen-elemen terpilih menjadi satu grup.
+    // IDs = array of element ids to group.
+    groupElements(ids) {
+      const slide = this.getActiveSlide();
+      if (!slide || !ids || ids.length < 2) return false;
+      const children = [];
+      const remaining = [];
+      for (const el of slide.elements) {
+        if (ids.includes(el.id)) children.push(el);
+        else remaining.push(el);
+      }
+      if (children.length < 2) return false;
+      // Hitung bounding box grup
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const el of children) {
+        const bx = el.x !== undefined ? el.x : (el.cx !== undefined ? el.cx - (el.r || 0) : 0);
+        const by = el.y !== undefined ? el.y : (el.cy !== undefined ? el.cy - (el.r || 0) : 0);
+        const bw = el.width || (el.r ? el.r * 2 : 0) || 0;
+        const bh = el.height || (el.r ? el.r * 2 : 0) || 0;
+        minX = Math.min(minX, bx);
+        minY = Math.min(minY, by);
+        maxX = Math.max(maxX, bx + bw);
+        maxY = Math.max(maxY, by + bh);
+      }
+      const groupEl = {
+        id: 'grp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+        type: 'group',
+        x: minX, y: minY,
+        width: maxX - minX, height: maxY - minY,
+        children: children
+      };
+      remaining.push(groupEl);
+      slide.elements = remaining;
+      this.selectedElementId = groupEl.id;
+      this.render();
+      if (typeof this.onChange === 'function') this.onChange(this.slides);
+      return groupEl.id;
+    }
+
+    ungroupElements() {
+      const slide = this.getActiveSlide();
+      if (!slide || !this.selectedElementId) return false;
+      const idx = slide.elements.findIndex(x => x.id === this.selectedElementId);
+      if (idx < 0) return false;
+      const el = slide.elements[idx];
+      if (el.type !== 'group' || !el.children) return false;
+      // Splice children back
+      slide.elements.splice(idx, 1, ...el.children);
+      this.selectedElementId = null;
+      this.render();
+      if (typeof this.onChange === 'function') this.onChange(this.slides);
+      return true;
+    }
+
+    // ==== TRANSISI SLIDE (paritas Google Slides) ====
+    setSlideTransition(type, durationMs) {
+      const slide = this.getActiveSlide();
+      if (!slide) return false;
+      const validTypes = ['none', 'fade', 'slide-left', 'slide-right', 'zoom'];
+      slide.transition = validTypes.includes(type) ? type : 'none';
+      slide.transitionDuration = typeof durationMs === 'number' && durationMs > 0 ? durationMs : 500;
+      if (typeof this.onChange === 'function') this.onChange(this.slides);
+      return true;
+    }
+
+    getSlideTransition() {
+      const slide = this.getActiveSlide();
+      if (!slide) return { type: 'none', duration: 500 };
+      return {
+        type: slide.transition || 'none',
+        duration: slide.transitionDuration || 500
+      };
+    }
+
     updateSelectedColor(color) {
       const slide = this.getActiveSlide();
       if (!slide || !this.selectedElementId) return false;
@@ -800,22 +902,51 @@
       });
     }
 
+    // Bungkus SVG markup dengan transform rotate jika el.angle !== 0
+    _wrapRotation(el, svgMarkup) {
+      const angle = el.angle || 0;
+      if (!angle) return svgMarkup;
+      // Hitung pusat rotasi dari bounding box elemen
+      let cx, cy;
+      if (el.type === 'rect') { cx = el.x + el.width / 2; cy = el.y + el.height / 2; }
+      else if (el.type === 'circle') { cx = el.cx; cy = el.cy; }
+      else if (el.type === 'line') { cx = (el.x1 + el.x2) / 2; cy = (el.y1 + el.y2) / 2; }
+      else if (el.type === 'text') { cx = el.x || 0; cy = el.y || 0; }
+      else { cx = (el.x || 0) + (el.width || 0) / 2; cy = (el.y || 0) + (el.height || 0) / 2; }
+      return `<g transform="rotate(${angle}, ${cx}, ${cy})">${svgMarkup}</g>`;
+    }
+
     elementToSvg(el, slide) {
       const isSelected = el.id === this.selectedElementId;
       const selStroke = isSelected ? 'stroke="#1a73e8" stroke-width="2" stroke-dasharray="4 2"' : '';
       const opacity = el.opacity !== undefined ? `opacity="${el.opacity}"` : '';
 
+      // ==== GROUP RENDERING ====
+      if (el.type === 'group' && el.children) {
+        let inner = '';
+        for (const child of el.children) {
+          inner += this.elementToSvg(child, slide);
+        }
+        const angle = el.angle || 0;
+        if (angle) {
+          const cx = el.x + el.width / 2;
+          const cy = el.y + el.height / 2;
+          return `<g data-element-id="${el.id}" transform="rotate(${angle}, ${cx}, ${cy})" style="cursor: move;">${inner}</g>`;
+        }
+        return `<g data-element-id="${el.id}" style="cursor: move;">${inner}</g>`;
+      }
+
       if (el.type === 'rect') {
         const rx = el.rx ? `rx="${el.rx}"` : '';
         const stroke = el.stroke ? `stroke="${escapeXml(el.stroke)}" stroke-width="${el.strokeWidth || 1}"` : '';
-        return `<rect data-element-id="${el.id}" x="${el.x}" y="${el.y}" width="${el.width}" height="${el.height}" fill="${escapeXml(el.fill || '#ffffff')}" ${rx} ${stroke} ${opacity} style="cursor: move;"/>`;
+        return this._wrapRotation(el, `<rect data-element-id="${el.id}" x="${el.x}" y="${el.y}" width="${el.width}" height="${el.height}" fill="${escapeXml(el.fill || '#ffffff')}" ${rx} ${stroke} ${opacity} style="cursor: move;"/>`);
       }
       if (el.type === 'circle') {
         const stroke = el.stroke ? `stroke="${escapeXml(el.stroke)}" stroke-width="${el.strokeWidth || 1}"` : '';
-        return `<circle data-element-id="${el.id}" cx="${el.cx}" cy="${el.cy}" r="${el.r}" fill="${escapeXml(el.fill || '#ffffff')}" ${stroke} ${opacity} style="cursor: move;"/>`;
+        return this._wrapRotation(el, `<circle data-element-id="${el.id}" cx="${el.cx}" cy="${el.cy}" r="${el.r}" fill="${escapeXml(el.fill || '#ffffff')}" ${stroke} ${opacity} style="cursor: move;"/>`);
       }
       if (el.type === 'line') {
-        return `<line data-element-id="${el.id}" x1="${el.x1}" y1="${el.y1}" x2="${el.x2}" y2="${el.y2}" stroke="${escapeXml(el.stroke || '#202124')}" stroke-width="${el.strokeWidth || 2}" stroke-linecap="round" ${opacity} style="cursor: move;"/>`;
+        return this._wrapRotation(el, `<line data-element-id="${el.id}" x1="${el.x1}" y1="${el.y1}" x2="${el.x2}" y2="${el.y2}" stroke="${escapeXml(el.stroke || '#202124')}" stroke-width="${el.strokeWidth || 2}" stroke-linecap="round" ${opacity} style="cursor: move;"/>`);
       }
       if (el.type === 'text') {
         const ax = this.absX(el, slide);
@@ -831,7 +962,7 @@
         const hitW = Math.max(40, (el.text || '').length * numSize * 0.55);
         const hitH = numSize + 8;
         const hitBox = `<rect data-element-id="${el.id}" x="${ax}" y="${ay - numSize}" width="${hitW}" height="${hitH}" fill="#000000" fill-opacity="0" pointer-events="all" style="cursor: move;"/>`;
-        return hitBox + `<text data-element-id="${el.id}" x="${ax}" y="${ay}" fill="${escapeXml(el.fill || '#202124')}" ${font} ${size} ${weight} ${opacity} style="cursor: move; user-select: none;">${escapeXml(el.text)}</text>`;
+        return this._wrapRotation(el, hitBox + `<text data-element-id="${el.id}" x="${ax}" y="${ay}" fill="${escapeXml(el.fill || '#202124')}" ${font} ${size} ${weight} ${opacity} style="cursor: move; user-select: none;">${escapeXml(el.text)}</text>`);
       }
       return '';
     }
@@ -936,13 +1067,28 @@
         });
       }
 
-      const updateOverlay = () => {
+      const updateOverlay = (direction) => {
+        const slide = this.slides[this.activeSlideIdx];
+        const trans = slide ? (slide.transition || 'none') : 'none';
+        const dur = slide ? (slide.transitionDuration || 500) : 500;
+        const animStyle = trans === 'none' ? ''
+          : trans === 'fade' ? `animation: punchFadeIn ${dur}ms ease;`
+          : trans === 'slide-left' ? `animation: punchSlideLeft ${dur}ms ease;`
+          : trans === 'slide-right' ? `animation: punchSlideRight ${dur}ms ease;`
+          : trans === 'zoom' ? `animation: punchZoomIn ${dur}ms ease;`
+          : '';
         overlay.innerHTML = `
+          <style>
+            @keyframes punchFadeIn { from { opacity: 0; } to { opacity: 1; } }
+            @keyframes punchSlideLeft { from { transform: translateX(100%); } to { transform: translateX(0); } }
+            @keyframes punchSlideRight { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+            @keyframes punchZoomIn { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+          </style>
           <div style="position: absolute; top: 16px; right: 24px; color: #fff; font-size: 13px; font-family: sans-serif; display: flex; gap: 16px; align-items: center; z-index: 100000;">
             <span>Slide ${this.activeSlideIdx + 1} / ${this.slides.length}</span>
             <span style="background: rgba(255,255,255,0.2); padding: 4px 10px; border-radius: 4px; cursor: pointer;" onclick="document.getElementById('slidesPresentOverlay').style.display='none'">Tutup (Esc)</span>
           </div>
-          <div style="width: 90vw; max-width: 1200px; aspect-ratio: 16/9; background: #fff; box-shadow: 0 10px 40px rgba(0,0,0,0.8); border-radius: 4px; overflow: hidden;">
+          <div style="width: 90vw; max-width: 1200px; aspect-ratio: 16/9; background: #fff; box-shadow: 0 10px 40px rgba(0,0,0,0.8); border-radius: 4px; overflow: hidden; ${animStyle}">
             <svg viewBox="0 0 960 540" style="width: 100%; height: 100%;">
               ${this.stage.innerHTML}
             </svg>

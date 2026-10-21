@@ -3127,6 +3127,84 @@ async function runTestSuite() {
     'Sheets 10c: notifyChange dipanggil setelah rename');
 
   console.log('  Suite 10c (rename sheet): selesai');
+
+  // ================= Suite 10d: SLIDES — Rotasi, Group, Transisi =================
+  console.log('\n--- Suite 10d: Slides — Rotasi, Group, Transisi ---');
+  const punchSrc10d = fs.readFileSync(path.resolve(__dirname, 'static/punch_editor.js'), 'utf8');
+
+  // 10d-1: rotateElement method ada
+  assertActive(punchSrc10d, /rotateElement\s*\(/,
+    'Slides 10d: rotateElement method ada (aktif)');
+
+  // 10d-2: setElementAngle method ada
+  assertActive(punchSrc10d, /setElementAngle\s*\(/,
+    'Slides 10d: setElementAngle method ada (aktif)');
+
+  // 10d-3: _wrapRotation helper ada
+  assertActive(punchSrc10d, /_wrapRotation\s*\(/,
+    'Slides 10d: _wrapRotation helper ada (aktif)');
+
+  // 10d-4: SVG transform="rotate(...)" ada di _wrapRotation
+  assert(/transform="rotate\(/.test(punchSrc10d),
+    'Slides 10d: SVG transform rotate ada di punch');
+
+  // 10d-5: elementToSvg memanggil _wrapRotation
+  assert((punchSrc10d.match(/this\._wrapRotation\(/g) || []).length >= 4,
+    'Slides 10d: elementToSvg memanggil _wrapRotation >= 4x (rect, circle, line, text)');
+
+  // 10d-6: groupElements method ada
+  assertActive(punchSrc10d, /groupElements\s*\(/,
+    'Slides 10d: groupElements method ada (aktif)');
+
+  // 10d-7: ungroupElements method ada
+  assertActive(punchSrc10d, /ungroupElements\s*\(/,
+    'Slides 10d: ungroupElements method ada (aktif)');
+
+  // 10d-8: elementToSvg punya branch group
+  assert(/el\.type === 'group'/.test(punchSrc10d),
+    'Slides 10d: elementToSvg punya branch type=group');
+
+  // 10d-9: group children recursive render
+  assert(/el\.children/.test(punchSrc10d),
+    'Slides 10d: group render iterates el.children');
+
+  // 10d-10: selectionBox punya branch group
+  assert(/kind: 'group'/.test(punchSrc10d),
+    'Slides 10d: selectionBox handle type=group');
+
+  // 10d-11: setSlideTransition method ada
+  assertActive(punchSrc10d, /setSlideTransition\s*\(/,
+    'Slides 10d: setSlideTransition method ada (aktif)');
+
+  // 10d-12: getSlideTransition method ada
+  assertActive(punchSrc10d, /getSlideTransition\s*\(/,
+    'Slides 10d: getSlideTransition method ada (aktif)');
+
+  // 10d-13: validTypes mengandung fade, slide-left, zoom
+  assert(/fade/.test(punchSrc10d) && /slide-left/.test(punchSrc10d) && /zoom/.test(punchSrc10d),
+    'Slides 10d: transisi mendukung fade, slide-left, zoom');
+
+  // 10d-14: CSS @keyframes ada di presentation mode
+  assert(/@keyframes punchFadeIn/.test(punchSrc10d),
+    'Slides 10d: @keyframes punchFadeIn ada');
+
+  // 10d-15: transitionDuration disimpan di slide
+  assert(/transitionDuration/.test(punchSrc10d),
+    'Slides 10d: transitionDuration property ada');
+
+  // 10d-16: angle property dipakai di rotateElement
+  assert(/el\.angle/.test(punchSrc10d),
+    'Slides 10d: el.angle property dipakai');
+
+  // 10d-17: pusat rotasi dihitung dari bounding box (cx, cy)
+  assert(/el\.x \+ el\.width \/ 2/.test(punchSrc10d),
+    'Slides 10d: pusat rotasi rect = x + width/2');
+
+  // 10d-18: onChange dipanggil setelah rotate
+  assert((punchSrc10d.match(/this\.onChange/g) || []).length >= 8,
+    'Slides 10d: onChange dipanggil cukup banyak (>= 8 tempat)');
+
+  console.log('  Suite 10d (slides rotasi+group+transisi): selesai');
     }
 
 

@@ -3093,6 +3093,40 @@ async function runTestSuite() {
     'Formula 10b: helper matchesCriteria ada di formula.mjs');
 
   console.log('  Suite 10b (formula conditional+lookup+date): selesai');
+
+  // ================= Suite 10c: RENAME SHEET =================
+  console.log('\n--- Suite 10c: Rename Sheet ---');
+  const ritzSrc10c = fs.readFileSync(path.resolve(__dirname, 'static/ritz_editor.js'), 'utf8');
+
+  // 10c-1: method renameSheet ada
+  assert(/renameSheet\s*\(/.test(ritzSrc10c),
+    'Sheets 10c: method renameSheet ada di ritz_editor.js');
+
+  // 10c-2: validasi nama kosong
+  assert(/trimmed/.test(ritzSrc10c) && /!trimmed/.test(ritzSrc10c),
+    'Sheets 10c: renameSheet memvalidasi nama kosong');
+
+  // 10c-3: cek duplikat case-insensitive
+  assert(/toLowerCase\(\)\s*===/.test(ritzSrc10c),
+    'Sheets 10c: renameSheet cek duplikat case-insensitive');
+
+  // 10c-4: renderSheetTabs punya dblclick handler
+  assert(/dblclick/.test(ritzSrc10c),
+    'Sheets 10c: renderSheetTabs punya dblclick handler untuk rename');
+
+  // 10c-5: input rename ada di renderSheetTabs
+  assert(/sheet-tab-rename/.test(ritzSrc10c),
+    'Sheets 10c: input rename punya class sheet-tab-rename');
+
+  // 10c-6: Enter commit, Escape cancel
+  assert(/Enter/.test(ritzSrc10c) && /Escape/.test(ritzSrc10c),
+    'Sheets 10c: input rename handle Enter (commit) dan Escape (cancel)');
+
+  // 10c-7: notifyChange dipanggil setelah rename
+  assertActive(ritzSrc10c, /this\.notifyChange\(\)/,
+    'Sheets 10c: notifyChange dipanggil setelah rename');
+
+  console.log('  Suite 10c (rename sheet): selesai');
     }
 
 

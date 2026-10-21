@@ -135,6 +135,23 @@
       this.initEvents();
     }
 
+    // ==== RENAME SHEET ====
+    // Google Sheets membolehkan rename tab via double-click.
+    // Validasi: nama tidak boleh kosong, tidak boleh duplikat (case-insensitive).
+    renameSheet(idx, newName) {
+      if (idx < 0 || idx >= this.sheets.length) return false;
+      const trimmed = String(newName == null ? '' : newName).trim();
+      if (!trimmed) return false;
+      // Cek duplikat (case-insensitive, kecuali diri sendiri)
+      const dup = this.sheets.some((s, i) => i !== idx && s.name.toLowerCase() === trimmed.toLowerCase());
+      if (dup) return false;
+      this.sheets[idx].name = trimmed;
+      this.renderSheetTabs();
+      this.notifyChange();
+      return true;
+    }
+
+
     // Tulis keadaan editor saat ini ke entri sheets[] yang aktif.
     // Dipanggil SEBELUM berpindah sheet / sebelum menyusun data dokumen,
     // supaya suntingan pada sheet lama tidak hilang.
@@ -799,6 +816,28 @@
           tab.appendChild(x);
         }
         tab.addEventListener('click', () => this.switchSheet(i));
+        // Double-click untuk rename (paritas Google Sheets)
+        tab.addEventListener('dblclick', (e) => {
+          e.stopPropagation();
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.className = 'sheet-tab-rename';
+          input.value = s.name;
+          input.style.cssText = 'width:80px;font-size:11px;border:1px solid #1a73e8;padding:1px 4px;';
+          const finish = () => {
+            const ok = this.renameSheet(i, input.value);
+            if (!ok) this.renderSheetTabs(); // revert visual
+          };
+          input.addEventListener('blur', finish);
+          input.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); }
+            if (ev.key === 'Escape') { input.value = s.name; input.blur(); }
+          });
+          label.textContent = '';
+          label.appendChild(input);
+          input.focus();
+          input.select();
+        });
         bar.appendChild(tab);
       });
       const add = document.createElement('button');

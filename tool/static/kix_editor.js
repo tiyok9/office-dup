@@ -49,6 +49,16 @@
       this.hiddenInput = document.getElementById(hiddenInputId);
       this.onPageChange = onPageChange;
 
+      // ==== VIRTUALISASI TILE (paritas .kix-rotatingtilemanager) ====
+      // Ambang sengaja LEBIH TINGGI dari jumlah halaman dokumen seed (2),
+      // supaya dokumen pendek berperilaku 100% identik dengan sebelumnya.
+      // Yang dihemat hanya PAINT kanvas; tile tetap dibuat di DOM agar
+      // indeks halaman, hit-test, dan scrollIntoView tidak berubah.
+      this.tileVirtualizeMin = 3;   // aktif bila total halaman > 3
+      this.tileWindowSpan = 1;      // halaman di kiri/kanan yang ikut dicat
+      this._dirtyPages = new Set(); // halaman yang kanvasnya sudah terisi
+      this._forceAll = false;       // paksa cat semua (dipakai renderAllForce)
+
       this.pages = [
         {
           pageNumber: 1,
@@ -212,6 +222,13 @@
           // tabel — tetap meninggalkan kursor input di interceptor.
           if (this.hiddenInput) this.hiddenInput.focus();
           const pIdxRaw = parseInt(canvas.getAttribute('data-page') || '0', 10);
+          // Halaman di luar jendela virtualisasi belum dicat, sehingga kotak
+          // hit-test-nya belum ada. Cat dulu, kalau tidak klik mendarat di
+          // baris yang salah (regresi senyap yang sulit dilacak).
+          if (this._dirtyPages && !this._dirtyPages.has(pIdxRaw)) {
+            this.renderPage(pIdxRaw);
+            this._dirtyPages.add(pIdxRaw);
+          }
           const rect = canvas.getBoundingClientRect();
           // Kompensasi zoom: rect mengembalikan ukuran SETELAH transform,
           // sedangkan koordinat gambar kanvas tetap 1:1 (PAGE_CANVAS_WIDTH).
@@ -229,6 +246,27 @@
           const pIdx = this.activePageIdx;
 
           const line = this.pages[pIdx]?.lines[this.activeLineIdx];
+
+          // ==== KLIK GAMBAR ====
+          // Baris gambar tidak punya line.text, jadi pemetaan karakter di
+          // bawah menaruh kursor di offset 0 dan gambar TIDAK PERNAH bisa
+          // dipilih. Tanpa cabang ini resizeActiveImage() dan
+          // setActiveImageAlign() mustahil dipakai user.
+          const imgHit = this.imageAt(pIdx, clickXl, clickYl);
+          this._lastHitImage = imgHit || null;
+          if (imgHit) {
+            this.activePageIdx = pIdx;
+            this.activeLineIdx = imgHit.lIdx;
+            this.activeCell = null;
+            this.selection = null;
+            this._dragging = false;
+            this.cursorCharIdx = 0;
+            if (this.hiddenInput) this.hiddenInput.focus();
+            this.isCaretVisible = true;
+            this.emitActiveLine();
+            this.renderAllPages();
+            return;
+          }
 
           // ==== KLIK HIGHLIGHT KOMENTAR ====
           // WAJIB diperiksa SEBELUM pemetaan karakter. Kalau tidak, klik pada
@@ -395,6 +433,8 @@
       // yang BENAR-BENAR mengisi viewport (lihat pageIndexAtViewportTop).
       this.scrollBox.addEventListener('scroll', () => {
         const curPage = this.pageIndexAtViewportTop() + 1;
+        // Geser jendela render mengikuti halaman yang mengisi viewport.
+        this.updateRenderWindow(false, curPage - 1);
         if (typeof this.onPageChange === 'function') {
           this.onPageChange(curPage, this.pages.length, this.calculateWordCount());
         }
@@ -992,6 +1032,78 @@
       this.cellCaret = newCell ? (newCell.text || '').length : 0;
       this.renderAllPages();
       this.emitActiveLine();
+      return true;
+    }
+
+    // ==== STRUKTUR TABEL: TAMBAH / HAPUS BARIS & KOLOM ====
+    // Paritas Docs: operasi berlaku pada baris/kolom tempat sel aktif berada.
+    // Tanpa ini tabel hanya bisa dibuat, tidak bisa diubah setelahnya.
+    insertTableRow(where) {
+      const line = this.activeTableLine();
+      if (!line || !this.activeCell) return false;
+      const t = line.table;
+      const nC = (t.rows[0] || []).length;
+      const row = [];
+      for (let i = 0; i < nC; i++) row.push({ text: '' });
+      const at = (where === 'above') ? this.activeCell.r : this.activeCell.r + 1;
+      t.rows.splice(at, 0, row);
+      this.activeCell = { r: at, c: this.activeCell.c };
+      this.cellCaret = 0;
+      this.reflowPages();
+      this.renderAllPages();
+      this.emitActiveLine();
+      this.notifyChange();
+      return true;
+    }
+
+    deleteTableRow() {
+      const line = this.activeTableLine();
+      if (!line || !this.activeCell) return false;
+      const t = line.table;
+      // Tabel minimal harus punya satu baris; menghapus baris terakhir
+      // akan menyisakan struktur tanpa sel yang membuat render pecah.
+      if (t.rows.length <= 1) return false;
+      const r = Math.max(0, Math.min(t.rows.length - 1, this.activeCell.r));
+      t.rows.splice(r, 1);
+      this.activeCell = { r: Math.min(r, t.rows.length - 1), c: this.activeCell.c };
+      this.cellCaret = 0;
+      this.reflowPages();
+      this.renderAllPages();
+      this.emitActiveLine();
+      this.notifyChange();
+      return true;
+    }
+
+    insertTableColumn(where) {
+      const line = this.activeTableLine();
+      if (!line || !this.activeCell) return false;
+      const t = line.table;
+      const at = (where === 'left') ? this.activeCell.c : this.activeCell.c + 1;
+      for (const row of t.rows) row.splice(at, 0, { text: '' });
+      this.activeCell = { r: this.activeCell.r, c: at };
+      this.cellCaret = 0;
+      this.reflowPages();
+      this.renderAllPages();
+      this.emitActiveLine();
+      this.notifyChange();
+      return true;
+    }
+
+    deleteTableColumn() {
+      const line = this.activeTableLine();
+      if (!line || !this.activeCell) return false;
+      const t = line.table;
+      const nC = (t.rows[0] || []).length;
+      // Sama seperti baris: minimal satu kolom harus tersisa.
+      if (nC <= 1) return false;
+      const c = Math.max(0, Math.min(nC - 1, this.activeCell.c));
+      for (const row of t.rows) row.splice(c, 1);
+      this.activeCell = { r: this.activeCell.r, c: Math.min(c, nC - 2) };
+      this.cellCaret = 0;
+      this.reflowPages();
+      this.renderAllPages();
+      this.emitActiveLine();
+      this.notifyChange();
       return true;
     }
 
@@ -2382,6 +2494,61 @@
       }
     }
 
+    // ==== JENDELA RENDER (VIRTUALISASI TILE) ====
+    // Paritas .kix-rotatingtilemanager milik Google Docs: hanya tile di
+    // sekitar viewport yang DIRASTERISASI. Tile DOM tetap dibuat untuk
+    // SEMUA halaman, sehingga indeks halaman, hit-test, clampPoint, dan
+    // scrollIntoView tidak berubah - yang dihemat murni paint kanvas.
+    //
+    // Gerbang tileVirtualizeMin (default 3) membuat dokumen pendek
+    // berperilaku 100% identik dengan sebelum perubahan ini.
+    updateRenderWindow(force, probeIdx) {
+      const total = this.pages.length;
+      if (!(total > this.tileVirtualizeMin)) {
+        for (let i = 0; i < total; i++) {
+          if (force || !this._dirtyPages.has(i)) {
+            this.renderPage(i);
+            this._dirtyPages.add(i);
+          }
+        }
+        this._renderWindow = { lo: 0, hi: Math.max(0, total - 1) };
+        return total;
+      }
+      const center = Math.max(0, Math.min(total - 1,
+        (probeIdx === undefined || probeIdx === null) ? this.activePageIdx : probeIdx));
+      const span = Math.max(0, Number(this.tileWindowSpan) || 0);
+      const lo = Math.max(0, center - span);
+      const hi = Math.min(total - 1, center + span);
+      let painted = 0;
+      for (let i = lo; i <= hi; i++) {
+        if (force || !this._dirtyPages.has(i)) {
+          this.renderPage(i);
+          this._dirtyPages.add(i);
+          painted++;
+        }
+      }
+      this._renderWindow = { lo: lo, hi: hi };
+      return painted;
+    }
+
+    // Cat SEMUA halaman tanpa memedulikan jendela render.
+    // WAJIB dipakai jalur Cetak/PDF: printOrExportPdf merasterisasi tiap
+    // kanvas lewat toDataURL, sehingga halaman yang belum dicat akan
+    // tercetak sebagai halaman KOSONG.
+    renderAllForce() {
+      this._forceAll = true;
+      try {
+        for (let i = 0; i < this.pages.length; i++) {
+          this.renderPage(i);
+          this._dirtyPages.add(i);
+        }
+      } finally {
+        this._forceAll = false;
+      }
+      this._renderWindow = { lo: 0, hi: Math.max(0, this.pages.length - 1) };
+      return this.pages.length;
+    }
+
     renderAllPages() {
       const container = this.scrollBox;
 
@@ -2404,8 +2571,26 @@
         container.appendChild(pageDiv);
       }
 
-      for (let i = 0; i < this.pages.length; i++) {
-        this.renderPage(i);
+      // Kanvas baru dibuat kosong oleh rebuild DOM di atas, jadi penanda
+      // 'sudah dicat' lama tidak berlaku lagi dan harus direset.
+      this._dirtyPages = new Set();
+      const totalPages = this.pages.length;
+      const virtual = totalPages > this.tileVirtualizeMin;
+      // Kelas & atribut paritas .kix-rotatingtilemanager (bisa dibuktikan tes).
+      if (container.classList && typeof container.classList.toggle === 'function') {
+        container.classList.toggle('kix-rotatingtilemanager', virtual);
+      }
+      if (typeof container.setAttribute === 'function') {
+        container.setAttribute('data-virtualized', virtual ? '1' : '0');
+      }
+      if (virtual && !this._forceAll) {
+        this.updateRenderWindow(false, this.activePageIdx);
+      } else {
+        for (let i = 0; i < totalPages; i++) {
+          this.renderPage(i);
+          this._dirtyPages.add(i);
+        }
+        this._renderWindow = { lo: 0, hi: Math.max(0, totalPages - 1) };
       }
 
       if (typeof this.onPageChange === 'function') {

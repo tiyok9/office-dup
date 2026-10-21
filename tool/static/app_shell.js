@@ -1282,6 +1282,17 @@
           { sep: true },
           { label: 'Tabel (Docs)', action: () => this.openInsertTableModal() },
           { label: 'Gambar (Docs)', action: () => this.openInsertImageModal() },
+          { label: 'Ukuran Gambar (Docs)', action: () => this.openImageSizeModal() },
+          { label: 'Gambar Rata Kiri (Docs)', action: () => this.setImageAlign('left') },
+          { label: 'Gambar Rata Tengah (Docs)', action: () => this.setImageAlign('center') },
+          { label: 'Gambar Rata Kanan (Docs)', action: () => this.setImageAlign('right') },
+          { sep: true },
+          { label: 'Tabel: Sisip Baris di Atas', action: () => this.tableOp('rowAbove') },
+          { label: 'Tabel: Sisip Baris di Bawah', action: () => this.tableOp('rowBelow') },
+          { label: 'Tabel: Hapus Baris', action: () => this.tableOp('rowDelete') },
+          { label: 'Tabel: Sisip Kolom di Kiri', action: () => this.tableOp('colLeft') },
+          { label: 'Tabel: Sisip Kolom di Kanan', action: () => this.tableOp('colRight') },
+          { label: 'Tabel: Hapus Kolom', action: () => this.tableOp('colDelete') },
           { sep: true },
           { label: 'Penyiapan Halaman (Docs)', action: () => this.openPageSetupModal() },
           { label: 'Komentar', shortcut: 'Ctrl+Alt+M', action: () => { if (this.currentApp === 'sheets') this.openSheetCommentModal(); else this.openCommentModal(); } },
@@ -1609,6 +1620,61 @@
       this.showToast('Gambar disisipkan.');
     }
 
+    // ==== GAMBAR: UKURAN & PERATAAN ====
+    // Engine sudah punya resizeActiveImage()/setActiveImageAlign(), tetapi
+    // tanpa pintu ini keduanya KODE MATI: user tak bisa mengubah gambar
+    // setelah disisipkan. Kelas celah yang sama dengan Tabel/Gambar dulu.
+    async openImageSizeModal() {
+      if (!this.kix || this.currentApp !== 'docs') return;
+      const val = await this.promptModal({
+        title: 'Ukuran Gambar',
+        message: 'Lebar gambar dalam piksel. Tinggi mengikuti proporsi asli gambar.',
+        defaultValue: '240',
+        confirmText: 'Terapkan'
+      });
+      if (val === null || val === undefined) return;
+      const w = parseInt(String(val).trim(), 10);
+      if (!w || w < 8) {
+        return this.alertModal({ title: 'Lebar tidak valid', message: 'Masukkan angka minimal 8.' });
+      }
+      if (!this.kix.resizeActiveImage(w)) {
+        return this.alertModal({ title: 'Tidak ada gambar aktif', message: 'Klik gambarnya dulu, lalu ulangi.' });
+      }
+      this.showToast('Lebar gambar: ' + w + 'px');
+    }
+
+    setImageAlign(align) {
+      if (!this.kix || this.currentApp !== 'docs') return;
+      if (!this.kix.setActiveImageAlign(align)) {
+        return this.alertModal({ title: 'Tidak ada gambar aktif', message: 'Klik gambarnya dulu, lalu ulangi.' });
+      }
+      this.showToast('Gambar rata ' + align + '.');
+    }
+
+    // ==== TABEL: STRUKTUR BARIS & KOLOM ====
+    // Tabel sebelumnya hanya bisa DIBUAT, tidak bisa diubah. Satu pintu
+    // untuk enam operasi agar menu tidak menumpuk enam method serupa.
+    tableOp(op) {
+      if (!this.kix || this.currentApp !== 'docs') return;
+      const map = {
+        rowAbove: () => this.kix.insertTableRow('above'),
+        rowBelow: () => this.kix.insertTableRow('below'),
+        rowDelete: () => this.kix.deleteTableRow(),
+        colLeft: () => this.kix.insertTableColumn('left'),
+        colRight: () => this.kix.insertTableColumn('right'),
+        colDelete: () => this.kix.deleteTableColumn()
+      };
+      const fn = map[op];
+      if (!fn) return;
+      if (!fn()) {
+        return this.alertModal({
+          title: 'Tidak bisa dijalankan',
+          message: 'Letakkan kursor di dalam sel tabel. Tabel selalu menyisakan minimal satu baris dan satu kolom.'
+        });
+      }
+      this.showToast('Tabel diperbarui.');
+    }
+
     async openPageSetupModal() {
       if (!this.kix || this.currentApp !== 'docs') return;
       const cur = this.kix.getPageSetup();
@@ -1635,6 +1701,11 @@
       // Canvas tidak ikut alur cetak browser secara otomatis. Setiap halaman Kix
       // dirasterisasi ke <img> lalu ditulis ke jendela cetak — jalur yang sama
       // dipakai untuk "ekspor PDF" lewat dialog cetak (Save as PDF).
+      // Virtualisasi tile hanya mencat halaman di sekitar viewport. Tanpa
+      // renderAllForce(), halaman yang jauh masih kanvas KOSONG dan
+      // toDataURL() menghasilkan PDF berisi halaman kosong. Ini regresi
+      // fungsional yang tidak tertangkap tes lama mana pun.
+      if (typeof this.kix.renderAllForce === 'function') this.kix.renderAllForce();
       const canvases = document.querySelectorAll('.kix-page-paginated canvas, .kix-page canvas');
       if (!canvases.length) { window.print(); return; }
       const win = window.open('', '_blank');
@@ -1646,6 +1717,12 @@
         html += '<img src="' + canvases[i].toDataURL('image/png') + '" />';
       }
       html += '</body></html>';
+      // Kembalikan jendela render normal setelah seluruh rasterisasi selesai.
+      // Data gambar sudah tersalin menjadi string HTML, jadi kanvas di luar
+      // jendela boleh dilepas lagi agar memori tidak membengkak.
+      if (typeof this.kix.updateRenderWindow === 'function') {
+        this.kix.updateRenderWindow(false, this.kix.activePageIdx);
+      }
       win.document.open();
       win.document.write(html);
       win.document.close();

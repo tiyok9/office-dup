@@ -2258,6 +2258,214 @@ async function runTestSuite() {
     console.log('  Suite 9i (wiring UI Docs + seleksi rentang): selesai');
   }
 
+    // ================= Suite 9j: VIRTUALISASI TILE, JALUR CETAK, STRUKTUR TABEL & GAMBAR =================
+    console.log('\n--- Suite 9j: Virtualisasi Tile, Jalur Cetak, Struktur Tabel & Gambar ---');
+    {
+      // Kix9i dideklarasikan const DI DALAM blok Suite 9i, jadi tidak terlihat
+      // di sini (ReferenceError: Kix9i is not defined). Muat kelas sendiri.
+      const Kix9j = loadEditor('static/kix_editor.js', 'KixDocsEditor');
+      const srcKix9j = fs.readFileSync(path.resolve(__dirname, 'static/kix_editor.js'), 'utf8');
+      const srcShell9j = fs.readFileSync(path.resolve(__dirname, 'static/app_shell.js'), 'utf8');
+      const defCount9j = (src, name) => (src.match(new RegExp('^\\s{4}(?:async\\s+)?' + name + '\\s*\\(', 'gm')) || []).length;
+      const mkDoc9j = (n) => ({
+        pages: Array.from({ length: n }, (_, i) => ({ lines: [{ text: 'baris halaman ' + (i + 1) }] }))
+      });
+      const findTable9j = (k) => k.pages.reduce((acc, p) => acc || p.lines.find(l => l && l.type === 'table') || null, null);
+      // Stub DOM tidak mengosongkan children saat innerHTML='' (cacat harness,
+      // bukan cacat engine). Reset manual supaya hitungan tile bermakna.
+      const resetBox9j = (k) => { k.scrollBox.children.length = 0; k._dirtyPages = new Set(); };
+
+      // ---- 9j-01..02: state & gerbang ambang ----
+      const k9v0 = new Kix9j('docsScrollBox', 'kixHiddenInput');
+      assert(k9v0.tileVirtualizeMin === 3 && k9v0.tileWindowSpan === 1,
+        `Docs 9j: state virtualisasi default (min=3, span=1) :: min=${k9v0.tileVirtualizeMin} span=${k9v0.tileWindowSpan}`);
+      assert(k9v0._dirtyPages instanceof Set && k9v0._forceAll === false,
+        'Docs 9j: penanda _dirtyPages berupa Set dan _forceAll mulai false');
+
+      // ---- 9j-03..04: DOKUMEN PENDEK identik perilaku lama (bukti gerbang) ----
+      const k9vShort = new Kix9j('docsScrollBox', 'kixHiddenInput');
+      k9vShort.setDocumentData(mkDoc9j(2));
+      k9vShort.activePageIdx = 0;
+      resetBox9j(k9vShort);
+      k9vShort.renderAllPages();
+      assert(k9vShort._dirtyPages.size === 2,
+        `Docs 9j: dokumen 2 halaman tetap dicat SELURUHNYA (gerbang min=3) :: dirty=${k9vShort._dirtyPages.size}`);
+      assert(k9vShort._renderWindow.lo === 0 && k9vShort._renderWindow.hi === 1,
+        `Docs 9j: jendela dokumen pendek mencakup semua halaman :: ${JSON.stringify(k9vShort._renderWindow)}`);
+
+      // ---- 9j-05..09: DOKUMEN BANYAK HALAMAN - hanya sekitar viewport dicat ----
+      const k9v = new Kix9j('docsScrollBox', 'kixHiddenInput');
+      k9v.setDocumentData(mkDoc9j(8));
+      k9v.activePageIdx = 0;
+      resetBox9j(k9v);
+      k9v.renderAllPages();
+      const total9j = k9v.pages.length;
+      assert(total9j === 8,
+        `Docs 9j: prasyarat dokumen 8 halaman :: pages=${total9j}`);
+      assert(k9v._dirtyPages.size < total9j,
+        `Docs 9j: halaman JAUH tidak dirasterisasi (dirty ${k9v._dirtyPages.size} < ${total9j})`);
+      assert(k9v._dirtyPages.has(7) === false,
+        'Docs 9j: halaman terakhir (di luar jendela) belum dicat :: has(7)=false');
+      assert(k9v._renderWindow.lo === 0 && k9v._renderWindow.hi === 1,
+        `Docs 9j: jendela render awal = halaman aktif +-1 :: ${JSON.stringify(k9v._renderWindow)}`);
+      assert(k9v.scrollBox.children.length === 8,
+        `Docs 9j: SEMUA tile tetap dibuat di DOM walau paint dibatasi (paritas E2E S11) :: tile=${k9v.scrollBox.children.length}`);
+
+      // ---- 9j-10..12: jendela bergeser saat scroll ----
+      const before9j = k9v._dirtyPages.size;
+      k9v.updateRenderWindow(false, 7);
+      assert(k9v._renderWindow.lo === 6 && k9v._renderWindow.hi === 7,
+        `Docs 9j: updateRenderWindow(probe=7) menggeser jendela :: ${JSON.stringify(k9v._renderWindow)}`);
+      assert(k9v._dirtyPages.has(7) === true && k9v._dirtyPages.has(0) === true,
+        'Docs 9j: halaman baru dicat tanpa membuang halaman yang sudah dicat');
+      assert(k9v._dirtyPages.size > before9j,
+        `Docs 9j: jumlah halaman tercat bertambah setelah scroll :: ${before9j} -> ${k9v._dirtyPages.size}`);
+
+      // ---- 9j-13..15: renderAllForce (kunci jalur cetak) ----
+      const nForce = k9v.renderAllForce();
+      assert(nForce === 8 && k9v._dirtyPages.size === 8,
+        `Docs 9j: renderAllForce mencet SEMUA halaman :: ret=${nForce} dirty=${k9v._dirtyPages.size}`);
+      assert(k9v._renderWindow.lo === 0 && k9v._renderWindow.hi === 7,
+        `Docs 9j: renderAllForce melebarkan jendela ke seluruh dokumen :: ${JSON.stringify(k9v._renderWindow)}`);
+      assert(k9v._forceAll === false,
+        'Docs 9j: penanda _forceAll dikembalikan false (tidak bocor ke render berikutnya)');
+
+      // ---- 9j-16: renderAllPages mereset penanda & kembali menyempit ----
+      k9v.renderAllPages();
+      assert(k9v._dirtyPages.size === 2 && k9v._renderWindow.hi === 1,
+        `Docs 9j: renderAllPages mereset _dirtyPages lalu menyempit lagi :: dirty=${k9v._dirtyPages.size} win=${JSON.stringify(k9v._renderWindow)}`);
+
+      // ---- 9j-17..20: kontrak sumber virtualisasi ----
+      assert(srcKix9j.includes("container.classList.toggle('kix-rotatingtilemanager', virtual)"),
+        'Docs 9j: kontainer ditandai kelas kix-rotatingtilemanager (paritas Docs asli)');
+      assert(srcKix9j.includes("container.setAttribute('data-virtualized'"),
+        'Docs 9j: atribut data-virtualized dipasang untuk pembuktian tes');
+      assert(srcKix9j.includes('this.updateRenderWindow(false, this.activePageIdx)'),
+        'Docs 9j: renderAllPages memakai jendela render, bukan mencet semua');
+      assert(srcKix9j.includes('this.updateRenderWindow(false, curPage - 1)'),
+        'Docs 9j: handler scroll memperbarui jendela render');
+
+      // ---- 9j-21: klik pada halaman belum tercat harus mengecat dulu ----
+      assert(/if \(this\._dirtyPages && !this\._dirtyPages\.has\(pIdxRaw\)\) \{[\s\S]{0,120}this\.renderPage\(pIdxRaw\)/.test(srcKix9j),
+        'Docs 9j: mousedown mengecat halaman yang belum terpaint sebelum hit-test');
+
+      // ---- 9j-22..24: JALUR CETAK - jebakan PDF kosong ----
+      // Anchor WAJIB pada DEFINISI method, bukan kemunculan pertama string:
+      // 'printOrExportPdf()' juga muncul di entri menu File (baris ~1242),
+      // sehingga indexOf() pertama memotong blok yang salah dan asersi ini
+      // gagal palsu (force=-1 data=-1).
+      const iPrint9j = srcShell9j.indexOf('    printOrExportPdf() {');
+      const blkPrint9j = iPrint9j === -1 ? '' : srcShell9j.slice(iPrint9j, iPrint9j + 2600);
+      assert(iPrint9j !== -1 && blkPrint9j.includes('this.kix.renderAllForce()'),
+        'Docs 9j: printOrExportPdf memanggil renderAllForce() (tanpa ini PDF berisi halaman kosong)');
+      const pForce9j = blkPrint9j.indexOf('renderAllForce');
+      const pData9j = blkPrint9j.indexOf('toDataURL');
+      assert(pForce9j !== -1 && pData9j !== -1 && pForce9j < pData9j,
+        `Docs 9j: renderAllForce dipanggil SEBELUM toDataURL :: force=${pForce9j} data=${pData9j}`);
+      assert(blkPrint9j.includes('updateRenderWindow'),
+        'Docs 9j: jendela render dipulihkan setelah rasterisasi cetak');
+
+      // ---- 9j-25..27: WIRING SHELL (pintu UI untuk kode yang tadinya mati) ----
+      assert(defCount9j(srcShell9j, 'openImageSizeModal') === 1
+        && defCount9j(srcShell9j, 'setImageAlign') === 1
+        && defCount9j(srcShell9j, 'tableOp') === 1,
+        'Docs 9j: shell mendefinisikan openImageSizeModal/setImageAlign/tableOp tepat 1x (tanpa duplikat)');
+      assert(srcShell9j.includes("'Ukuran Gambar (Docs)'")
+        && srcShell9j.includes("'Gambar Rata Tengah (Docs)'")
+        && srcShell9j.includes("'Tabel: Sisip Baris di Bawah'")
+        && srcShell9j.includes("'Tabel: Hapus Kolom'"),
+        'Docs 9j: entri menu gambar & struktur tabel tersedia di menu Sisipkan');
+      assert(srcShell9j.includes('this.kix.resizeActiveImage(')
+        && srcShell9j.includes('this.kix.setActiveImageAlign(')
+        && srcShell9j.includes("this.kix.insertTableRow('above')")
+        && srcShell9j.includes('this.kix.deleteTableColumn()'),
+        'Docs 9j: shell benar-benar memanggil method engine gambar & tabel');
+
+      // ---- 9j-28..31: PERILAKU tabel - tambah/hapus baris & kolom ----
+      const k9t = new Kix9j('docsScrollBox', 'kixHiddenInput');
+      k9t.setDocumentData({ pages: [{ lines: [{ text: 'a' }] }] });
+      k9t.activePageIdx = 0; k9t.activeLineIdx = 0;
+      k9t.insertTable(2, 2);
+      const sync9j = () => {
+        for (let p = 0; p < k9t.pages.length; p++) {
+          const li = k9t.pages[p].lines.findIndex(l => l && l.type === 'table');
+          if (li !== -1) { k9t.activePageIdx = p; k9t.activeLineIdx = li; return; }
+        }
+      };
+      sync9j();
+      assert(findTable9j(k9t) && findTable9j(k9t).table.rows.length === 2,
+        'Docs 9j: prasyarat tabel 2x2 :: rows=' + (findTable9j(k9t) ? findTable9j(k9t).table.rows.length : 'null'));
+      k9t.activeCell = { r: 0, c: 0 };
+      const okRow9j = k9t.insertTableRow('below');
+      sync9j();
+      assert(okRow9j === true && findTable9j(k9t).table.rows.length === 3 && k9t.activeCell.r === 1,
+        `Docs 9j: insertTableRow('below') menambah baris di bawah sel aktif :: rows=${findTable9j(k9t).table.rows.length} active=${k9t.activeCell.r}`);
+      k9t.activeCell = { r: 0, c: 0 };
+      k9t.insertTableColumn('right');
+      sync9j();
+      assert(findTable9j(k9t).table.rows.every(r => r.length === 3),
+        'Docs 9j: insertTableColumn(\'right\') menambah kolom di SEMUA baris :: cols=' + findTable9j(k9t).table.rows[0].length);
+      const okDelCol9j = k9t.deleteTableColumn();
+      sync9j();
+      assert(okDelCol9j === true && findTable9j(k9t).table.rows.every(r => r.length === 2),
+        'Docs 9j: deleteTableColumn() mengembalikan tabel ke 2 kolom');
+      const okDelRow9j = k9t.deleteTableRow();
+      sync9j();
+      assert(okDelRow9j === true && findTable9j(k9t).table.rows.length === 2,
+        'Docs 9j: deleteTableRow() mengembalikan tabel ke 2 baris');
+
+      // 9j-38: cabang 'above' HARUS diuji terpisah. Sebelum ini hanya
+      // 'below' yang dieksekusi, sehingga mutasi yang mengabaikan 'above'
+      // lolos tanpa suara (falsifikasi menemukannya, bukan dugaan).
+      k9t.activeCell = { r: 1, c: 0 };
+      const okAbove9j = k9t.insertTableRow('above');
+      sync9j();
+      assert(okAbove9j === true && findTable9j(k9t).table.rows.length === 3 && k9t.activeCell.r === 1,
+        `Docs 9j: insertTableRow('above') menyisipkan DI ATAS sel aktif :: rows=${findTable9j(k9t).table.rows.length} active=${k9t.activeCell.r}`);
+
+      // ---- 9j-32..33: penjaga struktur minimal tabel ----
+      const k9min = new Kix9j('docsScrollBox', 'kixHiddenInput');
+      k9min.setDocumentData({ pages: [{ lines: [{ text: 'a' }] }] });
+      k9min.activePageIdx = 0; k9min.activeLineIdx = 0;
+      k9min.insertTable(1, 1);
+      for (let p = 0; p < k9min.pages.length; p++) {
+        const li = k9min.pages[p].lines.findIndex(l => l && l.type === 'table');
+        if (li !== -1) { k9min.activePageIdx = p; k9min.activeLineIdx = li; break; }
+      }
+      k9min.activeCell = { r: 0, c: 0 };
+      assert(k9min.deleteTableRow() === false && k9min.deleteTableColumn() === false,
+        'Docs 9j: tabel 1x1 menolak hapus baris/kolom terakhir (guard, bukan crash)');
+
+      // ---- 9j-34..37: PERILAKU gambar - pilih, ubah ukuran, ratakan ----
+      const k9i = new Kix9j('docsScrollBox', 'kixHiddenInput');
+      k9i.setDocumentData({ pages: [{ lines: [{ text: 'a' }] }] });
+      k9i.activePageIdx = 0; k9i.activeLineIdx = 0;
+      k9i.insertImage('https://example.com/a.png');
+      const imgLine9j = k9i.pages[0].lines.findIndex(l => l && l.type === 'image');
+      k9i.activeLineIdx = imgLine9j;
+      k9i.renderAllPages();
+      const box9j = k9i._imageBoxes.filter(b => b.pIdx === 0)[0] || null;
+      assert(box9j && k9i.imageAt(0, box9j.x + 1, box9j.y + 1),
+        'Docs 9j: imageAt() menemukan kotak gambar pada koordinat di dalamnya (hit-test hidup)');
+      const maxW9j = k9i.pageWidth() - k9i.marginLeft() - k9i.marginRight();
+      k9i.resizeActiveImage(99999);
+      const wClamp9j = k9i.pages[0].lines[imgLine9j].image.width;
+      assert(wClamp9j === maxW9j,
+        `Docs 9j: resizeActiveImage menjepit lebar ke area teks :: ${wClamp9j} (maks ${maxW9j})`);
+      k9i.resizeActiveImage(120);
+      assert(k9i.pages[0].lines[imgLine9j].image.width === 120,
+        'Docs 9j: resizeActiveImage menerapkan lebar yang sah');
+      k9i.setActiveImageAlign('center');
+      const al1_9j = k9i.pages[0].lines[imgLine9j].image.align;
+      k9i.setActiveImageAlign('ngawur');
+      const al2_9j = k9i.pages[0].lines[imgLine9j].image.align;
+      assert(al1_9j === 'center' && al2_9j === 'left',
+        `Docs 9j: setActiveImageAlign menerima center & menormalkan nilai asing ke left :: ${al1_9j} -> ${al2_9j}`);
+
+      console.log('  Suite 9j (virtualisasi + cetak + tabel/gambar): selesai');
+    }
+
+
 
     // Laporan keutuhan ISI seed (informatif, bukan kegagalan): pengujian E2E
   // mengetik & menyimpan dokumen contoh secara nyata, jadi isinya bisa berubah.

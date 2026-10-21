@@ -368,6 +368,30 @@ function roundTo(v, d) {
   return Math.round(toNum(v) * f) / f;
 }
 
+// matchesCriteria: Google Sheets criteria — ">100", "<=5", "<>abc", "abc", 100
+function matchesCriteria(cellValue, criteria) {
+  const cStr = String(criteria).trim();
+  // Operator prefix
+  const opMatch = cStr.match(/^(<>|>=|<=|>|<|=)(.*)$/);
+  if (opMatch) {
+    const [, op, rest] = opMatch;
+    const cv = typeof cellValue === 'number' ? cellValue : toNum(cellValue);
+    const rv = rest.trim() === '' ? 0 : (isNaN(Number(rest)) ? String(rest).toLowerCase() : Number(rest));
+    const cvCmp = typeof rv === 'string' ? String(cellValue).toLowerCase() : cv;
+    switch (op) {
+      case '>':  return cvCmp > rv;
+      case '<':  return cvCmp < rv;
+      case '>=': return cvCmp >= rv;
+      case '<=': return cvCmp <= rv;
+      case '<>': return cvCmp !== rv;
+      case '=':  return cvCmp === rv;
+    }
+  }
+  // Exact match (case-insensitive for strings)
+  if (typeof cellValue === 'number' && !isNaN(Number(cStr))) return cellValue === Number(cStr);
+  return String(cellValue).toLowerCase() === cStr.toLowerCase();
+}
+
 const FUNCTIONS = {
   SUM: (a, g, v) => collectNumbers(a, g, v).reduce((x, y) => x + y, 0),
   AVERAGE: (a, g, v) => {
@@ -436,6 +460,180 @@ const FUNCTIONS = {
     const x = numOf(a[0], g, v);
     const sig = a.length > 1 ? numOf(a[1], g, v) : 1;
     return sig === 0 ? 0 : Math.floor(x / sig) * sig;
+  },
+
+  // --- CONDITIONAL AGGREGATES ---
+  COUNTIF: (a, g, v) => {
+    const s = scalar(a[0], g, v);
+    if (s.kind !== 'range') return '#VALUE!';
+    const crit = textOf(a[1], g, v);
+    let count = 0;
+    for (const c of s.coords) {
+      const r = resolveRawValue(c, g, new Set(v));
+      if (!r.empty && matchesCriteria(r.value, crit)) count++;
+    }
+    return count;
+  },
+  COUNTIFS: (a, g, v) => {
+    // COUNTIFS(range1, criteria1, range2, criteria2, ...)
+    if (a.length < 2 || a.length % 2 !== 0) return '#VALUE!';
+    const pairs = [];
+    for (let i = 0; i < a.length; i += 2) {
+      const s = scalar(a[i], g, v);
+      if (s.kind !== 'range') return '#VALUE!';
+      pairs.push({ coords: s.coords, crit: textOf(a[i + 1], g, v) });
+    }
+    const len = pairs[0].coords.length;
+    if (pairs.some(p => p.coords.length !== len)) return '#VALUE!';
+    let count = 0;
+    for (let i = 0; i < len; i++) {
+      let allMatch = true;
+      for (const p of pairs) {
+        const r = resolveRawValue(p.coords[i], g, new Set(v));
+        if (r.empty || !matchesCriteria(r.value, p.crit)) { allMatch = false; break; }
+      }
+      if (allMatch) count++;
+    }
+    return count;
+  },
+  SUMIF: (a, g, v) => {
+    const s = scalar(a[0], g, v);
+    if (s.kind !== 'range') return '#VALUE!';
+    const crit = textOf(a[1], g, v);
+    const sumRange = a.length > 2 ? scalar(a[2], g, v) : s;
+    const sumCoords = sumRange.kind === 'range' ? sumRange.coords : s.coords;
+    let sum = 0;
+    for (let i = 0; i < s.coords.length; i++) {
+      const r = resolveRawValue(s.coords[i], g, new Set(v));
+      if (!r.empty && matchesCriteria(r.value, crit)) {
+        const sv = i < sumCoords.length
+          ? resolveRawValue(sumCoords[i], g, new Set(v))
+          : { value: 0 };
+        sum += toNum(sv.value);
+      }
+    }
+    return sum;
+  },
+  SUMIFS: (a, g, v) => {
+    // SUMIFS(sum_range, criteria_range1, criteria1, ...)
+    if (a.length < 3 || a.length % 2 !== 1) return '#VALUE!';
+    const sumS = scalar(a[0], g, v);
+    if (sumS.kind !== 'range') return '#VALUE!';
+    const pairs = [];
+    for (let i = 1; i < a.length; i += 2) {
+      const s = scalar(a[i], g, v);
+      if (s.kind !== 'range') return '#VALUE!';
+      pairs.push({ coords: s.coords, crit: textOf(a[i + 1], g, v) });
+    }
+    const len = sumS.coords.length;
+    if (pairs.some(p => p.coords.length !== len)) return '#VALUE!';
+    let sum = 0;
+    for (let i = 0; i < len; i++) {
+      let allMatch = true;
+      for (const p of pairs) {
+        const r = resolveRawValue(p.coords[i], g, new Set(v));
+        if (r.empty || !matchesCriteria(r.value, p.crit)) { allMatch = false; break; }
+      }
+      if (allMatch) {
+        const sv = resolveRawValue(sumS.coords[i], g, new Set(v));
+        sum += toNum(sv.value);
+      }
+    }
+    return sum;
+  },
+
+  // --- LOOKUP ---
+  VLOOKUP: (a, g, v) => {
+    const searchVal = scalar(a[0], g, v);
+    const tableRange = scalar(a[1], g, v);
+    const colIdx = Math.floor(numOf(a[2], g, v));
+    const approx = a.length > 3 ? truthyOf(a[3], g, v) : true;
+    if (tableRange.kind !== 'range') return '#VALUE!';
+    // Tentukan dimensi tabel: butuh hitung kolom dari range
+    const first = parseCellCoord(tableRange.coords[0]);
+    const last = parseCellCoord(tableRange.coords[tableRange.coords.length - 1]);
+    if (!first || !last) return '#REF!';
+    const numCols = last.colIdx - first.colIdx + 1;
+    const numRows = (last.row - first.row + 1);
+    if (colIdx < 1 || colIdx > numCols) return '#REF!';
+    const sv = searchVal.kind === 'number' ? searchVal.value
+             : searchVal.kind === 'string' ? searchVal.value
+             : searchVal.kind === 'boolean' ? (searchVal.value ? 1 : 0) : '';
+    let bestRow = -1;
+    for (let r = 0; r < numRows; r++) {
+      const coordIdx = r * numCols; // first col of this row
+      const cellVal = resolveRawValue(tableRange.coords[coordIdx], g, new Set(v));
+      const cv = cellVal.empty ? '' : cellVal.value;
+      if (approx) {
+        // Approximate: find largest value <= searchVal
+        if (typeof sv === 'number' && toNum(cv) <= sv) bestRow = r;
+      } else {
+        // Exact match
+        if (String(cv).toLowerCase() === String(sv).toLowerCase()) { bestRow = r; break; }
+      }
+    }
+    if (bestRow < 0) return '#N/A';
+    const resultCoord = tableRange.coords[bestRow * numCols + (colIdx - 1)];
+    const result = resolveRawValue(resultCoord, g, new Set(v));
+    return result.empty ? '' : result.value;
+  },
+  INDEX: (a, g, v) => {
+    const arr = scalar(a[0], g, v);
+    const rowNum = Math.floor(numOf(a[1], g, v));
+    const colNum = a.length > 2 ? Math.floor(numOf(a[2], g, v)) : 1;
+    if (arr.kind !== 'range') return '#VALUE!';
+    const first = parseCellCoord(arr.coords[0]);
+    const last = parseCellCoord(arr.coords[arr.coords.length - 1]);
+    if (!first || !last) return '#REF!';
+    const numCols = last.colIdx - first.colIdx + 1;
+    if (rowNum < 1 || colNum < 1) return '#REF!';
+    const idx = (rowNum - 1) * numCols + (colNum - 1);
+    if (idx < 0 || idx >= arr.coords.length) return '#REF!';
+    const r = resolveRawValue(arr.coords[idx], g, new Set(v));
+    return r.empty ? '' : r.value;
+  },
+  MATCH: (a, g, v) => {
+    const searchVal = scalar(a[0], g, v);
+    const arr = scalar(a[1], g, v);
+    const matchType = a.length > 2 ? Math.floor(numOf(a[2], g, v)) : 1;
+    if (arr.kind !== 'range') return '#VALUE!';
+    const sv = searchVal.kind === 'number' ? searchVal.value : String(searchVal.value);
+    let bestIdx = -1;
+    for (let i = 0; i < arr.coords.length; i++) {
+      const r = resolveRawValue(arr.coords[i], g, new Set(v));
+      const cv = r.empty ? '' : r.value;
+      if (matchType === 0) {
+        if (String(cv).toLowerCase() === String(sv).toLowerCase()) return i + 1;
+      } else if (matchType === 1) {
+        if (toNum(cv) <= toNum(sv)) bestIdx = i;
+      } else if (matchType === -1) {
+        if (toNum(cv) >= toNum(sv)) bestIdx = i;
+      }
+    }
+    return bestIdx >= 0 ? bestIdx + 1 : '#N/A';
+  },
+
+  // --- DATE/TIME ---
+  TODAY: () => {
+    const d = new Date();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${d.getFullYear()}-${mm}-${dd}`;
+  },
+  NOW: () => {
+    const d = new Date();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mi = String(d.getMinutes()).padStart(2, '0');
+    const ss = String(d.getSeconds()).padStart(2, '0');
+    return `${d.getFullYear()}-${mm}-${dd} ${hh}:${mi}:${ss}`;
+  },
+  RANDBETWEEN: (a, g, v) => {
+    const lo = Math.ceil(numOf(a[0], g, v));
+    const hi = Math.floor(numOf(a[1], g, v));
+    if (lo > hi) return '#NUM!';
+    return Math.floor(Math.random() * (hi - lo + 1)) + lo;
   }
 };
 FUNCTIONS.CONCATENATE = FUNCTIONS.CONCAT;

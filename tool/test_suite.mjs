@@ -66,6 +66,24 @@ function sliceMethod(source, name) {
   return '';
 }
 
+// Helper: pastikan pattern ADA di source DAN TIDAK dibungkam `if (false && ...)`.
+// Menutup pola survivor yang sudah dua kali menggigit (C4, C6).
+// Signature: assertActive(source, pattern, msg)
+//   - pattern: RegExp yang harus cocok di source
+//   - Otomatis menolak kalau baris yang cocok dimulai dengan `if (false &&`
+function assertActive(src, pattern, msg) {
+  assert(pattern.test(src), msg);
+  // Cari SEMUA baris yang cocok, periksa tiap baris tidak dimulai false &&
+  const lines = src.split('\n');
+  for (const line of lines) {
+    if (pattern.test(line)) {
+      const trimmed = line.trim();
+      assert(!/^if\s*\(\s*false\s*&&/.test(trimmed),
+        msg + ' [GUARD: baris ini dibungkam false &&]');
+    }
+  }
+}
+
 async function runTestSuite() {
   console.log('====================================================');
   console.log(' RUNNING AUTOMATED TESTS: GOOGLE WORKSPACE ENGINE');
@@ -2944,24 +2962,17 @@ async function runTestSuite() {
 
   // 9n-2: penjaga sumber — renderPage punya cabang justify AKTIF (bukan di-false-kan)
   const kixSrc9n = fs.readFileSync(path.resolve(__dirname, 'static/kix_editor.js'), 'utf8');
-  assert(/line\.align === 'justify'/.test(kixSrc9n),
-    'Docs 9n: renderPage mengenal align=justify');
-  // Guard: if(false && ...) berarti cabang dimatikan — asersi HARUS menolak.
-  assert(!/if\s*\(\s*false\s*&&[^)]*align\s*===\s*'justify'/.test(kixSrc9n),
-    'Docs 9n: cabang justify renderPage TIDAK BOLEH dibungkam false && (M10)');
+  assertActive(kixSrc9n, /line\.align === 'justify'/,
+    'Docs 9n: renderPage mengenal align=justify (aktif, bukan false&&)');
 
   // 9n-3: penjaga sumber — charIndexAtPoint punya cabang justify
+  // Harus ada >= 2 kemunculan aktif (renderPage + charIndexAtPoint)
   assert((kixSrc9n.match(/line\.align === 'justify'/g) || []).length >= 2,
     'Docs 9n: charIndexAtPoint JUGA mengenal align=justify (konsistensi hit-test)');
-  // Guard: juga di charIndexAtPoint, pastikan tidak dibungkam
-  assert(!/if\s*\(\s*false\s*&&[^)]*align\s*===\s*'justify'[^)]*segs\.length/.test(kixSrc9n),
-    'Docs 9n: cabang justify charIndexAtPoint TIDAK BOLEH dibungkam false && (M15)');
 
   // 9n-4: penjaga sumber — justify gambar kata per kata (justifyGaps) AKTIF
-  assert(/if\s*\(justifyGaps\)\s*\{/.test(kixSrc9n),
-    'Docs 9n: renderer memiliki blok justifyGaps (distribusi spasi)');
-  assert(!/if\s*\(\s*false\s*&&\s*justifyGaps\s*\)/.test(kixSrc9n),
-    'Docs 9n: blok justifyGaps TIDAK BOLEH dibungkam false && (M11)');
+  assertActive(kixSrc9n, /if\s*\(justifyGaps\)\s*\{/,
+    'Docs 9n: renderer memiliki blok justifyGaps aktif (distribusi spasi)');
 
   // 9n-5: baris terakhir paragraf = fallback left (sIdx < segs.length - 1)
   assert(/sIdx < segs\.length - 1/.test(kixSrc9n),
@@ -2986,6 +2997,102 @@ async function runTestSuite() {
     'Docs 9n: context menu punya opsi Rata Kanan Kiri (exact label)');
 
   console.log('  Suite 9n (justify alignment): selesai');
+
+  // ================= Suite 10b: FORMULA ENGINE — Fungsi Baru =================
+  console.log('\n--- Suite 10b: Formula Engine — Fungsi Conditional, Lookup, Date ---');
+  const { evaluateFormula: ef10b, evaluateAllSheetCells: eAll10b } = await import('./formula.mjs');
+  const g10b = (k) => {
+    const data = {
+      'A1': { raw: 10, val: 10 }, 'A2': { raw: 20, val: 20 },
+      'A3': { raw: 30, val: 30 }, 'A4': { raw: 40, val: 40 },
+      'B1': { raw: 'apel', val: 'apel' }, 'B2': { raw: 'jeruk', val: 'jeruk' },
+      'B3': { raw: 'apel', val: 'apel' }, 'B4': { raw: 'mangga', val: 'mangga' },
+      'C1': { raw: 100, val: 100 }, 'C2': { raw: 200, val: 200 },
+      'C3': { raw: 300, val: 300 }, 'C4': { raw: 400, val: 400 },
+    };
+    return data[String(k).toUpperCase()] || null;
+  };
+
+  // 10b-1: COUNTIF angka
+  assert(ef10b('=COUNTIF(A1:A4, ">15")', g10b) === 3,
+    'Formula 10b: COUNTIF(A1:A4, ">15") = 3');
+
+  // 10b-2: COUNTIF teks
+  assert(ef10b('=COUNTIF(B1:B4, "apel")', g10b) === 2,
+    'Formula 10b: COUNTIF(B1:B4, "apel") = 2');
+
+  // 10b-3: SUMIF
+  assert(ef10b('=SUMIF(A1:A4, ">15")', g10b) === 90,
+    'Formula 10b: SUMIF(A1:A4, ">15") = 90 (20+30+40)');
+
+  // 10b-4: SUMIF dengan sum_range
+  assert(ef10b('=SUMIF(B1:B4, "apel", C1:C4)', g10b) === 400,
+    'Formula 10b: SUMIF(B1:B4, "apel", C1:C4) = 400 (100+300)');
+
+  // 10b-5: COUNTIFS multi-kriteria
+  assert(ef10b('=COUNTIFS(A1:A4, ">15", A1:A4, "<35")', g10b) === 2,
+    'Formula 10b: COUNTIFS >15 AND <35 = 2 (20, 30)');
+
+  // 10b-6: SUMIFS
+  assert(ef10b('=SUMIFS(C1:C4, A1:A4, ">15", B1:B4, "apel")', g10b) === 300,
+    'Formula 10b: SUMIFS sum C where A>15 AND B=apel = 300');
+
+  // 10b-7: VLOOKUP exact
+  assert(ef10b('=VLOOKUP("jeruk", B1:C4, 2, FALSE)', g10b) === 200,
+    'Formula 10b: VLOOKUP jeruk exact = 200');
+
+  // 10b-8: VLOOKUP not found
+  assert(ef10b('=VLOOKUP("durian", B1:C4, 2, FALSE)', g10b) === '#N/A',
+    'Formula 10b: VLOOKUP durian = #N/A');
+
+  // 10b-9: INDEX
+  assert(ef10b('=INDEX(C1:C4, 3)', g10b) === 300,
+    'Formula 10b: INDEX(C1:C4, 3) = 300');
+
+  // 10b-10: MATCH exact
+  assert(ef10b('=MATCH("apel", B1:B4, 0)', g10b) === 1,
+    'Formula 10b: MATCH apel exact = 1');
+
+  // 10b-11: MATCH not found
+  assert(ef10b('=MATCH("durian", B1:B4, 0)', g10b) === '#N/A',
+    'Formula 10b: MATCH durian = #N/A');
+
+  // 10b-12: TODAY format YYYY-MM-DD
+  const todayResult = ef10b('=TODAY()', g10b);
+  assert(/^\d{4}-\d{2}-\d{2}$/.test(todayResult),
+    `Formula 10b: TODAY() format YYYY-MM-DD :: ${todayResult}`);
+
+  // 10b-13: NOW format YYYY-MM-DD HH:MM:SS
+  const nowResult = ef10b('=NOW()', g10b);
+  assert(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(nowResult),
+    `Formula 10b: NOW() format YYYY-MM-DD HH:MM:SS :: ${nowResult}`);
+
+  // 10b-14: RANDBETWEEN
+  const rb = ef10b('=RANDBETWEEN(1, 10)', g10b);
+  assert(typeof rb === 'number' && rb >= 1 && rb <= 10,
+    `Formula 10b: RANDBETWEEN(1,10) in [1..10] :: ${rb}`);
+
+  // 10b-15: INDEX+MATCH combo (nested)
+  assert(ef10b('=INDEX(C1:C4, MATCH("jeruk", B1:B4, 0))', g10b) === 200,
+    'Formula 10b: INDEX+MATCH combo = 200');
+
+  // 10b-16: COUNTIF <> operator
+  assert(ef10b('=COUNTIF(B1:B4, "<>apel")', g10b) === 2,
+    'Formula 10b: COUNTIF <> apel = 2 (jeruk, mangga)');
+
+  // 10b-17: penjaga sumber — semua fungsi baru ada di FUNCTIONS
+  const fmSrc10b = fs.readFileSync(path.resolve(__dirname, 'formula.mjs'), 'utf8');
+  for (const fn of ['COUNTIF', 'COUNTIFS', 'SUMIF', 'SUMIFS', 'VLOOKUP', 'INDEX', 'MATCH', 'TODAY', 'NOW', 'RANDBETWEEN']) {
+    const re = new RegExp('\\b' + fn + '\\s*:');
+    assert(re.test(fmSrc10b),
+      `Formula 10b: fungsi ${fn} ada di FUNCTIONS map`);
+  }
+
+  // 10b-18: matchesCriteria helper ada
+  assert(/function matchesCriteria/.test(fmSrc10b),
+    'Formula 10b: helper matchesCriteria ada di formula.mjs');
+
+  console.log('  Suite 10b (formula conditional+lookup+date): selesai');
     }
 
 

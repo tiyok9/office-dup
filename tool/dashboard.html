@@ -250,6 +250,9 @@
 
     <!-- GRUP DOCS -->
     <span class="tb-group-docs" style="display:flex; align-items:center; gap:4px;">
+      <div class="tb-btn" id="tbSpellCheck" title="Pemeriksaan ejaan dan tata bahasa (Ctrl+Alt+X)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg></div>
+      <div class="tb-btn" id="tbFormatPainter" title="Terapkan format / Kuas Format"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 4V3c0-.55-.45-1-1-1H5c-.55 0-1 .45-1 1v4c0 .55.45 1 1 1h12c.55 0 1-.45 1-1V6h1v4H9v11c0 .55.45 1 1 1h2c.55 0 1-.45 1-1v-9h8V4h-3z"/></svg></div>
+      <div class="tb-sep"></div>
       <select class="tb-select" id="tbFontFamily" title="Font" style="width: 110px;">
         <option value="Arial">Arial</option>
         <option value="Google Sans">Google Sans</option>
@@ -257,9 +260,11 @@
         <option value="Times New Roman">Times New Roman</option>
         <option value="Courier New">Courier New</option>
       </select>
+      <div class="tb-btn" id="tbFontSizeDec" title="Perkecil ukuran font (Ctrl+Shift+koma)" style="font-weight:bold; width:22px; font-size:16px;">-</div>
       <select class="tb-select" id="tbFontSize" title="Ukuran Font" style="width: 56px;">
         <option value="10">7,5</option><option value="12">9</option><option value="13">9,75</option><option value="14">10,5</option><option value="16">12</option><option value="18">13,5</option><option value="20">15</option><option value="24">18</option><option value="26">19,5</option><option value="32">24</option>
       </select>
+      <div class="tb-btn" id="tbFontSizeInc" title="Perbesar ukuran font (Ctrl+Shift+titik)" style="font-weight:bold; width:22px; font-size:16px;">+</div>
       <div class="tb-sep"></div>
       <div class="tb-btn" id="tbBold" style="font-weight:bold;" title="Tebal (Ctrl+B)">B</div>
       <div class="tb-btn" id="tbItalic" style="font-style:italic;" title="Miring (Ctrl+I)">I</div>
@@ -267,6 +272,9 @@
       <div class="tb-btn" id="tbStrike" style="text-decoration:line-through;" title="Coret">S</div>
       <div class="tb-btn" id="tbColor" title="Warna Teks"><span>A</span><span class="tb-dot" id="tbColorDot" style="background:#ea4335;"></span></div>
       <div class="tb-btn" id="tbBg" title="Warna Latar Teks"><span style="background:#fef7e0; padding:0 3px;">A</span><span class="tb-dot" id="tbBgDot" style="background:#fef7e0;"></span></div>
+      <div class="tb-sep"></div>
+      <div class="tb-btn" id="tbInsertLink" title="Sisipkan link (Ctrl+K)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg></div>
+      <div class="tb-btn" id="tbInsertImage" title="Sisipkan gambar"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg></div>
       <div class="tb-sep"></div>
       <div class="tb-btn" id="tbAlignLeft" title="Rata Kiri"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M15 15H3v2h12v-2zm0-8H3v2h12V7zM3 13h18v-2H3v2zm0 8h18v-2H3v2zM3 3v2h18V3H3z"/></svg></div>
       <div class="tb-btn" id="tbAlignCenter" title="Rata Tengah"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 15v2h10v-2H7zm-4 6h18v-2H3v2zm0-8h18v-2H3v2zm4-6v2h10V7H7zM3 3v2h18V3H3z"/></svg></div>

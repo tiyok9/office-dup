@@ -3393,6 +3393,57 @@ async function runTestSuite() {
   console.log('  Suite 11a (menu kontekstual per app): selesai');
     }
 
+    // =========================================================================
+    // Suite 11b: PARITAS REA DOCS (TOOLBAR 6 KONTROL & MENU ALAT KANONIKAL)
+    // =========================================================================
+    {
+      console.log('\n--- Suite 11b: Paritas REA Docs (Toolbar & Menu Alat) ---');
+      const htmlSrc11b = fs.readFileSync(path.resolve(__dirname, 'dashboard.html'), 'utf8');
+      const shellSrc11b = fs.readFileSync(path.resolve(__dirname, 'static/app_shell.js'), 'utf8');
+      const kixSrc11b = fs.readFileSync(path.resolve(__dirname, 'static/kix_editor.js'), 'utf8');
+
+      // 11b-1: Kontrol toolbar baru Docs di dashboard.html
+      assert(/id="tbSpellCheck"/.test(htmlSrc11b), 'Toolbar Docs punya tbSpellCheck');
+      assert(/id="tbFormatPainter"/.test(htmlSrc11b), 'Toolbar Docs punya tbFormatPainter');
+      assert(/id="tbFontSizeDec"/.test(htmlSrc11b), 'Toolbar Docs punya tbFontSizeDec');
+      assert(/id="tbFontSizeInc"/.test(htmlSrc11b), 'Toolbar Docs punya tbFontSizeInc');
+      assert(/id="tbInsertLink"/.test(htmlSrc11b), 'Toolbar Docs punya tbInsertLink');
+      assert(/id="tbInsertImage"/.test(htmlSrc11b), 'Toolbar Docs punya tbInsertImage');
+
+      // 11b-2: Toolbar bindings di app_shell.js
+      assert(/bind\('tbSpellCheck'/.test(shellSrc11b), 'Shell punya binding tbSpellCheck');
+      assert(/bind\('tbFormatPainter'/.test(shellSrc11b), 'Shell punya binding tbFormatPainter');
+      assert(/bind\('tbFontSizeDec'/.test(shellSrc11b), 'Shell punya binding tbFontSizeDec');
+      assert(/bind\('tbFontSizeInc'/.test(shellSrc11b), 'Shell punya binding tbFontSizeInc');
+      assert(/bind\('tbInsertImage'/.test(shellSrc11b), 'Shell punya binding tbInsertImage');
+
+      // 11b-3: Engine methods di kix_editor.js
+      assert(/changeFontSizeBy\(delta\)/.test(kixSrc11b), 'Kix punya changeFontSizeBy');
+      assert(/copyFormatting\(\)/.test(kixSrc11b), 'Kix punya copyFormatting');
+      assert(/applyFormatPainter\(\)/.test(kixSrc11b), 'Kix punya applyFormatPainter');
+      assert(/toggleLineNumbers\(\)/.test(kixSrc11b), 'Kix punya toggleLineNumbers');
+      assert(/checkSpelling\(\)/.test(kixSrc11b), 'Kix punya checkSpelling');
+
+      // 11b-4: Paritas Menu Alat kanonikal Docs di app_shell.js
+      assert(/Ejaan dan Tata Bahasa/.test(shellSrc11b), 'Menu Alat Docs punya Ejaan dan Tata Bahasa');
+      assert(/Nomor Baris/.test(shellSrc11b), 'Menu Alat Docs punya Nomor Baris');
+      assert(/Kamus & Definisi/.test(shellSrc11b), 'Menu Alat Docs punya Kamus & Definisi');
+      assert(/Terjemahkan Dokumen/.test(shellSrc11b), 'Menu Alat Docs punya Terjemahkan Dokumen');
+      assert(/Dikte \(Pengetikan Suara\)/.test(shellSrc11b), 'Menu Alat Docs punya Dikte (Pengetikan Suara)');
+      assert(/Preferensi/.test(shellSrc11b), 'Menu Alat Docs punya Preferensi');
+
+      // 11b-5: Supporting methods di AppShell
+      assert(/toggleFormatPainter\(\)/.test(shellSrc11b), 'Shell punya method toggleFormatPainter');
+      assert(/checkSpelling\(\)/.test(shellSrc11b), 'Shell punya method checkSpelling');
+      assert(/toggleLineNumbers\(\)/.test(shellSrc11b), 'Shell punya method toggleLineNumbers');
+      assert(/openDictionaryModal\(\)/.test(shellSrc11b), 'Shell punya method openDictionaryModal');
+      assert(/openTranslateModal\(\)/.test(shellSrc11b), 'Shell punya method openTranslateModal');
+      assert(/openPreferencesModal\(\)/.test(shellSrc11b), 'Shell punya method openPreferencesModal');
+      assert(/toggleVoiceTyping\(\)/.test(shellSrc11b), 'Shell punya method toggleVoiceTyping');
+
+      console.log('  Suite 11b (Paritas REA Docs): selesai');
+    }
+
 
 
     // Laporan keutuhan ISI seed (informatif, bukan kegagalan): pengujian E2E

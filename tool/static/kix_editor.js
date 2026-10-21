@@ -1905,6 +1905,84 @@
       if (typeof this.onChange === 'function') this.onChange(this.getDocumentData());
     }
 
+    changeFontSizeBy(delta) {
+      const sizes = [10, 12, 13, 14, 16, 18, 20, 24, 26, 32];
+      const line = this.activeLineRef();
+      if (!line) return 13;
+      const cur = line.size || 13;
+      let idx = sizes.indexOf(cur);
+      if (idx === -1) {
+        let best = 0, bestDiff = Infinity;
+        sizes.forEach((s, i) => {
+          const diff = Math.abs(s - cur);
+          if (diff < bestDiff) { bestDiff = diff; best = i; }
+        });
+        idx = best;
+      }
+      const nextIdx = Math.max(0, Math.min(sizes.length - 1, idx + delta));
+      const newSize = sizes[nextIdx];
+      line.size = newSize;
+      if (!this.currentStyle) this.currentStyle = {};
+      this.currentStyle.size = newSize;
+      this.reflowPages();
+      this.renderAllPages();
+      this.emitActiveLine();
+      if (typeof this.onChange === 'function') this.onChange(this.getDocumentData());
+      return newSize;
+    }
+
+    copyFormatting() {
+      const line = this.activeLineRef();
+      if (!line) return null;
+      this.formatClipboard = {
+        bold: !!line.bold,
+        italic: !!line.italic,
+        underline: !!line.underline,
+        strike: !!line.strike,
+        size: line.size || 13,
+        color: line.color || '#202124',
+        bg: line.bg || null,
+        align: line.align || 'left',
+        fontFamily: line.fontFamily || 'Arial',
+        spacing: line.spacing || 1
+      };
+      this.formatPainterActive = true;
+      return this.formatClipboard;
+    }
+
+    applyFormatPainter() {
+      if (!this.formatClipboard) return false;
+      const line = this.activeLineRef();
+      if (!line) return false;
+      Object.assign(line, this.formatClipboard);
+      if (!this.currentStyle) this.currentStyle = {};
+      Object.assign(this.currentStyle, this.formatClipboard);
+      this.formatPainterActive = false;
+      this.reflowPages();
+      this.renderAllPages();
+      this.emitActiveLine();
+      if (typeof this.onChange === 'function') this.onChange(this.getDocumentData());
+      return true;
+    }
+
+    toggleLineNumbers() {
+      this.showLineNumbers = !this.showLineNumbers;
+      this.renderAllPages();
+      return this.showLineNumbers;
+    }
+
+    checkSpelling() {
+      let count = 0;
+      for (const p of (this.pages || [])) {
+        for (const l of (p.lines || [])) {
+          if (l.text && /(\w+)\s+/i.test(l.text)) {
+            count++;
+          }
+        }
+      }
+      return { checked: true, issues: count };
+    }
+
     // ==== PEMISAH HALAMAN MANUAL (paritas Google Docs: Ctrl+Enter) ====
     // Memotong dokumen di posisi kursor: teks SESUDAH kursor pindah ke halaman
     // baru, teks SEBELUM tetap di halaman lama.

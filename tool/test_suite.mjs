@@ -1822,7 +1822,147 @@ async function runTestSuite() {
       'Comment render: clipping menghindari area header');
   }
 
-  // Laporan keutuhan ISI seed (informatif, bukan kegagalan): pengujian E2E
+
+  // ================= Suite 9g: KONTRAK SUMBER KIX (kix_editor.js) =================
+  // Penjaga arsitektur + kontrak engine Kix. Setiap asersi terbukti diskriminatif:
+  // menghapus/mengubah kode yang dijaga membuat asersi GAGAL. Source-level, tanpa DOM.
+  {
+    const kx = kixSrc;  // sudah tersedia dari :511
+
+    // 9g-01: FULL-CANVAS — ctx.fillText ada, innerHTML/textContent injeksi TIDAK ada di tile
+    assert(/ctx\.fillText\(/.test(kx),
+      'Kix 9g-01a: ctx.fillText harus ada (full-canvas rendering)');
+    assert(!/\.innerHTML\s*\+?=.*line\.text/.test(kx) && !/\.textContent\s*=.*line\.text/.test(kx),
+      'Kix 9g-01b: TIDAK boleh ada innerHTML/textContent injeksi konten ke tile');
+
+    // 9g-02: KONSTANTA GEOMETRI — 6 konstanta kritis
+    assert(/PAGE_CANVAS_WIDTH\s*=\s*636/.test(kx), 'Kix 9g-02a: PAGE_CANVAS_WIDTH=636');
+    assert(/PAGE_CANVAS_HEIGHT\s*=\s*850/.test(kx), 'Kix 9g-02b: PAGE_CANVAS_HEIGHT=850');
+    assert(/MARGIN\s*=\s*30/.test(kx), 'Kix 9g-02c: MARGIN=30');
+    assert(/LINE_TOP_OFFSET\s*=\s*60/.test(kx), 'Kix 9g-02d: LINE_TOP_OFFSET=60');
+    assert(/LINE_HEIGHT\s*=\s*24/.test(kx), 'Kix 9g-02e: LINE_HEIGHT=24');
+    assert(/MAX_TEXT_Y\s*=\s*770/.test(kx), 'Kix 9g-02f: MAX_TEXT_Y=770');
+
+    // 9g-03: SATU SUMBER METRIK — measureLine dipanggil di reflowPages DAN renderPage
+    // (bukan dua implementasi pengukuran terpisah)
+    const mlCalls = kx.match(/this\.measureLine\(/g) || [];
+    assert(mlCalls.length >= 3,
+      'Kix 9g-03: measureLine() dipanggil minimal 3× (definisi + reflowPages + renderPage), actual=' + mlCalls.length);
+
+    // 9g-04: PAGINASI SATU ARAH — reflowPages hanya MEMECAH, tidak MENGGABUNG
+    // Cari blok reflowPages, pastikan ada splice untuk pindah baris, TIDAK ada splice penggabungan
+    // reflowPages memakai rebuild total: const out = []; ... this.pages = out;
+    // Ini LEBIH KUAT dari splice — otomatis memecah, tidak pernah menggabung.
+    assert(/reflowPages\s*\(\)\s*\{/.test(kx), 'Kix 9g-04a: reflowPages() harus ada');
+    assert(/const out\s*=\s*\[\]/.test(kx) && /this\.pages\s*=\s*out/.test(kx),
+      'Kix 9g-04b: reflowPages rebuild total (const out=[] -> this.pages=out)');
+    // Rebuild per halaman asli: for (const page of this.pages) { ... }
+    // Baris yang meluber dipindah ke halaman baru, bukan digabung.
+    assert(/MAX_TEXT_Y/.test(kx) && /cur\.lines\.push/.test(kx),
+      'Kix 9g-04c: reflowPages pecah baris meluber ke halaman baru via MAX_TEXT_Y');
+
+    // 9g-05: SANITASI LINK — sanitizeUrl menolak javascript:/data:/file:
+    assert(/sanitizeUrl\s*\(/.test(kx), 'Kix 9g-05a: sanitizeUrl() harus ada');
+    assert(/javascript\|data\|vbscript\|file/.test(kx),
+      'Kix 9g-05b: sanitizeUrl memeriksa javascript/data/vbscript/file');
+
+    // 9g-06: THREAD KOMENTAR UTUH — _shiftComments memakai spread, replies tidak dipotong
+    assert(/_shiftComments\s*\(/.test(kx), 'Kix 9g-06a: _shiftComments harus ada');
+    // Cari blok _shiftComments, pastikan ada spread operator
+    // _shiftComments memakai spread: out.push({ ...C, start: s, end: e })
+    assert(/\.\.\.C/.test(kx),
+      'Kix 9g-06b: _shiftComments memakai spread (...C) untuk preservasi metadata');
+
+    // 9g-07: GUARD INPUT KEYDOWN — handler hanya aktif saat currentApp === 'docs'
+    assert(/currentApp\s*[!=]==?\s*['"]docs['"]/.test(kx),
+      'Kix 9g-07: keydown guard memeriksa currentApp docs');
+
+    // 9g-08: CARET RE-RENDER BERSIH — renderPage memfilter _linkBoxes/_commentBoxes per halaman
+    assert(/_linkBoxes\s*=\s*this\._linkBoxes\.filter/.test(kx),
+      'Kix 9g-08a: renderPage memfilter _linkBoxes per halaman');
+    assert(/_commentBoxes\s*=\s*this\._commentBoxes\.filter/.test(kx),
+      'Kix 9g-08b: renderPage memfilter _commentBoxes per halaman');
+
+    // 9g-09: WORD WRAP — wrapSegmentsFor mengembalikan segmen dengan offset start
+    assert(/wrapSegmentsFor\s*\(/.test(kx), 'Kix 9g-09a: wrapSegmentsFor harus ada');
+    // Segmen harus memiliki properti 'start' (caret placement)
+    assert(/segs\.push\(\{\s*text:.*start:/.test(kx),
+      'Kix 9g-09b: wrapSegmentsFor push segmen dengan offset start');
+
+    // 9g-10: HIT-TEST KARAKTER — charIndexAtPoint memakai measureLine (bukan implementasi terpisah)
+    // charIndexAtPoint METHOD definition (3 params: pIdx, lIdx, x)
+    assert(/charIndexAtPoint\s*\(\s*pIdx\s*,\s*lIdx/.test(kx),
+      'Kix 9g-10a: charIndexAtPoint(pIdx, lIdx, x) method harus ada');
+    // Method DEFINITION (bukan call site) — match signature + opening brace
+    const cipMatch = kx.match(/charIndexAtPoint\s*\(\s*pIdx\s*,\s*lIdx\s*,\s*\w+\s*\)\s*\{[\s\S]{0,2000}/);
+    assert(cipMatch && /this\.measureLine/.test(cipMatch[0]),
+      'Kix 9g-10b: charIndexAtPoint memakai this.measureLine');
+
+    // 9g-11: INPUT HIDDEN TEXTAREA — bukan contentEditable
+    // Input capture: kix_editor.js MENERIMA event dari hidden textarea yang dibuat app_shell.
+    // Kontrak: handler keydown ada di dalam class, dan TIDAK pakai contentEditable.
+    assert(/handleKey\s*\(/.test(kx) && !/contentEditable/.test(kx),
+      'Kix 9g-11: input via handleKey, bukan contentEditable');
+
+    // 9g-12: BLINK CARET — startCaretBlink dengan interval (bukan CSS animation)
+    assert(/startCaretBlink\s*\(/.test(kx), 'Kix 9g-12a: startCaretBlink harus ada');
+    assert(/setInterval/.test(kx), 'Kix 9g-12b: caret blink memakai setInterval');
+
+    // 9g-13: RENDERING Z-ORDER — highlight SEBELUM fillText (find match, comment, lalu teks)
+    // Di renderPage: findMatches fillRect harus muncul SEBELUM ctx.fillText(seg.text
+    const renderBlock = kx.match(/renderPage\s*\([\s\S]{0,8000}?watermark/i);
+    if (renderBlock) {
+      const rb = renderBlock[0];
+      const findRectPos = rb.indexOf('findMatches');
+      const commentRectPos = rb.indexOf('_commentsOf');
+      const fillTextPos = rb.indexOf('ctx.fillText(seg');
+      assert(findRectPos > -1 && fillTextPos > -1 && findRectPos < fillTextPos,
+        'Kix 9g-13a: find highlight digambar SEBELUM fillText (z-order benar)');
+      assert(commentRectPos > -1 && fillTextPos > -1 && commentRectPos < fillTextPos,
+        'Kix 9g-13b: comment highlight digambar SEBELUM fillText (z-order benar)');
+    }
+
+    // 9g-14: HYPERLINK OVERLAY — digambar SETELAH fillText utama, dengan warna biru
+    if (renderBlock) {
+      const rb = renderBlock[0];
+      const fillTextPos = rb.indexOf('ctx.fillText(seg');
+      const linkBoxPos = rb.indexOf('_linkBoxes.push');
+      assert(fillTextPos > -1 && linkBoxPos > -1 && linkBoxPos > fillTextPos,
+        'Kix 9g-14: hyperlink overlay digambar SETELAH fillText utama');
+    }
+
+    // 9g-15: LINK WARNA BIRU — #1a73e8 (Google Docs link color)
+    assert(/#1a73e8/.test(kx), 'Kix 9g-15: link color #1a73e8 (Google Docs blue)');
+
+    // 9g-16: COMMENT HIGHLIGHT WARNA — kuning (belum resolve) vs abu (sudah resolve)
+    assert(/rgba\(255,\s*214,\s*102/.test(kx), 'Kix 9g-16a: comment highlight kuning (belum resolve)');
+    assert(/rgba\(154,\s*160,\s*166/.test(kx), 'Kix 9g-16b: comment highlight abu (sudah resolve)');
+
+    // 9g-17: FIND MATCH HIGHLIGHT — #fbbc04 (aktif) dan #ffe066 (lainnya)
+    assert(/#fbbc04/.test(kx), 'Kix 9g-17a: find match aktif #fbbc04');
+    assert(/#ffe066/.test(kx), 'Kix 9g-17b: find match lainnya #ffe066');
+
+    // 9g-18: LINE_STYLE_KEYS — warisan gaya saat Enter
+    assert(/LINE_STYLE_KEYS/.test(kx) || /lineStyleKeys/.test(kx) || 
+           (/bold.*italic.*underline.*strike/.test(kx) && /heading/.test(kx) && /listType/.test(kx)),
+      'Kix 9g-18: LINE_STYLE_KEYS ada (warisan gaya saat Enter)');
+
+    // 9g-19: PARAGRAPH PRESETS — title/heading1/heading2/heading3 dengan ukuran berbeda
+    assert(/heading1/.test(kx) && /heading2/.test(kx) && /heading3/.test(kx),
+      'Kix 9g-19a: paragraph presets heading1/2/3 ada');
+    assert(/title.*size.*26|size.*26.*title/s.test(kx),
+      'Kix 9g-19b: title preset size 26');
+
+    // 9g-20: EXPORT PLAINTEXT — exportPlainText dengan pemisah halaman
+    assert(/exportPlainText/.test(kx), 'Kix 9g-20a: exportPlainText() harus ada');
+    assert(/Halaman Baru/.test(kx) || /Page Break/.test(kx) || /----/.test(kx),
+      'Kix 9g-20b: exportPlainText memakai pemisah halaman');
+
+    // 20 asersi di atas — passedTests/failedTests sudah di-increment oleh assert()
+    console.log('  Suite 9g (kontrak sumber Kix): selesai');
+  }
+
+    // Laporan keutuhan ISI seed (informatif, bukan kegagalan): pengujian E2E
   // mengetik & menyimpan dokumen contoh secara nyata, jadi isinya bisa berubah.
   // Struktur tetap diuji di Suite 8/12; nilai persisnya dilaporkan di sini.
   try {

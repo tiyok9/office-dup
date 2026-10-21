@@ -1293,122 +1293,262 @@
     }
 
     getMenuItems(menu) {
+      const app = this.currentApp;
+
+      // ==================== FILE ====================
       if (menu === 'file') {
+        const common = [
+          { label: 'Buka Drive Hub', action: () => this.switchApp('drive') },
+          { label: 'Buat Salinan', action: () => this.duplicateDoc(this.currentDocId) },
+        ];
+        if (app === 'docs') {
+          return [
+            { label: 'Dokumen Baru', shortcut: 'Ctrl+N', action: () => this.createNewDoc('docs') },
+            { sep: true },
+            ...common,
+            { sep: true },
+            { label: 'Penyiapan Halaman', action: () => this.openPageSetupModal() },
+            { sep: true },
+            { label: 'Unduh sebagai Teks Biasa (.txt)', action: () => this.downloadCurrentDoc('txt') },
+            { label: 'Unduh sebagai Halaman Web (.html)', action: () => this.downloadCurrentDoc('html') },
+            { label: 'Unduh sebagai PDF', action: () => this.downloadCurrentDoc('pdf') },
+            { label: 'Unduh Data (.json)', action: () => this.downloadCurrentDoc('json') },
+            { sep: true },
+            { label: 'Cetak', shortcut: 'Ctrl+P', action: () => this.printOrExportPdf() }
+          ];
+        }
+        if (app === 'sheets') {
+          return [
+            { label: 'Spreadsheet Baru', action: () => this.createNewDoc('sheets') },
+            { sep: true },
+            ...common,
+            { sep: true },
+            { label: 'Unduh sebagai CSV (.csv)', action: () => this.downloadCurrentDoc('csv') },
+            { label: 'Unduh sebagai Excel (.xlsx)', action: () => this.downloadCurrentDoc('xlsx') },
+            { label: 'Unduh Data (.json)', action: () => this.downloadCurrentDoc('json') },
+            { sep: true },
+            { label: 'Cetak', shortcut: 'Ctrl+P', action: () => this.printOrExportPdf() }
+          ];
+        }
+        if (app === 'slides') {
+          return [
+            { label: 'Presentasi Baru', action: () => this.createNewDoc('slides') },
+            { sep: true },
+            ...common,
+            { sep: true },
+            { label: 'Unduh sebagai SVG', action: () => this.downloadCurrentDoc('svg') },
+            { label: 'Unduh sebagai PDF', action: () => this.downloadCurrentDoc('pdf') },
+            { label: 'Unduh Data (.json)', action: () => this.downloadCurrentDoc('json') },
+            { sep: true },
+            { label: 'Cetak', shortcut: 'Ctrl+P', action: () => this.printOrExportPdf() }
+          ];
+        }
+        // drive fallback
         return [
           { label: 'Dokumen Baru', shortcut: 'Ctrl+N', action: () => this.createNewDoc('docs') },
           { label: 'Spreadsheet Baru', action: () => this.createNewDoc('sheets') },
           { label: 'Presentasi Baru', action: () => this.createNewDoc('slides') },
-          { sep: true },
-          { label: 'Buka Drive Hub', action: () => this.switchApp('drive') },
-          { label: 'Buat Salinan (Make a copy)', action: () => this.duplicateDoc(this.currentDocId) },
-          { sep: true },
-          { label: 'Unduh Dokumen (.txt)', action: () => this.downloadCurrentDoc('txt') },
-          { label: 'Unduh Spreadsheet (.csv)', action: () => this.downloadCurrentDoc('csv') },
-          { label: 'Unduh Slide (.svg)', action: () => this.downloadCurrentDoc('svg') },
-          { label: 'Unduh Data (.json)', action: () => this.downloadCurrentDoc('json') },
-          { sep: true },
-          { label: 'Cetak / Print', shortcut: 'Ctrl+P', action: () => this.printOrExportPdf() }
         ];
       }
+
+      // ==================== EDIT ====================
       if (menu === 'edit') {
-        return [
+        const base = [
           { label: 'Undo', shortcut: 'Ctrl+Z', action: () => this.performUndo(this.currentApp) },
           { label: 'Redo', shortcut: 'Ctrl+Y', action: () => this.performRedo(this.currentApp) },
           { sep: true },
-          { label: 'Pilih Semua (Select All)', shortcut: 'Ctrl+A', action: () => this.selectAll() },
-          { sep: true },
-          // ==== FIND & REPLACE (paritas Google Docs: Edit > Cari dan ganti) ====
-          { label: 'Cari (Find)', shortcut: 'Ctrl+F', action: () => this.openFindReplaceModal(false) },
-          { label: 'Cari dan Ganti (Find and Replace)', shortcut: 'Ctrl+H', action: () => this.openFindReplaceModal(true) },
-          { sep: true },
-          { label: 'Hapus Elemen Terpilih (Slides)', shortcut: 'Delete', action: () => { if (this.punch) this.punch.deleteSelectedElement(); } }
+          { label: 'Pilih Semua', shortcut: 'Ctrl+A', action: () => this.selectAll() },
         ];
+        if (app === 'docs') {
+          return [
+            ...base,
+            { sep: true },
+            { label: 'Cari', shortcut: 'Ctrl+F', action: () => this.openFindReplaceModal(false) },
+            { label: 'Cari dan Ganti', shortcut: 'Ctrl+H', action: () => this.openFindReplaceModal(true) },
+          ];
+        }
+        if (app === 'sheets') {
+          return [
+            ...base,
+            { sep: true },
+            { label: 'Cari', shortcut: 'Ctrl+F', action: () => this.openFindReplaceModal(false) },
+            { label: 'Cari dan Ganti', shortcut: 'Ctrl+H', action: () => this.openFindReplaceModal(true) },
+          ];
+        }
+        if (app === 'slides') {
+          return [
+            ...base,
+            { sep: true },
+            { label: 'Hapus Elemen Terpilih', shortcut: 'Delete', action: () => { if (this.punch) this.punch.deleteSelectedElement(); } },
+          ];
+        }
+        return base;
       }
+
+      // ==================== VIEW ====================
       if (menu === 'view') {
-        const fz = this.ritz ? { rows: this.ritz.frozenRows || 0, cols: this.ritz.frozenCols || 0 } : { rows: 0, cols: 0 };
-        return [
-          { label: 'Mode Presentasi Slideshow', shortcut: 'F5', action: () => { if (this.punch) this.punch.startPresentationMode(); } },
-          { label: 'Layar Penuh (Fullscreen)', shortcut: 'F11', action: () => this.toggleFullscreen() },
-          { sep: true },
-          // ==== FREEZE PANE (paritas Google Sheets: menu Tampilan > Bekukan) ====
-          // Item yang statusnya sudah aktif ditandai centang agar user tahu posisi.
-          { label: `${fz.rows === 1 ? '✓ ' : ''}Bekukan 1 baris (Sheets)`, action: () => { if (this.ritz) { this.ritz.setFrozen(1, this.ritz.frozenCols); this.syncToolbar(); } } },
-          { label: `${fz.rows === 2 ? '✓ ' : ''}Bekukan 2 baris (Sheets)`, action: () => { if (this.ritz) { this.ritz.setFrozen(2, this.ritz.frozenCols); this.syncToolbar(); } } },
-          { label: `${fz.cols === 1 ? '✓ ' : ''}Bekukan 1 kolom (Sheets)`, action: () => { if (this.ritz) { this.ritz.setFrozen(this.ritz.frozenRows, 1); this.syncToolbar(); } } },
-          { label: `${(fz.rows === 0 && fz.cols === 0) ? '✓ ' : ''}Tidak ada panel beku (Sheets)`, action: () => { if (this.ritz) { this.ritz.setFrozen(0, 0); this.syncToolbar(); } } },
+        const common = [
+          { label: 'Layar Penuh', shortcut: 'F11', action: () => this.toggleFullscreen() },
           { sep: true },
           { label: 'Tampilkan/Sembunyikan Telemetry Drawer', action: () => window.toggleTelemetry() },
-          { label: 'Buka Drive Hub', action: () => this.switchApp('drive') }
+          { label: 'Buka Drive Hub', action: () => this.switchApp('drive') },
         ];
+        if (app === 'docs') {
+          return [
+            { label: 'Penghitung Kata', action: () => this.openWordCountModal() },
+            { sep: true },
+            ...common,
+          ];
+        }
+        if (app === 'sheets') {
+          const fz = this.ritz ? { rows: this.ritz.frozenRows || 0, cols: this.ritz.frozenCols || 0 } : { rows: 0, cols: 0 };
+          return [
+            { label: `${fz.rows === 1 ? '\u2713 ' : ''}Bekukan 1 baris`, action: () => { if (this.ritz) { this.ritz.setFrozen(1, this.ritz.frozenCols); this.syncToolbar(); } } },
+            { label: `${fz.rows === 2 ? '\u2713 ' : ''}Bekukan 2 baris`, action: () => { if (this.ritz) { this.ritz.setFrozen(2, this.ritz.frozenCols); this.syncToolbar(); } } },
+            { label: `${fz.cols === 1 ? '\u2713 ' : ''}Bekukan 1 kolom`, action: () => { if (this.ritz) { this.ritz.setFrozen(this.ritz.frozenRows, 1); this.syncToolbar(); } } },
+            { label: `${(fz.rows === 0 && fz.cols === 0) ? '\u2713 ' : ''}Tidak ada panel beku`, action: () => { if (this.ritz) { this.ritz.setFrozen(0, 0); this.syncToolbar(); } } },
+            { sep: true },
+            ...common,
+          ];
+        }
+        if (app === 'slides') {
+          return [
+            { label: 'Mode Presentasi', shortcut: 'F5', action: () => { if (this.punch) this.punch.startPresentationMode(); } },
+            { label: 'Catatan Pembicara', action: () => this.toggleSpeakerNotes() },
+            { sep: true },
+            ...common,
+          ];
+        }
+        return common;
       }
+
+      // ==================== INSERT ====================
       if (menu === 'insert') {
-        return [
-          { label: 'Tambah Halaman Baru (Docs)', action: () => { if (this.kix) this.kix.insertNewPage(); } },
-          { label: 'Pemisah Halaman (Docs)', shortcut: 'Ctrl+Enter', action: () => { if (this.kix) this.kix.insertPageBreak(); } },
-          { label: 'Tautan (Docs)', shortcut: 'Ctrl+K', action: () => this.openLinkModal() },
-          { label: 'Nomor Halaman (Docs)', action: () => this.toolbarAction('pageNumbers') },
-          { label: 'Header & Footer (Docs)', action: () => this.openHeaderFooterModal() },
-          { sep: true },
-          { label: 'Tabel (Docs)', action: () => this.openInsertTableModal() },
-          { label: 'Gambar (Docs)', action: () => this.openInsertImageModal() },
-          { label: 'Ukuran Gambar (Docs)', action: () => this.openImageSizeModal() },
-          { label: 'Gambar Rata Kiri (Docs)', action: () => this.setImageAlign('left') },
-          { label: 'Gambar Rata Tengah (Docs)', action: () => this.setImageAlign('center') },
-          { label: 'Gambar Rata Kanan (Docs)', action: () => this.setImageAlign('right') },
-          { sep: true },
-          { label: 'Tabel: Sisip Baris di Atas', action: () => this.tableOp('rowAbove') },
-          { label: 'Tabel: Sisip Baris di Bawah', action: () => this.tableOp('rowBelow') },
-          { label: 'Tabel: Hapus Baris', action: () => this.tableOp('rowDelete') },
-          { label: 'Tabel: Sisip Kolom di Kiri', action: () => this.tableOp('colLeft') },
-          { label: 'Tabel: Sisip Kolom di Kanan', action: () => this.tableOp('colRight') },
-          { label: 'Tabel: Hapus Kolom', action: () => this.tableOp('colDelete') },
-          { sep: true },
-          { label: 'Penyiapan Halaman (Docs)', action: () => this.openPageSetupModal() },
-          { label: 'Komentar', shortcut: 'Ctrl+Alt+M', action: () => { if (this.currentApp === 'sheets') this.openSheetCommentModal(); else this.openCommentModal(); } },
-          { sep: true },
-          { label: 'Tambah Slide Baru (Slides)', action: () => { if (this.punch) this.punch.addNewSlide(); } },
-          { label: 'Duplikat Slide Aktif (Slides)', action: () => { if (this.punch) this.punch.duplicateActiveSlide(); } },
-          { label: 'Hapus Slide Aktif (Slides)', action: () => { if (this.punch) this.punch.deleteActiveSlide(); } },
-          { sep: true },
-          { label: 'Sisipkan Kotak (Slides)', action: () => { if (this.punch) this.punch.insertShape('rect'); } },
-          { label: 'Sisipkan Lingkaran (Slides)', action: () => { if (this.punch) this.punch.insertShape('circle'); } },
-          { label: 'Sisipkan Garis (Slides)', action: () => { if (this.punch) this.punch.insertShape('line'); } },
-          { label: 'Sisipkan Teks (Slides)', action: () => { if (this.punch) this.punch.insertTextElement(); } }
-        ];
+        if (app === 'docs') {
+          return [
+            { label: 'Tambah Halaman Baru', action: () => { if (this.kix) this.kix.insertNewPage(); } },
+            { label: 'Pemisah Halaman', shortcut: 'Ctrl+Enter', action: () => { if (this.kix) this.kix.insertPageBreak(); } },
+            { sep: true },
+            { label: 'Tautan', shortcut: 'Ctrl+K', action: () => this.openLinkModal() },
+            { label: 'Komentar', shortcut: 'Ctrl+Alt+M', action: () => this.openCommentModal() },
+            { sep: true },
+            { label: 'Gambar', action: () => this.openInsertImageModal() },
+            { label: 'Ukuran Gambar', action: () => this.openImageSizeModal() },
+            { label: 'Gambar Rata Kiri', action: () => this.setImageAlign('left') },
+            { label: 'Gambar Rata Tengah', action: () => this.setImageAlign('center') },
+            { label: 'Gambar Rata Kanan', action: () => this.setImageAlign('right') },
+            { sep: true },
+            { label: 'Tabel', action: () => this.openInsertTableModal() },
+            { label: 'Tabel: Sisip Baris di Atas', action: () => this.tableOp('rowAbove') },
+            { label: 'Tabel: Sisip Baris di Bawah', action: () => this.tableOp('rowBelow') },
+            { label: 'Tabel: Hapus Baris', action: () => this.tableOp('rowDelete') },
+            { label: 'Tabel: Sisip Kolom di Kiri', action: () => this.tableOp('colLeft') },
+            { label: 'Tabel: Sisip Kolom di Kanan', action: () => this.tableOp('colRight') },
+            { label: 'Tabel: Hapus Kolom', action: () => this.tableOp('colDelete') },
+            { sep: true },
+            { label: 'Nomor Halaman', action: () => this.toolbarAction('pageNumbers') },
+            { label: 'Header & Footer', action: () => this.openHeaderFooterModal() },
+          ];
+        }
+        if (app === 'sheets') {
+          return [
+            { label: 'Komentar', shortcut: 'Ctrl+Alt+M', action: () => this.openSheetCommentModal() },
+            { sep: true },
+            { label: 'Tambah Sheet Baru', action: () => { if (this.ritz) this.ritz.addSheet(); } },
+            { label: 'Fungsi (SUM, AVERAGE, ...)', action: () => this.insertQuickFunction() },
+          ];
+        }
+        if (app === 'slides') {
+          return [
+            { label: 'Slide Baru', action: () => { if (this.punch) this.punch.addNewSlide(); } },
+            { label: 'Duplikat Slide Aktif', action: () => { if (this.punch) this.punch.duplicateActiveSlide(); } },
+            { label: 'Hapus Slide Aktif', action: () => { if (this.punch) this.punch.deleteActiveSlide(); } },
+            { sep: true },
+            { label: 'Sisipkan Kotak', action: () => { if (this.punch) this.punch.insertShape('rect'); } },
+            { label: 'Sisipkan Lingkaran', action: () => { if (this.punch) this.punch.insertShape('circle'); } },
+            { label: 'Sisipkan Garis', action: () => { if (this.punch) this.punch.insertShape('line'); } },
+            { label: 'Sisipkan Teks', action: () => { if (this.punch) this.punch.insertTextElement(); } },
+            { sep: true },
+            { label: 'Komentar', shortcut: 'Ctrl+Alt+M', action: () => this.openCommentModal() },
+          ];
+        }
+        return [{ label: 'Buka dokumen terlebih dahulu', action: () => {} }];
       }
+
+      // ==================== FORMAT ====================
       if (menu === 'format') {
-        return [
-          { label: 'Tebal (Bold)', shortcut: 'Ctrl+B', action: () => this.applyFormatForActive('bold') },
-          { label: 'Miring (Italic)', shortcut: 'Ctrl+I', action: () => this.applyFormatForActive('italic') },
-          { label: 'Garis Bawah (Underline)', shortcut: 'Ctrl+U', action: () => this.applyFormatForActive('underline') },
-          { label: 'Coret (Strikethrough)', action: () => this.applyFormatForActive('strike') },
-          { sep: true },
-          { label: 'Rata Kiri', action: () => this.applyFormatForActive('align', 'left') },
-          { label: 'Rata Tengah', action: () => this.applyFormatForActive('align', 'center') },
-          { label: 'Rata Kanan', action: () => this.applyFormatForActive('align', 'right') },
-          { label: 'Rata Kanan Kiri', action: () => this.applyFormatForActive('align', 'justify') },
-          { sep: true },
-          { label: 'Format Mata Uang ($)', action: () => this.applyFormatForActive('numFormat', 'currency') },
-          { label: 'Format Persen (%)', action: () => this.applyFormatForActive('numFormat', 'percent') },
-          { label: 'Hapus Format Angka', action: () => this.applyFormatForActive('numFormat', 'plain') }
+        const textFmt = [
+          { label: 'Tebal', shortcut: 'Ctrl+B', action: () => this.applyFormatForActive('bold') },
+          { label: 'Miring', shortcut: 'Ctrl+I', action: () => this.applyFormatForActive('italic') },
+          { label: 'Garis Bawah', shortcut: 'Ctrl+U', action: () => this.applyFormatForActive('underline') },
+          { label: 'Coret', action: () => this.applyFormatForActive('strike') },
         ];
+        if (app === 'docs') {
+          return [
+            ...textFmt,
+            { sep: true },
+            { label: 'Rata Kiri', action: () => this.applyFormatForActive('align', 'left') },
+            { label: 'Rata Tengah', action: () => this.applyFormatForActive('align', 'center') },
+            { label: 'Rata Kanan', action: () => this.applyFormatForActive('align', 'right') },
+            { label: 'Rata Kanan Kiri (Justify)', action: () => this.applyFormatForActive('align', 'justify') },
+            { sep: true },
+            { label: 'Hapus Format', action: () => { if (this.kix) this.kix.clearFormatting(); } },
+          ];
+        }
+        if (app === 'sheets') {
+          return [
+            ...textFmt,
+            { sep: true },
+            { label: 'Format Mata Uang ($)', action: () => this.applyFormatForActive('numFormat', 'currency') },
+            { label: 'Format Persen (%)', action: () => this.applyFormatForActive('numFormat', 'percent') },
+            { label: 'Hapus Format Angka', action: () => this.applyFormatForActive('numFormat', 'plain') },
+          ];
+        }
+        if (app === 'slides') {
+          return [
+            ...textFmt,
+            { sep: true },
+            { label: 'Rata Kiri', action: () => this.applyFormatForActive('align', 'left') },
+            { label: 'Rata Tengah', action: () => this.applyFormatForActive('align', 'center') },
+            { label: 'Rata Kanan', action: () => this.applyFormatForActive('align', 'right') },
+          ];
+        }
+        return textFmt;
       }
+
+      // ==================== TOOLS ====================
       if (menu === 'tools') {
-        return [
-          { label: 'Penghitung Kata (Word Count)', action: () => this.openWordCountModal() },
-          { label: 'Uji Soft-404 Engine', action: () => { window.toggleTelemetry(); } },
-          { sep: true },
-          { label: 'Ekspor CSV Spreadsheet', action: () => this.downloadCurrentDoc('csv') },
-          { label: 'Ekspor Slide ke SVG', action: () => this.downloadCurrentDoc('svg') }
-        ];
+        if (app === 'docs') {
+          return [
+            { label: 'Penghitung Kata', action: () => this.openWordCountModal() },
+            { sep: true },
+            { label: 'Unduh sebagai Teks Biasa (.txt)', action: () => this.downloadCurrentDoc('txt') },
+            { label: 'Unduh sebagai Halaman Web (.html)', action: () => this.downloadCurrentDoc('html') },
+          ];
+        }
+        if (app === 'sheets') {
+          return [
+            { label: 'Ekspor CSV', action: () => this.downloadCurrentDoc('csv') },
+            { label: 'Ekspor Excel (.xlsx)', action: () => this.downloadCurrentDoc('xlsx') },
+          ];
+        }
+        if (app === 'slides') {
+          return [
+            { label: 'Ekspor SVG', action: () => this.downloadCurrentDoc('svg') },
+          ];
+        }
+        return [{ label: 'Buka dokumen terlebih dahulu', action: () => {} }];
       }
+
+      // ==================== HELP (sama untuk semua) ====================
       if (menu === 'help') {
         return [
-          { label: 'Pintasan Keyboard (Shortcuts)', action: () => this.openShortcutsModal() },
+          { label: 'Pintasan Keyboard', action: () => this.openShortcutsModal() },
           { label: 'Tentang Workspace Ini', action: () => this.openAboutModal() }
         ];
       }
-      return [{ label: 'Fitur standar aktif', action: () => {} }];
+
+      return [{ label: 'Menu tidak tersedia', action: () => {} }];
     }
 
     selectAll() {

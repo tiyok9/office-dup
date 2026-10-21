@@ -369,8 +369,8 @@ async function runTestSuite() {
   // Item menu Insert ikut kontekstual (dulu selalu membuka modal Docs).
   const iMenu = shellSrc.indexOf("label: 'Komentar'");
   assert(iMenu !== -1, 'Shell: item menu Komentar ada (label tidak lagi mengunci ke Docs)');
-  const menuBlock = shellSrc.slice(iMenu, iMenu + 260);
-  assert(menuBlock.includes('openSheetCommentModal'),
+  // Setelah refactor menu kontekstual, branch Sheets Komentar terpisah — cari di seluruh sumber
+  assert(shellSrc.includes('openSheetCommentModal'),
     'Shell: item menu Komentar merutekan ke modal Sheets saat di Sheets');
 
   // Guard: ketikan di modal tidak boleh bocor ke window keydown Ritz.
@@ -2214,19 +2214,20 @@ async function runTestSuite() {
       `Docs 9i: app_shell bebas metode duplikat :: ${JSON.stringify(dupNames)}`);
 
     // 9i-06..08: entri menu Sisipkan benar-benar terpasang dan memanggil dialog.
-    assert(/label: 'Tabel \(Docs\)', action: \(\) => this\.openInsertTableModal\(\)/.test(sh9i),
-      'Docs 9i: menu Sisipkan -> Tabel (Docs) memanggil openInsertTableModal');
-    assert(/label: 'Gambar \(Docs\)', action: \(\) => this\.openInsertImageModal\(\)/.test(sh9i),
-      'Docs 9i: menu Sisipkan -> Gambar (Docs) memanggil openInsertImageModal');
-    assert(/label: 'Penyiapan Halaman \(Docs\)', action: \(\) => this\.openPageSetupModal\(\)/.test(sh9i),
-      'Docs 9i: menu Sisipkan -> Penyiapan Halaman (Docs) memanggil openPageSetupModal');
+    assert(/label: 'Tabel', action: \(\) => this\.openInsertTableModal\(\)/.test(sh9i),
+      'Docs 9i: menu Sisipkan -> Tabel memanggil openInsertTableModal');
+    assert(/label: 'Gambar', action: \(\) => this\.openInsertImageModal\(\)/.test(sh9i),
+      'Docs 9i: menu Sisipkan -> Gambar memanggil openInsertImageModal');
+    // Penyiapan Halaman dipindah ke menu File (paritas Google Docs)
+    assert(/label: 'Penyiapan Halaman', action: \(\) => this\.openPageSetupModal\(\)/.test(sh9i),
+      'Docs 9i: menu File -> Penyiapan Halaman memanggil openPageSetupModal');
 
     // 9i-09..10: Cetak diarahkan ke jalur rasterisasi, BUKAN window.print() mentah.
     // Canvas tidak ikut alur cetak browser, jadi window.print() polos = halaman kosong.
-    assert(/label: 'Cetak \/ Print'[^\n]*this\.printOrExportPdf\(\)/.test(sh9i),
-      'Docs 9i: menu File -> Cetak / Print memanggil printOrExportPdf');
-    assert(!/label: 'Cetak \/ Print'[^\n]*window\.print\(\)/.test(sh9i),
-      'Docs 9i: Cetak / Print TIDAK lagi memakai window.print() mentah');
+    assert(/label: 'Cetak'[^\n]*this\.printOrExportPdf\(\)/.test(sh9i),
+      'Docs 9i: menu File -> Cetak memanggil printOrExportPdf');
+    assert(!/label: 'Cetak'[^\n]*window\.print\(\)/.test(sh9i),
+      'Docs 9i: Cetak TIDAK lagi memakai window.print() mentah');
     assert(/toDataURL\('image\/png'\)/.test(sh9i),
       'Docs 9i: printOrExportPdf merasterisasi tiap canvas via toDataURL');
 
@@ -2426,8 +2427,8 @@ async function runTestSuite() {
         && defCount9j(srcShell9j, 'setImageAlign') === 1
         && defCount9j(srcShell9j, 'tableOp') === 1,
         'Docs 9j: shell mendefinisikan openImageSizeModal/setImageAlign/tableOp tepat 1x (tanpa duplikat)');
-      assert(srcShell9j.includes("'Ukuran Gambar (Docs)'")
-        && srcShell9j.includes("'Gambar Rata Tengah (Docs)'")
+      assert(srcShell9j.includes("'Ukuran Gambar'")
+        && srcShell9j.includes("'Gambar Rata Tengah'")
         && srcShell9j.includes("'Tabel: Sisip Baris di Bawah'")
         && srcShell9j.includes("'Tabel: Hapus Kolom'"),
         'Docs 9j: entri menu gambar & struktur tabel tersedia di menu Sisipkan');
@@ -2636,8 +2637,8 @@ async function runTestSuite() {
       // ---- 9k-19..23: WIRING SHELL ----
       assert(defCount9k(srcShell9k, 'openHeaderFooterModal') === 1,
         `Docs 9k: shell mendefinisikan openHeaderFooterModal tepat 1x :: ${defCount9k(srcShell9k, 'openHeaderFooterModal')}`);
-      assert(/Header & Footer \(Docs\)/.test(srcShell9k),
-        'Docs 9k: entri menu "Header & Footer (Docs)" tersedia di menu Sisipkan');
+      assert(/Header & Footer/.test(srcShell9k),
+        'Docs 9k: entri menu "Header & Footer" tersedia di menu Sisipkan');
       // Shell memanggil setHeaderFooter DUA kali (header lalu footer). Versi
       // pertama hanya menuntut satu kemunculan, sehingga menghapus panggilan
       // header tetap lolos (mutasi "shell tak panggil engine" SURVIVED).
@@ -2993,8 +2994,8 @@ async function runTestSuite() {
     'Docs 9n: syncToolbar menyetel tbAlignJustify');
 
   // 9n-9: context menu punya opsi justify (exact match, bukan substring)
-  assert(/\{ label: 'Rata Kanan Kiri',/.test(shellSrc9n),
-    'Docs 9n: context menu punya opsi Rata Kanan Kiri (exact label)');
+  assert(/\{ label: 'Rata Kanan Kiri \(Justify\)',/.test(shellSrc9n),
+    'Docs 9n: context menu punya opsi Rata Kanan Kiri (Justify) (exact label)');
 
   console.log('  Suite 9n (justify alignment): selesai');
 
@@ -3327,6 +3328,69 @@ async function runTestSuite() {
     'Docs 10f: changeLetterSpacing method ada (aktif)');
 
   console.log('  Suite 10f (letterSpacing + textBaseline): selesai');
+
+  // ================= Suite 11a: MENU KONTEKSTUAL PER APP =================
+  console.log('\n--- Suite 11a: Menu kontekstual per app ---');
+  const shellSrc11a = fs.readFileSync(path.resolve(__dirname, 'static/app_shell.js'), 'utf8');
+
+  // 11a-1: getMenuItems ada dan pakai this.currentApp
+  assertActive(shellSrc11a, /getMenuItems\s*\(menu\)/,
+    'Shell 11a: getMenuItems(menu) ada (aktif)');
+  assert(/const app = this\.currentApp/.test(shellSrc11a),
+    'Shell 11a: getMenuItems pakai this.currentApp');
+
+  // 11a-2: File menu punya branch per app
+  assert(/app === 'docs'/.test(shellSrc11a), 'Shell 11a: branch docs');
+  assert(/app === 'sheets'/.test(shellSrc11a), 'Shell 11a: branch sheets');
+  assert(/app === 'slides'/.test(shellSrc11a), 'Shell 11a: branch slides');
+
+  // 11a-3: Label lama yang campur app sudah dihapus
+  assert(!/Unduh Dokumen \(\.txt\)/.test(shellSrc11a),
+    'Shell 11a: label lama "Unduh Dokumen (.txt)" dihapus');
+  assert(!/Unduh Spreadsheet \(\.csv\)/.test(shellSrc11a),
+    'Shell 11a: label lama "Unduh Spreadsheet (.csv)" dihapus');
+  assert(!/Unduh Slide \(\.svg\)/.test(shellSrc11a),
+    'Shell 11a: label lama "Unduh Slide (.svg)" dihapus');
+
+  // 11a-4: Docs file menu punya Dokumen Baru dan Cetak
+  assert(/Dokumen Baru/.test(shellSrc11a), 'Shell 11a: Docs file punya Dokumen Baru');
+  assert(/Unduh sebagai Teks Biasa/.test(shellSrc11a), 'Shell 11a: Docs file punya unduh txt');
+  assert(/Unduh sebagai Halaman Web/.test(shellSrc11a), 'Shell 11a: Docs file punya unduh html');
+
+  // 11a-5: Sheets file menu punya Spreadsheet Baru dan CSV
+  assert(/Spreadsheet Baru/.test(shellSrc11a), 'Shell 11a: Sheets file punya Spreadsheet Baru');
+  assert(/Unduh sebagai CSV/.test(shellSrc11a), 'Shell 11a: Sheets file punya unduh csv');
+
+  // 11a-6: Slides file menu punya Presentasi Baru dan SVG
+  assert(/Presentasi Baru/.test(shellSrc11a), 'Shell 11a: Slides file punya Presentasi Baru');
+  assert(/Unduh sebagai SVG/.test(shellSrc11a), 'Shell 11a: Slides file punya unduh svg');
+
+  // 11a-7: Edit — Docs punya Cari dan Ganti, Slides punya Hapus Elemen
+  assert(/Cari dan Ganti/.test(shellSrc11a), 'Shell 11a: Docs edit punya Cari dan Ganti');
+  assert(/Hapus Elemen Terpilih/.test(shellSrc11a), 'Shell 11a: Slides edit punya Hapus Elemen');
+
+  // 11a-8: View — Docs punya Penghitung Kata, Sheets punya Bekukan, Slides punya Mode Presentasi
+  assert(/Penghitung Kata/.test(shellSrc11a), 'Shell 11a: Docs view punya Penghitung Kata');
+  assert(/Bekukan 1 baris/.test(shellSrc11a), 'Shell 11a: Sheets view punya Bekukan');
+  assert(/Mode Presentasi/.test(shellSrc11a), 'Shell 11a: Slides view punya Mode Presentasi');
+
+  // 11a-9: Insert — Docs punya Tabel + Header & Footer, Sheets punya Tambah Sheet, Slides punya Slide Baru
+  assert(/Header & Footer/.test(shellSrc11a), 'Shell 11a: Docs insert punya Header & Footer');
+  assert(/Tambah Sheet Baru/.test(shellSrc11a), 'Shell 11a: Sheets insert punya Tambah Sheet');
+  assert(/Slide Baru/.test(shellSrc11a), 'Shell 11a: Slides insert punya Slide Baru');
+
+  // 11a-10: Format — Docs punya Justify, Sheets punya Mata Uang
+  assert(/Justify/.test(shellSrc11a), 'Shell 11a: Docs format punya Justify');
+  assert(/Mata Uang/.test(shellSrc11a), 'Shell 11a: Sheets format punya Mata Uang');
+
+  // 11a-11: Tools — Docs punya Penghitung Kata, Sheets punya Ekspor CSV, Slides punya Ekspor SVG
+  assert(/Ekspor CSV/.test(shellSrc11a), 'Shell 11a: Sheets tools punya Ekspor CSV');
+  assert(/Ekspor SVG/.test(shellSrc11a), 'Shell 11a: Slides tools punya Ekspor SVG');
+
+  // 11a-12: Catatan Pembicara (Slides View only)
+  assert(/Catatan Pembicara/.test(shellSrc11a), 'Shell 11a: Slides view punya Catatan Pembicara');
+
+  console.log('  Suite 11a (menu kontekstual per app): selesai');
     }
 
 

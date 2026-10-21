@@ -905,13 +905,16 @@ async function stopIsolatedServer() {
   const persistedNotes = await apiGet(slidesId);
   check('S7f Slides: catatan pembicara benar-benar tertulis ke disk (persistensi)', JSON.stringify(persistedNotes?.data || {}).includes('CATATAN-UJI-PEMBICARA'));
 
-  // --- S7e: Menu Tools/Help (modal nyata) ---
-  await cdp.click('([...document.querySelectorAll(".menu-item")].find(m => m.dataset.menu === "tools"))');
+  // --- S7e: Menu View/Help (modal nyata) ---
+  // Penghitung Kata sekarang di menu View (Docs only), switch ke Docs dulu
+  await cdp.click('document.getElementById("tab-docs")');
+  await sleep(600);
+  await cdp.click('([...document.querySelectorAll(".menu-item")].find(m => m.dataset.menu === "view"))');
   await sleep(300);
   await cdp.click('([...document.querySelectorAll("#activeMenuDropdown .menu-option")].find(d => /Penghitung Kata/.test(d.textContent)))');
   await sleep(600);
   const wcTxt = await cdp.eval('document.getElementById("gwsModal").innerText');
-  check('Menu Tools → Penghitung Kata membuka modal berisi angka', /Kata/.test(wcTxt) && /Karakter/.test(wcTxt) && /\d/.test(wcTxt));
+  check('Menu View → Penghitung Kata membuka modal berisi angka', /Kata/.test(wcTxt) && /Karakter/.test(wcTxt) && /\d/.test(wcTxt));
   await cdp.click('document.querySelector("#gwsModal .modal-close")');
   await sleep(400);
   check('Modal Penghitung Kata dapat ditutup', (await cdp.eval('getComputedStyle(document.getElementById("gwsModal")).display')) === 'none');

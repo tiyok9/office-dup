@@ -34,6 +34,38 @@ function assert(condition, testName) {
   }
 }
 
+// Potong body sebuah method via brace-matching yang MEMAHAMI string, template
+// literal, dan komentar. Dipakai tes kontrak sumber supaya tidak lagi bergantung
+// pada jendela karakter ajaib seperti {0,8000}: body renderPage 15.062 karakter,
+// jendela 8.000 tidak pernah match dan asersi jadi gagal-senyap.
+function sliceMethod(source, name) {
+  // Wajib berbentuk definisi: `nama(...) {`. Tanpa `) {` di akhir, regex juga
+  // mencocokkan call-site seperti `this.renderPage(i);` dan body yang dipotong
+  // jadi sampah yang tetap non-kosong -> guard lolos padahal metode hilang.
+  const re = new RegExp('^\\s{0,8}(?:async\\s+)?' + name + '\\s*\\([^)]*\\)\\s*\\{', 'm');
+  const m = re.exec(source);
+  if (!m) return '';
+  const open = source.indexOf('{', m.index + m[0].length - 1);
+  if (open < 0) return '';
+  let depth = 0, i = open, inS = null, inLc = false, inBc = false;
+  for (; i < source.length; i++) {
+    const c = source[i], n = source[i + 1];
+    if (inLc) { if (c === '\n') inLc = false; continue; }
+    if (inBc) { if (c === '*' && n === '/') { inBc = false; i++; } continue; }
+    if (inS) {
+      if (c === '\\') { i++; continue; }
+      if (c === inS) inS = null;
+      continue;
+    }
+    if (c === '/' && n === '/') { inLc = true; i++; continue; }
+    if (c === '/' && n === '*') { inBc = true; i++; continue; }
+    if (c === '"' || c === "'" || c === '`') { inS = c; continue; }
+    if (c === '{') depth++;
+    else if (c === '}') { depth--; if (depth === 0) return source.slice(m.index, i + 1); }
+  }
+  return '';
+}
+
 async function runTestSuite() {
   console.log('====================================================');
   console.log(' RUNNING AUTOMATED TESTS: GOOGLE WORKSPACE ENGINE');
@@ -1910,9 +1942,15 @@ async function runTestSuite() {
 
     // 9g-13: RENDERING Z-ORDER — highlight SEBELUM fillText (find match, comment, lalu teks)
     // Di renderPage: findMatches fillRect harus muncul SEBELUM ctx.fillText(seg.text
-    const renderBlock = kx.match(/renderPage\s*\([\s\S]{0,8000}?watermark/i);
-    if (renderBlock) {
-      const rb = renderBlock[0];
+    // Body diambil via brace-matching, bukan jendela karakter ajaib. Versi lama
+    // memakai {0,8000} sementara body renderPage 15.062 karakter -> regex TIDAK
+    // PERNAH match, dan asersi terkurung `if (renderBlock)` sehingga gagal senyap
+    // (suite tetap hijau). Guard di bawah wajib lulus supaya kegagalan itu berisik.
+    const renderBlock = sliceMethod(kx, 'renderPage');
+    assert(renderBlock.length > 0,
+      'Kix 9g-13: body renderPage terpotong utuh (guard anti fail-silent)');
+    {
+      const rb = renderBlock;
       const findRectPos = rb.indexOf('findMatches');
       const commentRectPos = rb.indexOf('_commentsOf');
       const fillTextPos = rb.indexOf('ctx.fillText(seg');
@@ -1923,8 +1961,8 @@ async function runTestSuite() {
     }
 
     // 9g-14: HYPERLINK OVERLAY — digambar SETELAH fillText utama, dengan warna biru
-    if (renderBlock) {
-      const rb = renderBlock[0];
+    {
+      const rb = renderBlock;
       const fillTextPos = rb.indexOf('ctx.fillText(seg');
       const linkBoxPos = rb.indexOf('_linkBoxes.push');
       assert(fillTextPos > -1 && linkBoxPos > -1 && linkBoxPos > fillTextPos,
@@ -2463,6 +2501,141 @@ async function runTestSuite() {
         `Docs 9j: setActiveImageAlign menerima center & menormalkan nilai asing ke left :: ${al1_9j} -> ${al2_9j}`);
 
       console.log('  Suite 9j (virtualisasi + cetak + tabel/gambar): selesai');
+    }
+
+    // ================= Suite 9k: HEADER & FOOTER TEKS (paritas Docs) =================
+    console.log('\n--- Suite 9k: Header & Footer Teks (margin, merge, persistensi, wiring) ---');
+    {
+      const Kix9k = loadEditor('static/kix_editor.js', 'KixDocsEditor');
+      const srcKix9k = fs.readFileSync(path.resolve(__dirname, 'static/kix_editor.js'), 'utf8');
+      const srcShell9k = fs.readFileSync(path.resolve(__dirname, 'static/app_shell.js'), 'utf8');
+      const defCount9k = (src, name) => (src.match(new RegExp('^\\s{4}(?:async\\s+)?' + name + '\\s*\\(', 'gm')) || []).length;
+      const mkDoc9k = (n) => ({
+        pages: Array.from({ length: n }, (_, i) => ({ lines: [{ text: 'halaman ' + (i + 1) }] }))
+      });
+      // Spion ctx: mencatat setiap fillText supaya geometri bisa diuji tanpa canvas asli.
+      const spy9k = () => {
+        const calls = [];
+        return {
+          calls,
+          ctx: {
+            save() {}, restore() {}, font: '', fillStyle: '', textAlign: '',
+            fillText(t, x, y) { calls.push({ t: String(t), x: x, y: y }); }
+          }
+        };
+      };
+
+      // ---- 9k-01..02: STATE DEFAULT ----
+      const k9h = new Kix9k('docsScrollBox', 'kixHiddenInput');
+      assert(k9h.headerText === '' && k9h.footerText === '',
+        `Docs 9k: state header/footer default string kosong (bukan undefined) :: "${k9h.headerText}"/"${k9h.footerText}"`);
+      k9h.setDocumentData(mkDoc9k(2));
+      const hf0 = k9h.getHeaderFooter();
+      assert(hf0.header === '' && hf0.footer === '',
+        `Docs 9k: getHeaderFooter() memakai kunci {header, footer} :: ${JSON.stringify(hf0)}`);
+
+      // ---- 9k-03..05: MERGE PARSIAL (risiko tertinggi) ----
+      k9h.setHeaderFooter({ header: 'Laporan Q4' });
+      k9h.setHeaderFooter({ footer: 'Rahasia' });
+      const hfA = k9h.getHeaderFooter();
+      assert(hfA.header === 'Laporan Q4' && hfA.footer === 'Rahasia',
+        `Docs 9k: dua panggilan parsial saling melengkapi, bukan menimpa :: ${JSON.stringify(hfA)}`);
+      k9h.setHeaderFooter({ header: 'Header baru' });
+      const hfB = k9h.getHeaderFooter();
+      assert(hfB.footer === 'Rahasia',
+        `Docs 9k: memperbarui header saja MEMPERTAHANKAN footer :: footer="${hfB.footer}"`);
+      const ret9k = k9h.setHeaderFooter({ footer: 'Kaki baru' });
+      assert(ret9k && ret9k.header === 'Header baru' && ret9k.footer === 'Kaki baru',
+        `Docs 9k: setHeaderFooter mengembalikan pasangan hasil merge :: ${JSON.stringify(ret9k)}`);
+
+      // ---- 9k-06..07: NORMALISASI NILAI KOSONG ----
+      k9h.setHeaderFooter({ header: null, footer: undefined });
+      const hfN = k9h.getHeaderFooter();
+      assert(hfN.header === '' && hfN.footer === '',
+        `Docs 9k: null/undefined dinormalkan ke string kosong :: ${JSON.stringify(hfN)}`);
+      k9h.setHeaderFooter({ header: 'A', footer: 'B' });
+      k9h.clearHeaderFooter();
+      const hfC = k9h.getHeaderFooter();
+      assert(hfC.header === '' && hfC.footer === '',
+        `Docs 9k: clearHeaderFooter() mengosongkan keduanya :: ${JSON.stringify(hfC)}`);
+
+      // ---- 9k-08..11: PERSISTENSI + GUARD SEED EXACT MATCH ----
+      const kEmpty = new Kix9k('docsScrollBox', 'kixHiddenInput');
+      kEmpty.setDocumentData(mkDoc9k(1));
+      const dEmpty = kEmpty.getDocumentData();
+      assert(!('headerFooter' in dEmpty),
+        'Docs 9k: tanpa header/footer kunci headerFooter TIDAK ditulis (seed lama tetap EXACT MATCH)');
+      kEmpty.setHeaderFooter({ header: 'Kop surat' });
+      const dSet = kEmpty.getDocumentData();
+      assert(dSet.headerFooter && dSet.headerFooter.header === 'Kop surat',
+        `Docs 9k: header terisi -> kunci headerFooter ikut tersimpan :: ${JSON.stringify(dSet.headerFooter)}`);
+      const kRT = new Kix9k('docsScrollBox', 'kixHiddenInput');
+      kRT.setDocumentData({ pages: [{ lines: [{ text: 'x' }] }], headerFooter: { header: 'H', footer: 'F' } });
+      const hfRT = kRT.getHeaderFooter();
+      assert(hfRT.header === 'H' && hfRT.footer === 'F',
+        `Docs 9k: setDocumentData memulihkan header/footer dari data tersimpan :: ${JSON.stringify(hfRT)}`);
+      const kOld = new Kix9k('docsScrollBox', 'kixHiddenInput');
+      kOld.setDocumentData({ pages: [{ lines: [{ text: 'dokumen lama' }] }] });
+      assert(kOld.headerText === '' && kOld.footerText === '',
+        'Docs 9k: dokumen lama tanpa headerFooter dimuat sebagai string kosong (bukan undefined)');
+
+      // ---- 9k-12..15: GEOMETRI MARGIN ----
+      const kGeo = new Kix9k('docsScrollBox', 'kixHiddenInput');
+      kGeo.setDocumentData(mkDoc9k(1));
+      kGeo.setHeaderFooter({ header: 'KOP', footer: 'KAKI' });
+      const s1 = spy9k();
+      kGeo._drawHeaderFooter(s1.ctx);
+      const cH = s1.calls.find(c => c.t === 'KOP');
+      const cF = s1.calls.find(c => c.t === 'KAKI');
+      assert(!!cH && !!cF,
+        `Docs 9k: _drawHeaderFooter mengecat header & footer :: ${JSON.stringify(s1.calls.map(c => c.t))}`);
+      assert(cH && Math.abs(cH.y - (kGeo.marginTop() + 14)) < 0.01,
+        `Docs 9k: header digambar di margin atas + 14 :: y=${cH ? cH.y : 'NA'} harap=${kGeo.marginTop() + 14}`);
+      assert(cF && Math.abs(cF.y - (kGeo.pageHeight() - 38)) < 0.01,
+        `Docs 9k: footer digambar di dasar halaman - 38 :: y=${cF ? cF.y : 'NA'} harap=${kGeo.pageHeight() - 38}`);
+      assert(cH && cF && cH.y < cF.y,
+        'Docs 9k: header berada DI ATAS footer (urutan vertikal benar)');
+      const kNo = new Kix9k('docsScrollBox', 'kixHiddenInput');
+      kNo.setDocumentData(mkDoc9k(1));
+      const s2 = spy9k();
+      kNo._drawHeaderFooter(s2.ctx);
+      assert(s2.calls.length === 0,
+        `Docs 9k: tanpa header/footer tidak ada yang dicat :: ${s2.calls.length} fillText`);
+
+      // ---- 9k-16..18: WIRING ENGINE ----
+      const rp9k = sliceMethod(srcKix9k, 'renderPage');
+      // Baris komentar dibuang SEBELUM diperiksa. Versi pertama memakai
+      // includes() polos, dan `// this._drawHeaderFooter(ctx);` tetap lolos
+      // sehingga mutasi "matikan pemanggilan" SURVIVED di falsifikasi batch 1.
+      const rpCode9k = rp9k.split('\n')
+        .filter(l => !/^\s*\/\//.test(l) && !/^\s*\*/.test(l) && !/^\s*\/\*/.test(l))
+        .join('\n');
+      assert(rpCode9k.length > 0 && /this\._drawHeaderFooter\(/.test(rpCode9k),
+        'Docs 9k: renderPage memanggil _drawHeaderFooter di KODE (bukan komentar)');
+      assert(/else if \(!this\.footerText\)/.test(srcKix9k),
+        'Docs 9k: watermark tidak menimpa footer teks (gerbang !this.footerText)');
+
+      // ---- 9k-19..23: WIRING SHELL ----
+      assert(defCount9k(srcShell9k, 'openHeaderFooterModal') === 1,
+        `Docs 9k: shell mendefinisikan openHeaderFooterModal tepat 1x :: ${defCount9k(srcShell9k, 'openHeaderFooterModal')}`);
+      assert(/Header & Footer \(Docs\)/.test(srcShell9k),
+        'Docs 9k: entri menu "Header & Footer (Docs)" tersedia di menu Sisipkan');
+      // Shell memanggil setHeaderFooter DUA kali (header lalu footer). Versi
+      // pertama hanya menuntut satu kemunculan, sehingga menghapus panggilan
+      // header tetap lolos (mutasi "shell tak panggil engine" SURVIVED).
+      const setCalls9k = (srcShell9k.match(/this\.kix\.setHeaderFooter\(/g) || []).length;
+      assert(setCalls9k >= 2
+        && /this\.kix\.setHeaderFooter\(\{ header \}\)/.test(srcShell9k)
+        && /this\.kix\.setHeaderFooter\(\{ footer \}\)/.test(srcShell9k)
+        && /this\.kix\.getHeaderFooter\(\)/.test(srcShell9k),
+        `Docs 9k: shell memanggil engine utk header DAN footer :: set=${setCalls9k}`);
+      assert(/if \(header === null\) return;/.test(srcShell9k),
+        'Docs 9k: batal prompt (null) TIDAK menghapus header yang sudah ada');
+      const nullRes9k = (srcShell9k.match(/_resolveModal\(null\)/g) || []).length;
+      assert(nullRes9k >= 3,
+        `Docs 9k: promptModal me-resolve null di semua jalur batal :: ${nullRes9k} jalur`);
+
+      console.log('  Suite 9k (header & footer teks): selesai');
     }
 
 

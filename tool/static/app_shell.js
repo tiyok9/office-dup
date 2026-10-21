@@ -1279,6 +1279,7 @@
           { label: 'Pemisah Halaman (Docs)', shortcut: 'Ctrl+Enter', action: () => { if (this.kix) this.kix.insertPageBreak(); } },
           { label: 'Tautan (Docs)', shortcut: 'Ctrl+K', action: () => this.openLinkModal() },
           { label: 'Nomor Halaman (Docs)', action: () => this.toolbarAction('pageNumbers') },
+          { label: 'Header & Footer (Docs)', action: () => this.openHeaderFooterModal() },
           { sep: true },
           { label: 'Tabel (Docs)', action: () => this.openInsertTableModal() },
           { label: 'Gambar (Docs)', action: () => this.openInsertImageModal() },
@@ -1673,6 +1674,35 @@
         });
       }
       this.showToast('Tabel diperbarui.');
+    }
+
+    // ==== HEADER & FOOTER (paritas Docs: Sisipkan > Header & footer) ====
+    // Dua promptModal berurutan, BUKAN sistem modal kedua: promptModal sudah
+    // menangani Escape, fokus, dan pelepasan fokus di closeModal(). Membangun
+    // modal tandingan di sini persis akar bug duplikat openWordCountModal dulu.
+    //
+    // Tiap langkah diterapkan SEGERA, sehingga membatalkan prompt footer tidak
+    // ikut membatalkan perubahan header yang sudah dikonfirmasi.
+    async openHeaderFooterModal() {
+      if (!this.kix || this.currentApp !== 'docs') return;
+      const cur = this.kix.getHeaderFooter();
+
+      const header = await this.promptModal({
+        title: 'Header',
+        message: 'Teks header diulang pada setiap halaman. Kosongkan untuk menghapus.',
+        defaultValue: cur.header
+      });
+      if (header === null) return;
+      this.kix.setHeaderFooter({ header });
+
+      const footer = await this.promptModal({
+        title: 'Footer',
+        message: 'Teks footer diulang pada setiap halaman. Kosongkan untuk menghapus.',
+        defaultValue: cur.footer
+      });
+      if (footer === null) { this.showToast('Header diperbarui.'); return; }
+      this.kix.setHeaderFooter({ footer });
+      this.showToast('Header & footer diperbarui.');
     }
 
     async openPageSetupModal() {

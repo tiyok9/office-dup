@@ -135,6 +135,11 @@
       // Default MATI agar dokumen lama tampil identik seperti sebelumnya; user
       // menyalakannya lewat toolbarAction('pageNumbers') / setPageNumbers(true).
       this.showPageNumbers = false;
+      // Teks header/footer (paritas Docs: Sisipkan > Header & footer).
+      // Default kosong -> dokumen lama dan seed tampil IDENTIK seperti
+      // sebelumnya, dan getDocumentData() tidak menambah kunci apa pun.
+      this.headerText = '';
+      this.footerText = '';
       // ==== STATE SELEKSI RENTANG (paritas Google Docs) ====
       // Seleksi disimpan sebagai pasangan TITIK DOKUMEN {pageIdx, lineIdx, charIdx},
       // bukan sekadar indeks baris aktif, supaya rentang bisa melintasi baris DAN
@@ -183,6 +188,11 @@
         // dan tanpa normalisasi di sini nomor halaman footer bisa kosong.
         this.pages.forEach((p, i) => { if (!p.pageNumber) p.pageNumber = i + 1; });
       }
+      // Header/footer opsional. Berkas lama tanpa kunci ini dimuat sebagai
+      // string kosong (bukan undefined) agar render tidak mencetak 'undefined'.
+      const hf = (data && data.headerFooter) || {};
+      this.headerText = typeof hf.header === 'string' ? hf.header : '';
+      this.footerText = typeof hf.footer === 'string' ? hf.footer : '';
       this.activePageIdx = 0;
       this.activeLineIdx = 0;
       this.cursorCharIdx = 0;
@@ -190,7 +200,13 @@
     }
 
     getDocumentData() {
-      return { pages: this.pages };
+      const out = { pages: this.pages };
+      // Kunci headerFooter HANYA ditambahkan bila terisi, supaya dokumen lama
+      // dan seed tetap identik (API vs disk EXACT MATCH tidak berubah).
+      if (this.headerText || this.footerText) {
+        out.headerFooter = { header: this.headerText || '', footer: this.footerText || '' };
+      }
+      return out;
     }
 
     startCaretBlink() {
@@ -1623,6 +1639,48 @@
         characters: chars,
         charactersNoSpaces: charsNoSpaces
       };
+    }
+
+    // ==== HEADER & FOOTER TEKS (paritas Docs) ====
+    // Mengembalikan nilai EFEKTIF setelah perubahan, sehingga pemanggil dan
+    // tes bisa membuktikan hasilnya tanpa membaca state internal.
+    setHeaderFooter(opts) {
+      const o = opts || {};
+      const has = (k) => Object.prototype.hasOwnProperty.call(o, k);
+      if (has('header')) this.headerText = (o.header === null || o.header === undefined) ? '' : String(o.header);
+      if (has('footer')) this.footerText = (o.footer === null || o.footer === undefined) ? '' : String(o.footer);
+      this.renderAllPages();
+      this.notifyChange();
+      return { header: this.headerText, footer: this.footerText };
+    }
+
+    getHeaderFooter() {
+      return { header: this.headerText || '', footer: this.footerText || '' };
+    }
+
+    clearHeaderFooter() {
+      return this.setHeaderFooter({ header: '', footer: '' });
+    }
+
+    // Digambar di AREA MARGIN, di luar alur teks, sehingga measureLine() dan
+    // reflowPages() tidak terpengaruh: header/footer tidak menggeser paginasi.
+    _drawHeaderFooter(ctx) {
+      if (this.headerText) {
+        ctx.save();
+        ctx.font = '11px Arial, sans-serif';
+        ctx.fillStyle = '#5f6368';
+        ctx.textAlign = 'left';
+        ctx.fillText(String(this.headerText), this.marginLeft(), this.marginTop() + 14);
+        ctx.restore();
+      }
+      if (this.footerText) {
+        ctx.save();
+        ctx.font = '11px Arial, sans-serif';
+        ctx.fillStyle = '#5f6368';
+        ctx.textAlign = 'left';
+        ctx.fillText(String(this.footerText), this.marginLeft(), this.pageHeight() - 38);
+        ctx.restore();
+      }
     }
 
     setPageNumbers(show) {
@@ -3452,6 +3510,9 @@
         y += m.paragraphGap;
       }
 
+      // Header/footer teks di area margin (paritas Docs).
+      this._drawHeaderFooter(ctx);
+
       // ==== NOMOR HALAMAN / WATERMARK FOOTER (Paritas Google Docs) ====
       if (this.showPageNumbers) {
         ctx.save();
@@ -3460,7 +3521,7 @@
         ctx.textAlign = 'center';
         ctx.fillText(String(pIdx + 1), this.pageWidth() / 2, this.pageHeight() - 22);
         ctx.restore();
-      } else {
+      } else if (!this.footerText) {
         // Watermark identitas engine Kix di bagian bawah halaman
         ctx.fillStyle = '#9aa0a6';
         ctx.font = 'italic 11px monospace';

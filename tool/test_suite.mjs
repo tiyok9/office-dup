@@ -1962,6 +1962,178 @@ async function runTestSuite() {
     console.log('  Suite 9g (kontrak sumber Kix): selesai');
   }
 
+  // ================= TEST SUITE 9h: FITUR & PARITAS BARU KIX =================
+  // Menjaga kontrak dan perilaku baru yang telah diterapkan pada Kix Engine & Shell:
+  // 1. Semantik Enter pada list kosong (outdent / exit-list tanpa baris baru)
+  // 2. Semantik Backspace pada col 0 (outdent / exit-list / reset heading tanpa hapus teks)
+  // 3. Paritas DOM (.kix-page-paginated & window.__kixEditor / window.kixEditor)
+  // 4. Penghitung kata & statistik dokumen (getStatistics)
+  // 5. Rich text inline runs (applyInlineFormat)
+  // 6. Penomoran halaman footer (setPageNumbers / togglePageNumbers)
+  // 7. Hit-testing safe boundary clamping (clampPoint)
+  // 8. Sinkronisasi reaktif toolbar shell (#tbChecklist & Word Count shortcut)
+  {
+    console.log('\n--- Suite 9h: Fitur & Paritas Baru Kix (List Semantics, Word Count, Runs, Page Numbers) ---');
+    const kx = fs.readFileSync('static/kix_editor.js', 'utf8');
+    const sh = fs.readFileSync('static/app_shell.js', 'utf8');
+
+    // 9h-01: SEMANTIK LIST — ENTER PADA LIST KOSONG
+    // Enter pada list kosong indent 0 melepaskan listType dan TIDAK menambah baris baru.
+    // Enter pada list kosong indent > 0 menurunkan indent (outdent).
+    const Kix9h = loadEditor('static/kix_editor.js', 'KixDocsEditor');
+    const k9h = new Kix9h('docsScrollBox', 'kixHiddenInput');
+
+    k9h.setDocumentData({ pages: [{ lines: [{ text: '', listType: 'bullet', indent: 0 }] }] });
+    k9h.activePageIdx = 0; k9h.activeLineIdx = 0; k9h.cursorCharIdx = 0;
+    k9h.handleKey({ key: 'Enter', ctrlKey: false, metaKey: false, preventDefault() {} });
+    const lEnter0 = k9h.pages[0].lines[0];
+    assert(!lEnter0.listType && k9h.pages[0].lines.length === 1,
+      'Kix 9h-01a: Enter pada list kosong indent 0 melepas listType tanpa menambah baris baru');
+
+    k9h.setDocumentData({ pages: [{ lines: [{ text: '', listType: 'bullet', indent: 1 }] }] });
+    k9h.activePageIdx = 0; k9h.activeLineIdx = 0; k9h.cursorCharIdx = 0;
+    k9h.handleKey({ key: 'Enter', ctrlKey: false, metaKey: false, preventDefault() {} });
+    const lEnter1 = k9h.pages[0].lines[0];
+    assert(lEnter1.indent === 0 && lEnter1.listType === 'bullet' && k9h.pages[0].lines.length === 1,
+      'Kix 9h-01b: Enter pada list kosong indent 1 menurunkan indent ke 0 (outdent)');
+
+    // 9h-02: SEMANTIK LIST — BACKSPACE PADA COL 0
+    // Backspace pada col 0 baris list ber-indentasi menurunkan indent; pada indent 0 melepas listType tanpa menghapus teks.
+    k9h.setDocumentData({ pages: [{ lines: [{ text: 'Item 1', listType: 'bullet', indent: 1 }] }] });
+    k9h.activePageIdx = 0; k9h.activeLineIdx = 0; k9h.cursorCharIdx = 0;
+    k9h.handleKey({ key: 'Backspace', ctrlKey: false, metaKey: false, preventDefault() {} });
+    const lBs1 = k9h.pages[0].lines[0];
+    assert(lBs1.indent === 0 && lBs1.text === 'Item 1',
+      'Kix 9h-02a: Backspace di col 0 baris list indent 1 menurunkan indent tanpa hapus teks');
+
+    k9h.setDocumentData({ pages: [{ lines: [{ text: 'Item 2', listType: 'bullet', indent: 0 }] }] });
+    k9h.activePageIdx = 0; k9h.activeLineIdx = 0; k9h.cursorCharIdx = 0;
+    k9h.handleKey({ key: 'Backspace', ctrlKey: false, metaKey: false, preventDefault() {} });
+    const lBs0 = k9h.pages[0].lines[0];
+    assert(!lBs0.listType && lBs0.text === 'Item 2' && k9h.pages[0].lines.length === 1,
+      'Kix 9h-02b: Backspace di col 0 baris list indent 0 melepas listType tanpa hapus teks');
+
+    // 9h-03: SEMANTIK HEADING — BACKSPACE PADA COL 0
+    // Backspace pada col 0 baris heading mereset ke 'normal' (size 13) tanpa menghapus teks.
+    k9h.setDocumentData({ pages: [{ lines: [{ text: 'Judul Dokumen', heading: 'heading1', size: 20, bold: true }] }] });
+    k9h.activePageIdx = 0; k9h.activeLineIdx = 0; k9h.cursorCharIdx = 0;
+    k9h.handleKey({ key: 'Backspace', ctrlKey: false, metaKey: false, preventDefault() {} });
+    const lBsH = k9h.pages[0].lines[0];
+    assert(lBsH.heading === 'normal' && lBsH.size === 13 && lBsH.text === 'Judul Dokumen',
+      'Kix 9h-03: Backspace di col 0 baris heading mereset heading ke normal (size 13)');
+
+    // 9h-04: PARITAS DOM & INSTANCE GLOBAL
+    assert(/kix-page-paginated/.test(kx),
+      'Kix 9h-04a: kix-page-paginated ada di renderAllPages kix_editor.js');
+    assert(/window\.__kixEditor\s*=/.test(kx) && /window\.kixEditor\s*=/.test(sh),
+      'Kix 9h-04b: window.__kixEditor di kix_editor.js dan window.kixEditor di app_shell.js');
+
+    // 9h-05: PENGHITUNG KATA & STATISTIK DOKUMEN (getStatistics)
+    k9h.setDocumentData({ pages: [{ lines: [{ text: 'Halo Dunia' }, { text: 'Google Docs Kix' }] }] });
+    const stats = k9h.getStatistics();
+    assert(stats && stats.pages === 1 && stats.words === 5 && stats.characters === 25 && stats.charactersNoSpaces === 22,
+      `Kix 9h-05: getStatistics menghitung pages=1, words=5, chars=25, noSpaces=22 :: ${JSON.stringify(stats)}`);
+
+    // 9h-06: RICH TEXT INLINE RUNS (applyInlineFormat)
+    k9h.setDocumentData({ pages: [{ lines: [{ text: 'Halo Dunia Indah' }] }] });
+    k9h.activePageIdx = 0; k9h.activeLineIdx = 0;
+    k9h.applyInlineFormat(5, 10, { bold: true });
+    const lRun = k9h.pages[0].lines[0];
+    assert(Array.isArray(lRun.runs) && lRun.runs.length === 3 && lRun.runs[1].bold === true && lRun.runs[1].text === 'Dunia',
+      `Kix 9h-06: applyInlineFormat memecah runs menjadi 3 segmen dengan Dunia berformat bold :: ${JSON.stringify(lRun.runs)}`);
+
+    // 9h-07: FOOTER & NOMOR HALAMAN (setPageNumbers / togglePageNumbers)
+    k9h.setPageNumbers(true);
+    const p1On = k9h.showPageNumbers;
+    k9h.togglePageNumbers();
+    const p1Off = k9h.showPageNumbers;
+    assert(p1On === true && p1Off === false,
+      'Kix 9h-07: setPageNumbers(true) dan togglePageNumbers() mengendalikan showPageNumbers');
+
+    // 9h-08: SAFE BOUNDARY CLAMPING (clampPoint)
+    const cpHigh = k9h.clampPoint(999, 999, 9999);
+    const cpLow = k9h.clampPoint(-5, -5, -100);
+    assert(cpHigh.pIdx === 0 && cpHigh.lIdx === 0 && cpHigh.x === 606 &&
+           cpLow.pIdx === 0 && cpLow.lIdx === 0 && cpLow.x === 30,
+      `Kix 9h-08: clampPoint menjaga koordinat tetap di dalam bounds valid :: high=${JSON.stringify(cpHigh)} low=${JSON.stringify(cpLow)}`);
+
+    // 9h-09: SHELL TOOLBAR & SHORTCUT SINKRONISASI
+    assert(/set\(['"]tbChecklist['"],\s*st\.listType\s*===\s*['"]checklist['"]\)/.test(sh),
+      'Kix 9h-09a: syncToolbar menyinkronkan status tombol tbChecklist');
+    assert(/openWordCountModal/.test(sh) && /Ctrl\+Shift\+C|key\s*===\s*['"][Cc]['"]/.test(sh),
+      'Kix 9h-09b: openWordCountModal dan shortcut Ctrl+Shift+C terdefinisi di app_shell.js');
+
+    // 9h-10: RUN-AWARE MEASUREMENT — jalur wrap membaca `runs`
+    // Baris multi-run WAJIB diukur per-run. Kalau tidak, teks tebal yang lebih
+    // lebar akan meluber melewati margin kanan tanpa terdeteksi paginasi.
+    assert(/runsCumWidths\s*\(/.test(kx),
+      'Kix 9h-10a: runsCumWidths() ada (lebar kumulatif per batas karakter)');
+    assert(/wrapSegmentsFor\s*\([^)]*runs/.test(kx) || /line\.runs,\s*prefix\.length/.test(kx),
+      'Kix 9h-10b: wrapSegmentsFor menerima runs + prefixLen (jalur run-aware)');
+
+    // 9h-11: RUN-AWARE RENDER — potongan runs per SEGMEN, bukan per baris
+    // Tanpa pemotongan per segmen, setiap segmen hasil wrap menggambar ulang
+    // seluruh isi baris sehingga teks tampak berlipat di kanvas.
+    assert(/segRunsFor\s*\(/.test(kx),
+      'Kix 9h-11a: segRunsFor() ada (irisan runs terhadap satu segmen wrap)');
+
+    // 9h-12: SINKRONISASI `runs` TERHADAP EDIT TEKS
+    // Kontrak: concat(runs.text) === line.text setelah SETIAP edit. Kalau tidak,
+    // offset run melenceng satu karakter tiap ketikan (cacat senyap).
+    assert(/_editRuns\s*\(/.test(kx),
+      'Kix 9h-12a: _editRuns() ada (pemindah batas run saat teks berubah)');
+    const editRunCalls = (kx.match(/this\._editRuns\(/g) || []).length;
+    assert(editRunCalls >= 3,
+      `Kix 9h-12b: _editRuns dipanggil di ketik/Backspace/Delete :: calls=${editRunCalls}`);
+    assert(/delete line\.runs/.test(kx),
+      'Kix 9h-12c: _editRuns membuang runs saat concat mismatch / tinggal 1 run (fail-safe)');
+
+    // 9h-13: PERILAKU NYATA — _editRuns menjaga konsistensi teks↔runs
+    const Kix13 = loadEditor('static/kix_editor.js', 'KixDocsEditor');
+    const k13 = new Kix13('docsScrollBox', 'kixHiddenInput');
+    k13.setDocumentData({ pages: [{ lines: [{ text: 'Halo Dunia Indah' }] }] });
+    k13.activePageIdx = 0; k13.activeLineIdx = 0;
+    k13.applyInlineFormat(5, 10, { bold: true });
+    const l13 = k13.pages[0].lines[0];
+    assert(Array.isArray(l13.runs) && l13.runs.length === 3 && l13.runs[1].bold === true,
+      'Kix 9h-13a: applyInlineFormat menghasilkan 3 run, "Dunia" tebal');
+    assert(l13.runs.map(r => r.text).join('') === l13.text,
+      `Kix 9h-13b: concat(runs.text) === line.text :: ${JSON.stringify(l13.runs.map(r => r.text).join(''))}`);
+
+    // Ketik 'X' di tengah run tebal (offset 7) — X harus mewarisi tebal.
+    k13.activeLineIdx = 0; k13.cursorCharIdx = 7;
+    k13.handleKey({ key: 'X', ctrlKey: false, metaKey: false, preventDefault() {} });
+    const l13b = k13.pages[0].lines[0];
+    assert(l13b.text === 'Halo DuXnia Indah',
+      `Kix 9h-13c: mengetik menyisipkan karakter di posisi kursor :: "${l13b.text}"`);
+    assert(Array.isArray(l13b.runs) && l13b.runs.map(r => r.text).join('') === l13b.text,
+      `Kix 9h-13d: runs tetap konsisten setelah mengetik :: ${JSON.stringify(l13b.runs && l13b.runs.map(r => r.text))}`);
+    assert(l13b.runs.some(r => r.bold && r.text.includes('X')),
+      `Kix 9h-13e: karakter baru mewarisi gaya tebal run induk :: ${JSON.stringify(l13b.runs.map(r => [r.text, r.bold]))}`);
+
+    // Backspace menghapus karakter — runs wajib tetap konsisten.
+    k13.activeLineIdx = 0; k13.cursorCharIdx = 8;
+    k13.handleKey({ key: 'Backspace', ctrlKey: false, metaKey: false, preventDefault() {} });
+    const l13c = k13.pages[0].lines[0];
+    assert(l13c.text === 'Halo Dunia Indah' && (!l13c.runs || l13c.runs.map(r => r.text).join('') === l13c.text),
+      `Kix 9h-13f: Backspace menjaga konsistensi runs :: text="${l13c.text}" runs=${JSON.stringify(l13c.runs && l13c.runs.map(r => r.text))}`);
+
+    // 9h-14: FAIL-SAFE — runs tidak konsisten dibuang, bukan dibiarkan melenceng
+    const l14 = { text: 'abcdef', runs: [{ text: 'abc', bold: true }, { text: 'def', bold: false }] };
+    l14.text = 'ZZZZZZ';                       // paksa mismatch
+    k13._editRuns(l14, 0, 1, '');
+    assert(!l14.runs,
+      'Kix 9h-14: runs dibuang saat tidak lagi mereproduksi line.text (fail-safe, bukan offset salah)');
+
+    // 9h-15: BACKWARD COMPAT — baris tanpa runs tetap memakai jalur lama
+    // Ini yang menjaga 451 asersi lama tetap hijau: dokumen seed tidak punya
+    // `runs`, jadi paginasi & render harus identik dengan sebelum perubahan.
+    assert(/else\s*\{\s*\n\s*ctx\.fillText\(seg\.text, segX, y\);/.test(kx),
+      'Kix 9h-15: jalur render lama (fillText seg.text) dipertahankan sebagai fallback');
+
+    console.log('  Suite 9h (fitur & paritas baru Kix): selesai');
+  }
+
     // Laporan keutuhan ISI seed (informatif, bukan kegagalan): pengujian E2E
   // mengetik & menyimpan dokumen contoh secara nyata, jadi isinya bisa berubah.
   // Struktur tetap diuji di Suite 8/12; nilai persisnya dilaporkan di sini.

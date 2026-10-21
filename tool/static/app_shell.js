@@ -100,7 +100,10 @@
         };
         // Toolbar harus memantulkan format BARIS DI KURSOR setiap kali kursor
         // bergerak (klik baris lain, panah, Enter) — bukan hanya saat mengedit.
-        this.kix.onActiveLineChange = () => this.syncToolbar();
+        this.kix.onActiveLineChange = (line, currentStyle, formatting) => this.syncToolbar(formatting);
+        if (typeof window !== 'undefined') {
+          window.kixEditor = this.kix;
+        }
         // Ctrl+Klik pada tautan: buka di tab baru. Callback ini dipasang di
         // shell (bukan di editor) supaya editor tetap murni model+tampilan,
         // dan supaya harness dapat mengganti perilakunya saat pengujian.
@@ -569,15 +572,21 @@
       this.syncToolbar();
     }
 
-    syncToolbar() {
+    syncToolbar(stOverride) {
       const set = (id, on) => {
         const el = document.getElementById(id);
         if (el) el.classList.toggle('active', !!on);
       };
 
       let st = {};
-      if (this.currentApp === 'docs' && this.kix) {
-        st = this.kix.pages[this.kix.activePageIdx]?.lines[this.kix.activeLineIdx] || this.kix.currentStyle || {};
+      if (stOverride && typeof stOverride === 'object') {
+        st = stOverride;
+        const fam = document.getElementById('tbFontFamily');
+        if (fam && st.fontFamily) fam.value = st.fontFamily;
+        const sz = document.getElementById('tbFontSize');
+        if (sz && st.size) sz.value = String(st.size);
+      } else if (this.currentApp === 'docs' && this.kix) {
+        st = (this.kix.getActiveFormatting ? this.kix.getActiveFormatting() : (this.kix.pages[this.kix.activePageIdx]?.lines[this.kix.activeLineIdx] || this.kix.currentStyle || {}));
         const fam = document.getElementById('tbFontFamily');
         if (fam && st.fontFamily) fam.value = st.fontFamily;
         const sz = document.getElementById('tbFontSize');
@@ -597,6 +606,7 @@
       set('tbPercent', st.numFormat === 'percent');
       set('tbBulletList', st.listType === 'bullet');
       set('tbNumberedList', st.listType === 'numbered');
+      set('tbChecklist', st.listType === 'checklist');
       // Tombol paritas khusus Sheets (id berbeda agar grup tidak bertabrakan).
       set('tbSheetBold', st.bold);
       set('tbSheetItalic', st.italic);
@@ -623,6 +633,11 @@
 
     // Aksi toolbar yang sadar-konteks: Docs -> Kix, Sheets -> Ritz, Slides -> Punch.
     toolbarAction(kind, value) {
+      if (kind === 'pageNumbers' && this.kix) {
+        this.kix.togglePageNumbers();
+        this.showToast(this.kix.showPageNumbers ? 'Nomor halaman diaktifkan.' : 'Nomor halaman dinonaktifkan.');
+        return;
+      }
       this.applyFormatForActive(kind, value);
     }
 
@@ -1026,6 +1041,13 @@
         // dalam modal pencarian itu sendiri (agar tidak membuka modal berulang).
         const inModalField = !!(e.target && e.target.closest && e.target.closest('#gwsModal'));
 
+        // Ctrl+Shift+C: Dialog Jumlah Kata (paritas Google Docs)
+        if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'C' || e.key === 'c') && this.currentApp === 'docs' && this.kix) {
+          e.preventDefault();
+          this.openWordCountModal();
+          return;
+        }
+
         if (e.key === 'Escape') {
           this.closeAllMenus();
           if (this._modalResolver) {
@@ -1239,6 +1261,7 @@
           { label: 'Tambah Halaman Baru (Docs)', action: () => { if (this.kix) this.kix.insertNewPage(); } },
           { label: 'Pemisah Halaman (Docs)', shortcut: 'Ctrl+Enter', action: () => { if (this.kix) this.kix.insertPageBreak(); } },
           { label: 'Tautan (Docs)', shortcut: 'Ctrl+K', action: () => this.openLinkModal() },
+          { label: 'Nomor Halaman (Docs)', action: () => this.toolbarAction('pageNumbers') },
           { label: 'Komentar', shortcut: 'Ctrl+Alt+M', action: () => { if (this.currentApp === 'sheets') this.openSheetCommentModal(); else this.openCommentModal(); } },
           { sep: true },
           { label: 'Tambah Slide Baru (Slides)', action: () => { if (this.punch) this.punch.addNewSlide(); } },
@@ -1522,11 +1545,18 @@
 
     openWordCountModal() {
       const modal = this.ensureModal();
-      const words = this.kix ? this.kix.calculateWordCount() : 0;
-      let chars = 0, pages = 0;
-      if (this.kix) {
-        pages = this.kix.pages.length;
-        for (const p of this.kix.pages) for (const l of p.lines) chars += (l.text || '').length;
+      let words = 0, chars = 0, pages = 0;
+      if (this.kix && this.currentApp === 'docs') {
+        const stats = this.kix.getStatistics ? this.kix.getStatistics() : null;
+        if (stats) {
+          words = stats.words;
+          chars = stats.characters;
+          pages = stats.pages;
+        } else {
+          words = this.kix.calculateWordCount();
+          pages = this.kix.pages.length;
+          for (const p of this.kix.pages) for (const l of p.lines) chars += (l.text || '').length;
+        }
       } else if (this.ritz) {
         for (const c of Object.values(this.ritz.cells)) chars += String(c.val === undefined ? '' : c.val).length;
       } else if (this.punch) {

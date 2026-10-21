@@ -111,14 +111,24 @@
       // Callback saat baris aktif / posisi kursor berubah — dipakai shell untuk
       // menyinkronkan status tombol toolbar (B/I/U/S/align) dengan baris di kursor.
       this.onActiveLineChange = null;
+      // Penomoran halaman footer (paritas Google Docs: Sisipkan > Nomor Halaman).
+      // Default MATI agar dokumen lama tampil identik seperti sebelumnya; user
+      // menyalakannya lewat toolbarAction('pageNumbers') / setPageNumbers(true).
+      this.showPageNumbers = false;
       this.initEvents();
       this.startCaretBlink();
       this.renderAllPages();
+      if (typeof window !== 'undefined') {
+        window.__kixEditor = this;
+      }
     }
 
     setDocumentData(data) {
       if (data && Array.isArray(data.pages) && data.pages.length > 0) {
         this.pages = JSON.parse(JSON.stringify(data.pages));
+        // Normalisasi nomor halaman: berkas lama tidak menyimpan pageNumber,
+        // dan tanpa normalisasi di sini nomor halaman footer bisa kosong.
+        this.pages.forEach((p, i) => { if (!p.pageNumber) p.pageNumber = i + 1; });
       }
       this.activePageIdx = 0;
       this.activeLineIdx = 0;
@@ -143,9 +153,7 @@
       this.scrollBox.addEventListener('click', (e) => {
         const canvas = e.target.closest('.kix-page')?.querySelector('canvas');
         if (canvas) {
-          const pIdx = parseInt(canvas.getAttribute('data-page') || '0', 10);
-          this.activePageIdx = pIdx;
-
+          const pIdxRaw = parseInt(canvas.getAttribute('data-page') || '0', 10);
           const rect = canvas.getBoundingClientRect();
           // Kompensasi zoom: rect mengembalikan ukuran SETELAH transform,
           // sedangkan koordinat gambar kanvas tetap 1:1 (PAGE_CANVAS_WIDTH).
@@ -153,11 +161,16 @@
           const zx = rect.width ? canvas.width / rect.width : 1;
           const zy = rect.height ? canvas.height / rect.height : 1;
           const clickY = (e.clientY - rect.top) * zy - LINE_TOP_OFFSET;
-          this.activeLineIdx = Math.max(0, Math.min(Math.floor(clickY / LINE_HEIGHT), (this.pages[pIdx]?.lines.length || 1) - 1));
-
-          const line = this.pages[pIdx]?.lines[this.activeLineIdx];
           const clickXl = (e.clientX - rect.left) * zx;
           const clickYl = (e.clientY - rect.top) * zy;
+
+          const lIdxRaw = Math.floor(clickY / LINE_HEIGHT);
+          const clamped = this.clampPoint(pIdxRaw, lIdxRaw, clickXl);
+          this.activePageIdx = clamped.pIdx;
+          this.activeLineIdx = clamped.lIdx;
+          const pIdx = this.activePageIdx;
+
+          const line = this.pages[pIdx]?.lines[this.activeLineIdx];
 
           // ==== KLIK HIGHLIGHT KOMENTAR ====
           // WAJIB diperiksa SEBELUM pemetaan karakter. Kalau tidak, klik pada
@@ -305,6 +318,7 @@
         e.preventDefault();
         if (this.cursorCharIdx > 0) {
           line.text = line.text.slice(0, this.cursorCharIdx - 1) + line.text.slice(this.cursorCharIdx);
+          this._editRuns(line, this.cursorCharIdx - 1, 1, '');
           this._shiftLinks(line, this.cursorCharIdx - 1, -1);
           // Komentar WAJIB ikut bergeser di sini. Delete sudah memanggil
           // _shiftComments, tetapi Backspace di tengah baris adalah jalur
@@ -314,12 +328,23 @@
           this._shiftComments(line, this.cursorCharIdx - 1, -1);
           this.cursorCharIdx--;
           modified = true;
-        } else if (line.listType && !line.text) {
-          // Backspace pada butir daftar yang kosong = lepas dari daftar,
-          // bukan menggabung dengan baris sebelumnya (perilaku Google Docs).
-          delete line.listType;
-          delete line.indent;
-          delete line.checked;
+        } else if (this.cursorCharIdx === 0 && ((line.indent || 0) > 0 || line.listType || (line.heading && line.heading !== 'normal'))) {
+          // ==== PARITAS GOOGLE DOCS: BACKSPACE PADA COL 0 ====
+          // 1. Baris list ber-indentasi: outdent (indent--)
+          // 2. Baris list di margin (indent 0): lepas dari format list
+          // 3. Baris heading: reset ke normal text
+          // Teks baris TETAP dipertahankan (bukan dihapus/digabung).
+          if ((line.indent || 0) > 0) {
+            line.indent = Math.max(0, line.indent - 1);
+          } else if (line.listType) {
+            delete line.listType;
+            delete line.indent;
+            delete line.checked;
+          } else if (line.heading && line.heading !== 'normal') {
+            line.heading = 'normal';
+            line.size = 13;
+            line.bold = false;
+          }
           modified = true;
         } else if (this.activeLineIdx > 0) {
           const prevLine = page.lines[this.activeLineIdx - 1];
@@ -350,6 +375,7 @@
         e.preventDefault();
         if (this.cursorCharIdx < line.text.length) {
           line.text = line.text.slice(0, this.cursorCharIdx) + line.text.slice(this.cursorCharIdx + 1);
+          this._editRuns(line, this.cursorCharIdx, 1, '');
           this._shiftLinks(line, this.cursorCharIdx, -1);
           this._shiftComments(line, this.cursorCharIdx, -1);
           modified = true;
@@ -363,6 +389,26 @@
         return;   // insertPageBreak() sudah melakukan reflow+render+emit+onChange
       } else if (e.key === 'Enter') {
         e.preventDefault();
+        // ==== PARITAS GOOGLE DOCS: ENTER PADA BUTIR DAFTAR KOSONG ====
+        // Tekan Enter pada baris list kosong (teks kosong atau hanya whitespace):
+        // - Bila ber-indentasi (indent > 0): kurangi indent (outdent)
+        // - Bila tanpa indentasi (indent === 0): keluar dari format list (listType = null)
+        // Keduanya TIDAK membuat baris baru dan mempertahankan kursor di baris ini.
+        if (line.listType && (!line.text || line.text.trim() === '')) {
+          if ((line.indent || 0) > 0) {
+            line.indent = Math.max(0, line.indent - 1);
+          } else {
+            delete line.listType;
+            delete line.indent;
+            delete line.checked;
+          }
+          this.cursorCharIdx = 0;
+          this.reflowPages();
+          this.renderAllPages();
+          this.emitActiveLine();
+          this.notifyChange();
+          return;
+        }
         const textAfter = line.text.slice(this.cursorCharIdx);
         line.text = line.text.slice(0, this.cursorCharIdx);
         // ==== TAUTAN SAAT PECAH BARIS ====
@@ -448,7 +494,8 @@
       } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
         line.text = line.text.slice(0, this.cursorCharIdx) + e.key + line.text.slice(this.cursorCharIdx);
-        // Sisip 1 karakter: tautan & komentar sesudah/di dalam rentang ikut bergeser.
+        // Sisip 1 karakter: batas run, tautan & komentar ikut bergeser.
+        this._editRuns(line, this.cursorCharIdx, 0, e.key);
         this._shiftLinks(line, this.cursorCharIdx, 1);
         this._shiftComments(line, this.cursorCharIdx, 1);
         this.cursorCharIdx++;
@@ -499,8 +546,235 @@
     emitActiveLine() {
       if (typeof this.onActiveLineChange === 'function') {
         const page = this.pages[this.activePageIdx];
-        this.onActiveLineChange(page ? page.lines[this.activeLineIdx] : null, this.currentStyle);
+        const line = page ? page.lines[this.activeLineIdx] : null;
+        this.onActiveLineChange(line, this.currentStyle, this.getActiveFormatting());
       }
+    }
+
+    // ==== SINKRONISASI `runs` TERHADAP EDIT TEKS ====
+    // `line.text` adalah sumber kebenaran; `line.runs` hanyalah tampilan
+    // terperincinya. Setiap operasi teks WAJIB memindahkan batas run dengan
+    // jumlah yang sama, kalau tidak offset run melenceng satu karakter setiap
+    // kali user mengetik/menghapus — cacat senyap: teks di kanvas tetap
+    // "terlihat benar" karena `line.text` masih utuh, sementara pewarnaan dan
+    // ketebalan run perlahan menempel ke huruf yang salah.
+    //
+    // Kontrak: setelah fungsi ini, concat(runs.text) HARUS === line.text.
+    // Bila tidak dapat dijamin, runs dibuang (fallback ke gaya baris datar)
+    // supaya tampilan tidak pernah lebih buruk daripada sebelum ada runs.
+    _editRuns(line, at, delCount, insText) {
+      if (!Array.isArray(line.runs) || !line.runs.length) return;
+      const runs = line.runs.map(r => ({ ...r }));
+      const ins = insText || '';
+      // 1) Hapus `delCount` karakter mulai offset `at`.
+      if (delCount > 0) {
+        let pos = 0;
+        for (let i = 0; i < runs.length; i++) {
+          const len = (runs[i].text || '').length;
+          const s = pos, e = pos + len;
+          pos = e;
+          if (e <= at || s >= at + delCount) continue;
+          const cutStart = Math.max(0, at - s);
+          const cutEnd = Math.min(len, at + delCount - s);
+          runs[i].text = runs[i].text.slice(0, cutStart) + runs[i].text.slice(cutEnd);
+        }
+      }
+      // 2) Sisipkan `ins` pada offset `at`, mewarisi gaya run yang menaungi `at`.
+      if (ins) {
+        let pos = 0, placed = false;
+        for (let i = 0; i < runs.length; i++) {
+          const len = (runs[i].text || '').length;
+          const s = pos, e = pos + len;
+          pos = e;
+          if (at > s && at < e) {
+            const cut = at - s;
+            const left = runs[i].text.slice(0, cut);
+            const right = runs[i].text.slice(cut);
+            runs.splice(i, 1, { ...runs[i], text: left }, { ...runs[i], text: ins + right });
+            placed = true;
+            break;
+          }
+        }
+        if (!placed) {
+          // `at` jatuh tepat di batas run: warisi run SEBELUMNYA bila ada
+          // (perilaku Google Docs — mengetik di ujung kata tebal melanjutkan tebal).
+          let pos2 = 0, target = -1;
+          for (let i = 0; i < runs.length; i++) {
+            const len = (runs[i].text || '').length;
+            if (at <= pos2 + len) { target = i; break; }
+            pos2 += len;
+          }
+          if (target < 0) target = runs.length - 1;
+          if (target >= 0) {
+            const r = runs[target];
+            const cut = Math.max(0, Math.min((r.text || '').length, at - pos2));
+            runs[target] = { ...r, text: r.text.slice(0, cut) + ins + r.text.slice(cut) };
+          }
+        }
+      }
+      // 3) Buang run kosong + gabungkan run berdampingan bergaya identik.
+      const merged = [];
+      for (const r of runs) {
+        if (!r.text) continue;
+        const p = merged[merged.length - 1];
+        if (p && p.bold === r.bold && p.italic === r.italic && p.underline === r.underline &&
+            p.strike === r.strike && p.size === r.size && p.color === r.color &&
+            p.fontFamily === r.fontFamily) {
+          p.text += r.text;
+        } else {
+          merged.push(r);
+        }
+      }
+      // 4) Verifikasi akhir: runs WAJIB mereproduksi line.text persis.
+      const joined = merged.map(r => r.text).join('');
+      if (joined !== (line.text || '')) {
+        delete line.runs;           // fallback aman: gaya baris datar
+        return;
+      }
+      // Satu run sisa = tidak ada informasi gaya tambahan; simpan sebagai
+      // baris datar agar jalur render cepat (dan paginasi lama) tetap dipakai.
+      if (merged.length <= 1) {
+        delete line.runs;
+        return;
+      }
+      line.runs = merged;
+    }
+
+    notifyChange() {
+      if (typeof this.onChange === 'function') {
+        this.onChange(this.getDocumentData());
+      }
+    }
+
+    getActiveFormatting() {
+      const page = this.pages[this.activePageIdx];
+      const line = page ? page.lines[this.activeLineIdx] : null;
+      const st = line || this.currentStyle || {};
+      return {
+        bold: !!st.bold,
+        italic: !!st.italic,
+        underline: !!st.underline,
+        strike: !!st.strike,
+        size: st.size || 13,
+        color: st.color || '#202124',
+        align: st.align || 'left',
+        heading: st.heading || 'normal',
+        listType: st.listType || null,
+        indent: st.indent || 0,
+        fontFamily: st.fontFamily || 'Arial'
+      };
+    }
+
+    clampPoint(pIdx, lIdx, x) {
+      const safeP = Math.max(0, Math.min(this.pages.length - 1, pIdx || 0));
+      const page = this.pages[safeP];
+      const maxL = Math.max(0, (page && page.lines ? page.lines.length : 1) - 1);
+      const safeL = Math.max(0, Math.min(maxL, lIdx || 0));
+      const safeX = Math.max(MARGIN, Math.min(PAGE_CANVAS_WIDTH - MARGIN, x || MARGIN));
+      return { pIdx: safeP, lIdx: safeL, x: safeX };
+    }
+
+    getStatistics() {
+      let words = 0, chars = 0, charsNoSpaces = 0;
+      for (const p of this.pages) {
+        for (const l of p.lines) {
+          const t = l.text || '';
+          chars += t.length;
+          charsNoSpaces += t.replace(/\s/g, '').length;
+          const w = t.trim().split(/\s+/).filter(Boolean).length;
+          words += w;
+        }
+      }
+      return {
+        pages: this.pages.length,
+        words,
+        characters: chars,
+        charactersNoSpaces: charsNoSpaces
+      };
+    }
+
+    setPageNumbers(show) {
+      this.showPageNumbers = !!show;
+      this.renderAllPages();
+    }
+
+    togglePageNumbers() {
+      this.setPageNumbers(!this.showPageNumbers);
+    }
+
+    applyInlineFormat(start, end, patch) {
+      const page = this.pages[this.activePageIdx];
+      const line = page && page.lines[this.activeLineIdx];
+      if (!line || typeof start !== 'number' || typeof end !== 'number' || start >= end) return;
+      const fullText = line.text || '';
+      const s = Math.max(0, Math.min(fullText.length, start));
+      const e = Math.max(s, Math.min(fullText.length, end));
+      if (s === e) return;
+
+      // Inisialisasi runs bila belum ada
+      if (!Array.isArray(line.runs) || !line.runs.length) {
+        line.runs = [{
+          text: fullText,
+          bold: !!line.bold,
+          italic: !!line.italic,
+          underline: !!line.underline,
+          strike: !!line.strike,
+          size: line.size || 13,
+          color: line.color || '#202124',
+          fontFamily: line.fontFamily || 'Arial'
+        }];
+      }
+
+      // Potong runs pada offset s dan e
+      const splitAt = (runs, offset) => {
+        const out = [];
+        let pos = 0;
+        for (const r of runs) {
+          const rLen = r.text.length;
+          if (pos < offset && pos + rLen > offset) {
+            const cut = offset - pos;
+            out.push({ ...r, text: r.text.slice(0, cut) });
+            out.push({ ...r, text: r.text.slice(cut) });
+          } else {
+            out.push({ ...r });
+          }
+          pos += rLen;
+        }
+        return out;
+      };
+
+      let newRuns = splitAt(line.runs, s);
+      newRuns = splitAt(newRuns, e);
+
+      // Terapkan patch pada rentang [s, e]
+      let curPos = 0;
+      for (const r of newRuns) {
+        const rLen = r.text.length;
+        if (curPos >= s && curPos + rLen <= e) {
+          Object.assign(r, patch);
+        }
+        curPos += rLen;
+      }
+
+      // Gabungkan runs berdampingan dengan style identik
+      const merged = [];
+      for (const r of newRuns) {
+        if (!r.text) continue;
+        const prev = merged[merged.length - 1];
+        if (prev && prev.bold === r.bold && prev.italic === r.italic &&
+            prev.underline === r.underline && prev.strike === r.strike &&
+            prev.size === r.size && prev.color === r.color &&
+            prev.fontFamily === r.fontFamily) {
+          prev.text += r.text;
+        } else {
+          merged.push(r);
+        }
+      }
+      line.runs = merged.length ? merged : [{ text: fullText }];
+      this.reflowPages();
+      this.renderAllPages();
+      this.emitActiveLine();
+      this.notifyChange();
     }
 
     activeLineRef() {
@@ -1298,7 +1572,7 @@
       container.innerHTML = '';
       for (let i = 0; i < this.pages.length; i++) {
         const pageDiv = document.createElement('div');
-        pageDiv.className = 'kix-page';
+        pageDiv.className = 'kix-page kix-page-paginated';
         pageDiv.id = `kixPage${i + 1}`;
         pageDiv.setAttribute('data-page-index', i.toString());
         pageDiv.innerHTML = `
@@ -1320,20 +1594,39 @@
     // Word-wrap ala Google Docs: pecah teks menjadi segmen yang muat dalam margin.
     // Mengembalikan array { text, start } — `start` = offset char di teks asli,
     // dipakai untuk menempatkan caret pada segmen yang benar.
-    wrapSegmentsFor(canvas, text, fontSize, bold, italic, fontFamily, extraLeft) {
+    wrapSegmentsFor(canvas, text, fontSize, bold, italic, fontFamily, extraLeft, runs, prefixLen) {
       const ctx = canvas.getContext('2d');
       let style = '';
       if (italic) style += 'italic ';
       if (bold) style += 'bold ';
-      ctx.font = `${style}${fontSize}px ${fontFamily || 'Arial'}, sans-serif`;
+      const baseFont = `${style}${fontSize}px ${fontFamily || 'Arial'}, sans-serif`;
+      ctx.font = baseFont;
       const maxWidth = canvas.width - 60 - (extraLeft || 0); // margin + indentasi/penanda
       if (!text) return [{ text: '', start: 0 }];
+
+      // ==== JALUR RUN-AWARE (hanya aktif bila baris punya runs) ====
+      // Google Docs mengukur lebar per-run, bukan per-baris. Bila sebuah baris
+      // memuat kata tebal di tengah kalimat, lebar glyph-nya berbeda sehingga
+      // titik wrap bisa bergeser. Tanpa jalur ini, teks run yang lebih lebar
+      // akan meluber melewati margin kanan.
+      // Jalur lama (tanpa runs) TETAP dipakai apa adanya di bawah agar seluruh
+      // dokumen lama menghasilkan paginasi yang identik byte-per-byte.
+      const useRuns = Array.isArray(runs) && runs.length > 0;
+      let cum = null;
+      if (useRuns) {
+        cum = this.runsCumWidths(canvas, text, prefixLen || 0, runs, baseFont);
+        ctx.font = baseFont;
+      }
+      const widthOf = (a, b) => {
+        if (cum) return cum[b] - cum[a];
+        return ctx.measureText(text.slice(a, b)).width;
+      };
 
       const tokens = text.split(/(?<=\s)/);
       const segs = [];
       let cur = '', curStart = 0, pos = 0;
       for (const tok of tokens) {
-        if (cur !== '' && ctx.measureText(cur + tok).width > maxWidth) {
+        if (cur !== '' && widthOf(curStart, pos + tok.length) > maxWidth) {
           segs.push({ text: cur, start: curStart });
           curStart = pos;
           cur = tok;
@@ -1344,6 +1637,65 @@
       }
       if (cur !== '') segs.push({ text: cur, start: curStart });
       return segs.length ? segs : [{ text: '', start: 0 }];
+    }
+
+    // Lebar kumulatif tiap batas karakter pada teks (prefix + isi baris).
+    // Setiap karakter diukur dengan font RUN yang menaunginya, sehingga hasil
+    // wrap dan hit-test sama-sama memakai metrik yang benar untuk teks campuran.
+    runsCumWidths(canvas, fullText, prefixLen, runs, baseFont) {
+      const ctx = canvas.getContext('2d');
+      const n = fullText.length;
+      const cum = new Array(n + 1).fill(0);
+      // Peta batas offset absolut tiap run di dalam `fullText`.
+      const bounds = [];
+      let p = prefixLen;
+      for (const r of runs) {
+        const len = (r.text || '').length;
+        bounds.push({ start: p, end: p + len, run: r });
+        p += len;
+      }
+      const fontFor = (idx) => {
+        for (const b of bounds) {
+          if (idx >= b.start && idx < b.end) {
+            const r = b.run;
+            let st = '';
+            if (r.italic) st += 'italic ';
+            if (r.bold) st += 'bold ';
+            return `${st}${r.size || 13}px ${r.fontFamily || 'Arial'}, sans-serif`;
+          }
+        }
+        return baseFont;
+      };
+      let acc = 0, curFont = null;
+      for (let i = 0; i < n; i++) {
+        const f = fontFor(i);
+        if (f !== curFont) { ctx.font = f; curFont = f; }
+        acc += ctx.measureText(fullText[i]).width;
+        cum[i + 1] = acc;
+      }
+      return cum;
+    }
+
+    // Irisan runs terhadap SATU segmen hasil word-wrap.
+    // `seg.start` memuat offset prefix, jadi dikurangi dulu agar jatuh di
+    // koordinat line.text. Tanpa pengurangan ini, seluruh run akan tergambar
+    // bergeser sepanjang penanda butir.
+    segRunsFor(line, seg, prefixLen) {
+      if (!Array.isArray(line.runs) || !line.runs.length) return null;
+      const segStart = seg.start - prefixLen;
+      const segEnd = segStart + seg.text.length;
+      const out = [];
+      let pos = 0;
+      for (const r of line.runs) {
+        const rStart = pos;
+        const rEnd = pos + (r.text || '').length;
+        pos = rEnd;
+        const a = Math.max(rStart, segStart);
+        const b = Math.min(rEnd, segEnd);
+        if (b <= a) continue;
+        out.push({ run: r, text: r.text.slice(a - rStart, b - rStart) });
+      }
+      return out;
     }
 
     // ==== METRIK BARIS (satu sumber kebenaran) ====
@@ -1447,7 +1799,8 @@
       const prefix = this.listPrefixFor(page, lIdx);
       const segs = this.wrapSegmentsFor(
         canvas, prefix + (line.text || ''), fontSize,
-        line.bold, line.italic, line.fontFamily, indent
+        line.bold, line.italic, line.fontFamily, indent,
+        line.runs, prefix.length
       );
       const base = Math.round(fontSize * 1.5 * (line.spacing || 1));
       const prev = lIdx > 0 ? page.lines[lIdx - 1] : null;
@@ -1566,7 +1919,33 @@
           }
 
           ctx.fillStyle = line.color || '#202124';
-          ctx.fillText(seg.text, segX, y);
+          // ==== Z-INDEX 3: TEKS UTAMA (RUN-AWARE) ====
+          // Baris dengan `runs` digambar potongan demi potongan memakai font run
+          // masing-masing; baris tanpa `runs` memakai jalur lama apa adanya.
+          // `segRunsFor` memotong runs terhadap SEGMEN INI saja (bukan seluruh
+          // baris) — tanpa itu, setiap segmen hasil wrap akan menggambar ulang
+          // seluruh isi baris dan teks tampak berlipat.
+          const segRuns = this.segRunsFor(line, seg, m.prefix.length);
+          if (segRuns && segRuns.length) {
+            let rx = segX;
+            for (const piece of segRuns) {
+              if (!piece.text) continue;
+              const r = piece.run;
+              let rStyle = '';
+              if (r.italic) rStyle += 'italic ';
+              if (r.bold) rStyle += 'bold ';
+              ctx.font = `${rStyle}${r.size || fontSize}px ${r.fontFamily || fontFamily}, sans-serif`;
+              ctx.fillStyle = r.color || line.color || '#202124';
+              ctx.fillText(piece.text, rx, y);
+              rx += ctx.measureText(piece.text).width;
+            }
+            // Kembalikan font baris supaya highlight/tautan di bawah memakai metrik
+            // yang sama seperti jalur non-run.
+            ctx.font = `${fontStyle}${fontSize}px ${fontFamily}, sans-serif`;
+            ctx.fillStyle = line.color || '#202124';
+          } else {
+            ctx.fillText(seg.text, segX, y);
+          }
 
           // ==== HYPERLINK: GAMBAR & HIT-TEST ====
           // Sama seperti highlight pencarian: offset tautan berada pada line.text
@@ -1653,10 +2032,24 @@
         y += m.paragraphGap;
       }
 
-      // Watermark identitas engine Kix di bagian bawah halaman
-      ctx.fillStyle = '#9aa0a6';
-      ctx.font = 'italic 11px monospace';
-      ctx.fillText(`[Kix Engine Tile #0${page.pageNumber} · Canvas 2D Text Buffer · 0 DOM Text Glyphs]`, MARGIN, 810);
+      // ==== NOMOR HALAMAN / WATERMARK FOOTER (Paritas Google Docs) ====
+      if (this.showPageNumbers) {
+        ctx.save();
+        ctx.font = '11px Arial, sans-serif';
+        ctx.fillStyle = '#70757a';
+        ctx.textAlign = 'center';
+        ctx.fillText(String(pIdx + 1), PAGE_CANVAS_WIDTH / 2, PAGE_CANVAS_HEIGHT - 22);
+        ctx.restore();
+      } else {
+        // Watermark identitas engine Kix di bagian bawah halaman
+        ctx.fillStyle = '#9aa0a6';
+        ctx.font = 'italic 11px monospace';
+        // Nomor tile diturunkan dari indeks halaman, BUKAN dari page.pageNumber:
+        // data yang baru dimuat lewat setDocumentData() belum melewati
+        // reflowPages(), sehingga pageNumber masih undefined dan watermark
+        // akan tercetak "Tile #0undefined".
+        ctx.fillText(`[Kix Engine Tile #0${pIdx + 1} · Canvas 2D Text Buffer · 0 DOM Text Glyphs]`, MARGIN, 810);
+      }
     }
   }
 

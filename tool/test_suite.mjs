@@ -416,6 +416,44 @@ async function runTestSuite() {
   assert(tbCommentBlock.indexOf("currentApp === 'sheets'") !== -1,
     'Audit: tbComment hidup di Sheets juga (dulu mati total di sana)');
 
+  // TEST SUITE 9d: ESCAPE PADA MODAL TANPA _modalResolver
+  //
+  // Kelas bug yang sama dengan m4: modal komentar (Docs & Sheets) dibuka lewat
+  // ensureModal(), BUKAN wrapper confirm/prompt/alert, jadi tidak punya
+  // _modalResolver. Escape karenanya jatuh ke cabang fallback. Cabang itu dulu
+  // menyembunyikan #gwsModal dengan style.display='none' MENTAH, tanpa melepas
+  // fokus. Akibatnya activeElement tetap menunjuk elemen di dalam modal
+  // tersembunyi, guard inModalField (:1027) tetap true, dan SELURUH pintasan
+  // keyboard mati sampai user mengklik area lain. Gejalanya menyesatkan:
+  // tombol toolbar tetap jalan, pintasan tidak.
+  //
+  // Di sini yang dikunci adalah KONTRAK SUMBER. Perilaku nyata (fokus benar-
+  // benar lepas + pintasan hidup lagi) diuji S12b lewat DOM sungguhan.
+  console.log('\n--- Suite 9d: Escape modal non-resolver melepas fokus ---');
+  // WAJIB variabel lokal: htmlTb/shellTb milik Suite 13 dideklarasikan jauh di
+  // bawah titik ini -> memakainya di sini memicu TDZ ReferenceError yang
+  // menghentikan seluruh suite sebelum baris HASIL PENGUJIAN tercetak.
+  const shellEsc = shellSrc;
+  const iEsc = shellEsc.indexOf("if (e.key === 'Escape')");
+  assert(iEsc !== -1, 'Escape: handler global ditemukan di app_shell.js');
+  // Jendela WAJIB cukup lebar: this.closeModal() berada ~1002 karakter setelah
+  // awal handler (komentar penjelas di antaranya). Jendela 900 membuat asersi
+  // gagal secara PALSU tanpa ada bug kode apa pun.
+  const escBlock = iEsc >= 0 ? shellEsc.slice(iEsc, iEsc + 1700) : '';
+  assert(escBlock.indexOf('this.closeModal()') !== -1,
+    'Escape: cabang fallback memakai closeModal() (melepas fokus), bukan hide mentah');
+  assert(escBlock.indexOf("style.display = 'none'") === -1,
+    'Escape: cabang fallback TIDAK menyembunyikan #gwsModal secara mentah');
+  const iCloseDef = shellEsc.indexOf('closeModal() {');
+  assert(iCloseDef !== -1, 'closeModal(): definisi ditemukan');
+  const closeBody = iCloseDef >= 0 ? shellEsc.slice(iCloseDef, iCloseDef + 1200) : '';
+  assert(/if\s*\(\s*modal\s*\)/.test(closeBody),
+    'closeModal(): null-safe saat #gwsModal belum ada (Escape di grid kosong tidak boleh TypeError)');
+  assert(closeBody.indexOf('activeElement') !== -1 && closeBody.indexOf('blur(') !== -1,
+    'closeModal(): melepas fokus (activeElement + blur) sebelum menyembunyikan');
+  assert(closeBody.indexOf('blur(') < closeBody.indexOf("style.display = 'none'"),
+    'closeModal(): blur() dijalankan SEBELUM display:none (urutan menentukan)');
+
   // TEST SUITE 10: FORMULA ENGINE — REGRESI & TOKEN ERROR
   // Menguji perilaku NYATA engine (bukan sekadar keberadaan teks di sumber),
   // termasuk dua kelas bug yang dulu lolos: parser greedy dan pembagian nol.
@@ -1573,6 +1611,119 @@ async function runTestSuite() {
   assert(cmJoinC && cmJoinC.start === 3 && cmJoinC.end === 6
     && cmJoinC.author === 'Budi' && cmJoinC.text === 'seluruh baris dua',
     `Docs: komentar baris gabungan pindah utuh ke baris pertama :: ${cmJoinC && cmJoinC.start + '-' + cmJoinC.end} author=${cmJoinC && cmJoinC.author}`);
+
+  // ================= TEST SUITE 9e: REGRESI 5 PERILAKU INTI SHEETS =================
+  // m6 mengaudit cakupan regresi resize/autofill/freeze/seleksi/undo. Audit itu
+  // membuktikan resize, autofill, dan freeze NOL asersi permanen: perilakunya
+  // hanya tersentuh tidak langsung, sehingga tidak ada yang menangkap regresi.
+  // Suite ini mengunci kelimanya dengan angka HASIL UKUR (colWidth=110,
+  // rowHeight=26, headerWidth=46, headerHeight=28), bukan angka karangan.
+  // Undo/redo tidak diuji di sini karena state-nya milik app_shell (undoStack),
+  // bukan Ritz; cakupannya dijaga Suite 9b/9d + E2E S8 (batas 60 entri).
+  console.log('\n--- Suite 9e: Regresi resize / autofill / freeze / seleksi ---');
+  const rRz = new Ritz14('sheetsGridCanvas', 'sheetFormulaInput', 'sheetActiveCell');
+  rRz.render = () => {};
+  rRz.recalculateAll = () => rRz.cells;
+
+  // --- RESIZE KOLOM: default, geser prefix-sum, dan clamp minimum ---
+  assert(rRz.colWidth === 110 && rRz.rowHeight === 26 && rRz.headerWidth === 46 && rRz.headerHeight === 28,
+    `Resize: geometri dasar tidak berubah :: colW=${rRz.colWidth} rowH=${rRz.rowHeight} hW=${rRz.headerWidth} hH=${rRz.headerHeight}`);
+  assert(rRz.getColWidth(0) === 110 && rRz.getColX(0) === 46 && rRz.getColX(1) === 156,
+    `Resize: lebar default & posisi kolom :: w0=${rRz.getColWidth(0)} x0=${rRz.getColX(0)} x1=${rRz.getColX(1)}`);
+  assert(rRz.setColWidth(1, 200) === 200 && rRz.getColWidth(1) === 200,
+    `Resize: setColWidth menyimpan lebar baru :: ${rRz.getColWidth(1)}`);
+  assert(rRz.getColX(2) === 356 && rRz.colBoundaryX(1) === 356,
+    `Resize: kolom SESUDAHNYA ikut bergeser (prefix-sum) :: x2=${rRz.getColX(2)} batas1=${rRz.colBoundaryX(1)}`);
+  assert(rRz.setColWidth(2, 5) === 30 && rRz.setColWidth(3, 'abc') === 30,
+    `Resize: lebar di-clamp ke minimum 30 (input tak wajar tidak merusak grid) :: ${rRz.getColWidth(2)}/${rRz.getColWidth(3)}`);
+  assert(rRz.colResizeHit(357, 10) === 1 && rRz.colResizeHit(300, 10) === -1 && rRz.colResizeHit(357, 40) === -1,
+    'Resize: hit-test hanya tepat di garis (toleransi 4px) & hanya di pita header');
+
+  // --- RESIZE BARIS: cermin kolom, minimum 18 ---
+  assert(rRz.setRowHeight(1, 40) === 40 && rRz.getRowHeight(1) === 40 && rRz.cellY(1) === 28,
+    `Resize: tinggi baris tersimpan :: h=${rRz.getRowHeight(1)} y1=${rRz.cellY(1)}`);
+  assert(rRz.setRowHeight(2, 5) === 18 && rRz.getRowHeight(2) === 18 && rRz.getRowHeight(3) === 26,
+    `Resize: tinggi di-clamp ke minRowHeight=18 & baris lain tetap 26 :: ${rRz.getRowHeight(2)}/${rRz.getRowHeight(3)}`);
+  assert(rRz.rowResizeHit(20, 69) === 1 && rRz.rowResizeHit(100, 69) === -1,
+    'Resize: hit-test baris hanya di pita header kiri (x <= headerWidth)');
+
+  // --- FREEZE: panel beku mengabaikan scroll, selain itu ikut scroll ---
+  const rFz = new Ritz14('sheetsGridCanvas', 'sheetFormulaInput', 'sheetActiveCell');
+  rFz.render = () => {};
+  rFz.recalculateAll = () => rFz.cells;
+  assert(rFz.freezeX() === 46 && rFz.freezeY() === 28,
+    `Freeze: tanpa panel beku rumus IDENTIK versi lama :: x=${rFz.freezeX()} y=${rFz.freezeY()}`);
+  rFz.frozenCols = 2;
+  rFz.frozenRows = 1;
+  rFz.scrollX = 50;
+  rFz.scrollY = 30;
+  assert(rFz.freezeX() === 266 && rFz.freezeY() === 54,
+    `Freeze: batas panel beku = header + lebar/tinggi yang dibekukan :: x=${rFz.freezeX()} y=${rFz.freezeY()}`);
+  assert(rFz.cellX(0) === 46 && rFz.cellX(3) === 326,
+    `Freeze: kolom beku ABAIKAN scroll, kolom lain ikut :: x0=${rFz.cellX(0)} x3=${rFz.cellX(3)}`);
+  assert(rFz.cellY(1) === 28 && rFz.cellY(2) === 24,
+    `Freeze: baris beku ABAIKAN scroll, baris lain ikut :: y1=${rFz.cellY(1)} y2=${rFz.cellY(2)}`);
+  assert(rFz.colFromX(50) === 0 && rFz.colFromX(rFz.cellX(3) + 2) === 3,
+    `Freeze: colFromX konsisten dengan cellX di area beku & area scroll :: ${rFz.colFromX(50)}/${rFz.colFromX(rFz.cellX(3) + 2)}`);
+
+  // --- AUTOFILL: deret angka, geser relatif formula, lanjut teks, salin ---
+  const rAf = new Ritz14('sheetsGridCanvas', 'sheetFormulaInput', 'sheetActiveCell');
+  rAf.render = () => {};
+  rAf.recalculateAll = () => rAf.cells;
+  rAf.cells = { A1: { raw: '1', val: 1 }, A2: { raw: '2', val: 2 } };
+  const afN = rAf.applyAutofill({ minCol: 0, maxCol: 0, minRow: 1, maxRow: 2 },
+                               { minCol: 0, maxCol: 0, minRow: 3, maxRow: 5 });
+  assert(afN === 3 && rAf.cells.A3.val === 3 && rAf.cells.A4.val === 4 && rAf.cells.A5.val === 5,
+    `Autofill: 2 angka jadi deret berlanjut :: tulis=${afN} A3..A5=${rAf.cells.A3 && rAf.cells.A3.val}/${rAf.cells.A4 && rAf.cells.A4.val}/${rAf.cells.A5 && rAf.cells.A5.val}`);
+  assert(rAf.cells.A1.val === 1 && rAf.cells.A2.val === 2,
+    'Autofill: sel SUMBER tidak ikut berubah (hanya tujuan yang ditulis)');
+
+  const rAfF = new Ritz14('sheetsGridCanvas', 'sheetFormulaInput', 'sheetActiveCell');
+  rAfF.render = () => {};
+  rAfF.recalculateAll = () => rAfF.cells;
+  rAfF.cells = { B1: { raw: '=A1', val: 7 } };
+  const afF = rAfF.applyAutofill({ minCol: 1, maxCol: 1, minRow: 1, maxRow: 1 },
+                                 { minCol: 1, maxCol: 1, minRow: 2, maxRow: 2 });
+  assert(afF === 1 && rAfF.cells.B2.raw === '=A2',
+    `Autofill: formula digeser RELATIF (bukan disalin mentah) :: tulis=${afF} B2=${rAfF.cells.B2 && rAfF.cells.B2.raw}`);
+
+  const rAfT = new Ritz14('sheetsGridCanvas', 'sheetFormulaInput', 'sheetActiveCell');
+  rAfT.render = () => {};
+  rAfT.recalculateAll = () => rAfT.cells;
+  rAfT.cells = { C1: { raw: 'Bab 1', val: 'Bab 1' } };
+  const afT = rAfT.applyAutofill({ minCol: 2, maxCol: 2, minRow: 1, maxRow: 1 },
+                                 { minCol: 2, maxCol: 2, minRow: 2, maxRow: 3 });
+  assert(afT === 2 && rAfT.cells.C2.raw === 'Bab 2' && rAfT.cells.C3.raw === 'Bab 3',
+    `Autofill: teks berakhiran angka dilanjutkan :: tulis=${afT} C2=${rAfT.cells.C2 && rAfT.cells.C2.raw} C3=${rAfT.cells.C3 && rAfT.cells.C3.raw}`);
+
+  const rAfC = new Ritz14('sheetsGridCanvas', 'sheetFormulaInput', 'sheetActiveCell');
+  rAfC.render = () => {};
+  rAfC.recalculateAll = () => rAfC.cells;
+  rAfC.cells = { D1: { raw: 'teks', val: 'teks' } };
+  const afC = rAfC.applyAutofill({ minCol: 3, maxCol: 3, minRow: 1, maxRow: 1 },
+                                 { minCol: 3, maxCol: 3, minRow: 2, maxRow: 4 });
+  assert(afC === 3 && rAfC.cells.D2.raw === 'teks' && rAfC.cells.D4.raw === 'teks',
+    `Autofill: teks tanpa angka DISALIN apa adanya :: tulis=${afC} D2=${rAfC.cells.D2 && rAfC.cells.D2.raw}`);
+  assert(rAfC.applyAutofill(null, null) === 0,
+    'Autofill: argumen kosong tidak menulis apa pun (tidak melempar)');
+
+  // --- SELEKSI RENTANG: arah terbalik dinormalisasi, label A1 kanonik ---
+  const rSel = new Ritz14('sheetsGridCanvas', 'sheetFormulaInput', 'sheetActiveCell');
+  rSel.render = () => {};
+  rSel.activeCol = 0;
+  rSel.activeRow = 1;
+  rSel.selStartCol = 3; rSel.selEndCol = 1;   // sengaja TERBALIK
+  rSel.selStartRow = 5; rSel.selEndRow = 2;
+  const sb = rSel.getRangeBounds();
+  assert(sb.minCol === 1 && sb.maxCol === 3 && sb.minRow === 2 && sb.maxRow === 5,
+    `Seleksi: seret terbalik tetap dinormalisasi :: ${JSON.stringify(sb)}`);
+  assert(rSel.isRangeSelection() === true && rSel.getRangeA1() === 'B2:D5',
+    `Seleksi: label rentang kanonik Google Sheets :: ${rSel.getRangeA1()}`);
+  rSel.selStartCol = 0; rSel.selEndCol = 0; rSel.selStartRow = 1; rSel.selEndRow = 1;
+  assert(rSel.isRangeSelection() === false && rSel.getRangeA1() === rSel.getActiveCoord(),
+    `Seleksi: satu sel bukan rentang (label = koordinat aktif) :: ${rSel.getRangeA1()}`);
+  assert(rSel.colLabel(1) === 'B' && rSel.colLabel(3) === 'D',
+    `Seleksi: kolom -> huruf konsisten :: ${rSel.colLabel(1)}/${rSel.colLabel(3)}`);
 
   // Laporan keutuhan ISI seed (informatif, bukan kegagalan): pengujian E2E
   // mengetik & menyimpan dokumen contoh secara nyata, jadi isinya bisa berubah.

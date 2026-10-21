@@ -618,6 +618,29 @@ async function stopIsolatedServer() {
   await sleep(300);
   check('Tombol Selesai menutup modal', (await cdp.eval('getComputedStyle(document.getElementById("gwsShareModal")).display')) === 'none');
 
+  // Modal Bagikan memakai elemen SENDIRI (#gwsShareModal), bukan #gwsModal.
+  // Dulu satu-satunya jalan keluar adalah tombol Selesai / x; Escape tidak
+  // melakukan apa pun karena handler global hanya mengenal #gwsModal. Ini
+  // bug yang PASTI terasa oleh user (modal menutup diri saat Esc ditekan).
+  await cdp.click('document.getElementById("shareModalBtn")');
+  await sleep(500);
+  check('S5b: modal Bagikan terbuka lagi untuk uji Escape',
+    (await cdp.eval('getComputedStyle(document.getElementById("gwsShareModal")).display')) === 'flex');
+  await cdp.key('Escape');
+  await sleep(400);
+  const shareEsc = await cdp.eval('getComputedStyle(document.getElementById("gwsShareModal")).display');
+  check('S5b: Escape menutup modal Bagikan (dulu Escape tidak melakukan apa pun)',
+    shareEsc === 'none', String(shareEsc));
+
+  // Tombol x memakai jalur tutup YANG SAMA, bukan onclick mentah: kalau tidak,
+  // fokus bisa tertinggal di dalam modal tersembunyi.
+  await cdp.click('document.getElementById("shareModalBtn")');
+  await sleep(450);
+  await cdp.click('document.querySelector("#gwsShareModal span[onclick]")');
+  await sleep(350);
+  const shareX = await cdp.eval('getComputedStyle(document.getElementById("gwsShareModal")).display');
+  check('S5b: tombol x menutup modal Bagikan lewat closeShareModal()', shareX === 'none', String(shareX));
+
   const drawerBefore = await cdp.eval('document.getElementById("telemetryDrawer").classList.contains("minimized")');
   await cdp.click('document.querySelector("#telemetryDrawer .drawer-header")');
   await sleep(350);
@@ -1597,6 +1620,80 @@ async function stopIsolatedServer() {
   await sleep(600);
   const hot12 = await cdp.eval('(() => { const m = document.getElementById("gwsModal"); return !!(m && m.style.display === "flex" && /Komentar Sel/.test(m.innerText || m.textContent || "")); })()');
   check('S12: Ctrl+Alt+M membuka komentar sel di Sheets', hot12 === true, String(hot12));
+  await cdp.eval('window.workspaceApp.closeModal()');
+  await sleep(300);
+
+  // ================= S12b: ESCAPE MODAL MELEPAS FOKUS =================
+  // m4 memperbaiki modal yang tidak melepas fokus saat ditutup. Sisa jalur yang
+  // belum terjaga: Escape pada modal TANPA _modalResolver (komentar Docs/Sheets)
+  // dulu menyembunyikan #gwsModal secara mentah, tanpa blur(). Akibatnya
+  // activeElement tertinggal di dalam modal tersembunyi -> guard inModalField
+  // (:1027) tetap true -> SELURUH pintasan mati. Tombol toolbar tetap jalan,
+  // jadi gejalanya menyesatkan.
+  //
+  // JEBAKAN yang harus dihindari: guardTextarea() di openSheetCommentModal
+  // memasang listener Escape LOKAL dengan stopPropagation. Bila fokus ada di
+  // textarea, cabang fallback global TIDAK PERNAH diuji -> tes lulus palsu.
+  // Karena itu fokus sengaja ditempatkan pada TOMBOL di dalam modal.
+  //
+  // Probe pintasan memakai Ctrl+Alt+M, BUKAN Ctrl+B: Ctrl+B hanya untuk docs
+  // (:1059), sehingga di Sheets ia tidak akan pernah membuka apa pun dan tes
+  // gagal secara palsu. Ctrl+Alt+M justru dijaga `!inModalField` (:1093) —
+  // persis guard yang dirusak bug ini.
+  console.log('\n--- S12b: Escape pada modal komentar melepas fokus ---');
+  const appB = await cdp.eval('window.workspaceApp.currentApp');
+  check('S12b: konteks masih Sheets', appB === 'sheets', String(appB));
+
+  await cdp.click('document.getElementById("tbComment")');
+  await sleep(500);
+  const openB = await cdp.eval('(() => { const m = document.getElementById("gwsModal"); return m ? m.style.display : "no-modal"; })()');
+  check('S12b: modal komentar sel terbuka', openB === 'flex', String(openB));
+
+  // Klik tombol (bukan textarea) -> tombol menjadi document.activeElement.
+  // Textarea kosong, jadi handler hanya menulis pesan error dan modal TETAP
+  // terbuka; efek sampingnya tidak mengganggu pengukuran fokus.
+  await cdp.click('document.getElementById("gwsSheetCommentAdd")');
+  await sleep(250);
+  // Fokus dipindah EKSPLISIT. Mengandalkan semantik klik (apakah <button>
+  // otomatis menerima fokus) adalah variabel platform yang tidak perlu:
+  // kalau klik tidak memindahkan fokus, asersi prasyarat gagal secara palsu.
+  await cdp.eval('document.getElementById("gwsSheetCommentAdd").focus()');
+  await sleep(120);
+  const focusB = JSON.parse(await cdp.eval(`(() => {
+    const m = document.getElementById('gwsModal');
+    const ae = document.activeElement;
+    return JSON.stringify({
+      tag: ae ? ae.tagName : null,
+      inside: !!(m && ae && m.contains(ae)),
+      isTextarea: !!(ae && ae.tagName === 'TEXTAREA')
+    });
+  })()`));
+  check('S12b: prasyarat — fokus di TOMBOL dalam modal, bukan textarea (agar cabang fallback benar-benar diuji)',
+    focusB.inside === true && focusB.tag === 'BUTTON' && focusB.isTextarea === false,
+    JSON.stringify(focusB));
+
+  await cdp.key('Escape');
+  await sleep(350);
+  const escB = JSON.parse(await cdp.eval(`(() => {
+    const m = document.getElementById('gwsModal');
+    const ae = document.activeElement;
+    return JSON.stringify({
+      display: m ? m.style.display : 'no-modal',
+      inside: !!(m && ae && m.contains(ae)),
+      active: ae ? (ae.tagName + (ae.id ? '#' + ae.id : '')) : 'null'
+    });
+  })()`));
+  check('S12b: Escape menyembunyikan modal komentar', escB.display === 'none', JSON.stringify(escB));
+  check('S12b: Escape MELEPAS fokus (activeElement tidak lagi di dalam #gwsModal)',
+    escB.inside === false, JSON.stringify(escB));
+
+  // Bukti perilaku: pintasan yang dijaga !inModalField harus hidup lagi.
+  await cdp.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'm', code: 'KeyM', windowsVirtualKeyCode: 77, nativeVirtualKeyCode: 77, modifiers: 3 });
+  await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'm', code: 'KeyM', windowsVirtualKeyCode: 77, nativeVirtualKeyCode: 77, modifiers: 3 });
+  await sleep(700);
+  const revB = await cdp.eval('(() => { const m = document.getElementById("gwsModal"); return !!(m && m.style.display === "flex" && /Komentar Sel/.test(m.innerText || m.textContent || "")); })()');
+  check('S12b: setelah Escape, Ctrl+Alt+M hidup lagi (inModalField tidak nyangkut)',
+    revB === true, String(revB));
   await cdp.eval('window.workspaceApp.closeModal()');
   await sleep(300);
 

@@ -1037,8 +1037,20 @@
             this._resolveModal(this._modalCancelValue);
             return;
           }
-          const m = document.getElementById('gwsModal');
-          if (m) m.style.display = 'none';
+          // Modal Bagikan memakai elemen sendiri (#gwsShareModal), bukan
+          // #gwsModal. Tanpa cabang ini Escape tidak menutupnya sama sekali.
+          const sm = document.getElementById('gwsShareModal');
+          if (sm && sm.style.display !== 'none') {
+            this.closeShareModal();
+            return;
+          }
+          // JANGAN sembunyikan langsung: closeModal() yang melepas fokus.
+          // Modal komentar Docs/Sheets dibuka lewat ensureModal(), BUKAN
+          // wrapper confirm/prompt/alert, jadi tidak punya _modalResolver
+          // dan Escape mendarat di sini. Raw hide di titik ini membuat
+          // activeElement tertinggal di dalam modal tersembunyi -> guard
+          // inModalField (:1027) mematikan SEMUA pintasan.
+          this.closeModal();
           return;
         }
 
@@ -1400,6 +1412,18 @@
         modal.style.display = 'none';
         modal.onclick = null;
       }
+    }
+
+    // Modal Bagikan (#gwsShareModal) adalah elemen TERPISAH dari #gwsModal.
+    // closeModal() TIDAK menjangkaunya, jadi ia butuh jalur tutupnya sendiri.
+    // Sebelum ini Escape tidak menutupnya sama sekali dan tombol x memakai
+    // onclick mentah tanpa melepas fokus: jalan keluar hanya lewat klik.
+    closeShareModal() {
+      const m = document.getElementById('gwsShareModal');
+      if (!m) return;
+      const ae = document.activeElement;
+      if (ae && m.contains(ae) && typeof ae.blur === 'function') ae.blur();
+      m.style.display = 'none';
     }
 
     // ============== MODAL DIALOG WRAPPERS (Promise-based) ==============
@@ -2132,7 +2156,7 @@
         <div style="background: #fff; width: 500px; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.25); overflow: hidden; padding: 24px; font-family: 'Google Sans', Arial, sans-serif;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
             <h3 style="font-size: 18px; font-weight: 500; color: #202124;">Bagikan "${escapeXml(document.getElementById('docTitle')?.value || 'Dokumen')}"</h3>
-            <span style="cursor: pointer; font-size: 20px; color: #5f6368;" onclick="document.getElementById('gwsShareModal').style.display='none'">✕</span>
+            <span style="cursor: pointer; font-size: 20px; color: #5f6368;" onclick="window.workspaceApp.closeShareModal()">✕</span>
           </div>
           <div style="margin-bottom: 20px;">
             <div style="font-size: 13px; color: #5f6368; margin-bottom: 8px;">Akses Umum</div>
@@ -2171,7 +2195,7 @@
         });
       }
       modal.querySelectorAll('.share-done').forEach(el => el.addEventListener('click', () => {
-        modal.style.display = 'none';
+        this.closeShareModal();
       }));
     }
 
